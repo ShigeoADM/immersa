@@ -1,0 +1,335 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View, Text, Image, StyleSheet, TouchableOpacity,
+  TextInput, ScrollView, StatusBar, ActivityIndicator, Alert, Switch,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import * as ImagePicker from 'expo-image-picker';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { signOut, updateProfile } from 'firebase/auth';
+import { auth, db, storage } from '@/config/firebase';
+import { useAuth } from '@/context/AuthContext';
+import { Colors } from '@/constants/theme';
+
+export default function SettingsScreen() {
+  const router  = useRouter();
+  const { user } = useAuth();
+
+  const [displayName,    setDisplayName]    = useState('');
+  const [bio,            setBio]            = useState('');
+  const [avatarUrl,      setAvatarUrl]      = useState('');
+  const [emailPublic,    setEmailPublic]    = useState(false);   // privado por defecto
+  const [uploadingAvatar,setUploadingAvatar]= useState(false);
+  const [saving,         setSaving]         = useState(false);
+  const [loadingInitial, setLoadingInitial] = useState(true);
+
+  // Cargar perfil existente
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'users', user.uid));
+        if (snap.exists()) {
+          const d = snap.data();
+          setDisplayName(d.displayName ?? user.displayName ?? '');
+          setBio(d.bio ?? '');
+          setAvatarUrl(d.avatarUrl ?? user.photoURL ?? '');
+          setEmailPublic(d.emailPublic === true);  // false si no existe
+        } else {
+          setDisplayName(user.displayName ?? '');
+          setAvatarUrl(user.photoURL ?? '');
+        }
+      } catch (e) {
+        console.error('Error cargando ajustes:', e);
+      } finally {
+        setLoadingInitial(false);
+      }
+    })();
+  }, [user]);
+
+  // ── Subir avatar ────────────────────────────────────────────────────────────
+  const handlePickAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permiso denegado', 'Necesitamos acceso a tu galería.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const localUri = result.assets[0].uri;
+      setAvatarUrl(localUri);
+      setUploadingAvatar(true);
+      try {
+        const filename = `avatars/${user!.uid}/${Date.now()}.jpg`;
+        const storageRef = ref(storage, filename);
+        const blob: Blob = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.onload    = () => resolve(xhr.response);
+          xhr.onerror   = () => reject(new Error('No se pudo leer la imagen'));
+          xhr.ontimeout = () => reject(new Error('Tiempo de espera agotado al leer la imagen'));
+          xhr.responseType = 'blob';
+          xhr.timeout = 15000;
+          xhr.open('GET', localUri, true);
+          xhr.send(null);
+        });
+        await uploadBytes(storageRef, blob);
+        const url = await getDownloadURL(storageRef);
+        setAvatarUrl(url);
+      } catch (e: any) {
+        Alert.alert('Error al subir foto', e?.message ?? 'Inténtalo de nuevo.');
+        setAvatarUrl(user?.photoURL ?? '');
+      } finally {
+        setUploadingAvatar(false);
+      }
+    }
+  };
+
+  // ── Guardar cambios ─────────────────────────────────────────────────────────
+  const handleSave = async () => {
+    if (!user || saving || uploadingAvatar) return;
+    setSaving(true);
+    try {
+      // Actualizar Firebase Auth displayName
+      await updateProfile(user, {
+        displayName: displayName.trim() || null,
+        photoURL: avatarUrl || null,
+      });
+      // Guardar/crear doc en Firestore
+      await setDoc(doc(db, 'users', user.uid), {
+        displayName: displayName.trim(),
+        bio: bio.trim(),
+        avatarUrl,
+        emailPublic,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      router.back();
+    } catch (e: any) {
+      console.error('Error guardando ajustes:', e);
+      Alert.alert('Error', e?.message ?? 'No se pudieron guardar los cambios.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Cerrar sesión ───────────────────────────────────────────────────────────
+  const handleSignOut = () => {
+    Alert.alert(
+      'Cerrar sesión',
+      '¿Seguro que quieres cerrar sesión?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar sesión',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOut(auth);
+              router.replace('/auth/login');
+            } catch (e) {
+              console.error('Error cerrando sesión:', e);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  if (loadingInitial) {
+    return (
+      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+        <StatusBar barStyle="light-content" />
+        <ActivityIndicator color={Colors.emerald} />
+      </View>
+    );
+  }
+
+  const initials = (displayName || user?.email || '?').trim().charAt(0).toUpperCase();
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+
+      {/* Header */}
+      <SafeAreaView edges={['top']} style={styles.headerWrap}>
+        <View style={styles.headerBar}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <MaterialIcons name="arrow-back" size={22} color={Colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Ajustes de perfil</Text>
+          <TouchableOpacity
+            style={[styles.saveBtn, (saving || uploadingAvatar) && styles.saveBtnDisabled]}
+            onPress={handleSave}
+            disabled={saving || uploadingAvatar}
+            activeOpacity={0.8}
+          >
+            {saving
+              ? <ActivityIndicator size="small" color="#000" />
+              : <Text style={styles.saveBtnText}>Guardar</Text>
+            }
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+
+        {/* ── Avatar ── */}
+        <View style={styles.avatarSection}>
+          <TouchableOpacity
+            style={styles.avatarWrap}
+            onPress={handlePickAvatar}
+            disabled={uploadingAvatar}
+            activeOpacity={0.8}
+          >
+            {avatarUrl
+              ? <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+              : <View style={styles.avatarFallback}>
+                  <Text style={styles.avatarInitial}>{initials}</Text>
+                </View>
+            }
+            {/* Cámara overlay */}
+            {!uploadingAvatar && (
+              <View style={styles.avatarEditOverlay}>
+                <MaterialIcons name="photo-camera" size={16} color="#fff" />
+              </View>
+            )}
+            {uploadingAvatar && (
+              <View style={[styles.avatarEditOverlay, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
+                <ActivityIndicator size="small" color={Colors.emerald} />
+              </View>
+            )}
+          </TouchableOpacity>
+          <Text style={styles.avatarHint}>Toca para cambiar la foto</Text>
+        </View>
+
+        {/* ── Nombre ── */}
+        <Text style={styles.fieldLabel}>Nombre</Text>
+        <TextInput
+          style={styles.input}
+          value={displayName}
+          onChangeText={setDisplayName}
+          placeholder="Tu nombre o alias"
+          placeholderTextColor={Colors.textMuted}
+          maxLength={50}
+          autoCorrect={false}
+        />
+
+        {/* ── Descripción ── */}
+        <Text style={styles.fieldLabel}>Descripción</Text>
+        <TextInput
+          style={[styles.input, styles.inputMultiline]}
+          value={bio}
+          onChangeText={setBio}
+          placeholder="Cuéntanos algo sobre ti o sobre lo que escribes…"
+          placeholderTextColor={Colors.textMuted}
+          multiline
+          numberOfLines={4}
+          maxLength={200}
+          textAlignVertical="top"
+        />
+        <Text style={styles.charCount}>{bio.length}/200</Text>
+
+        {/* ── Cuenta ── */}
+        <View style={styles.divider} />
+        <Text style={styles.sectionLabel}>Cuenta</Text>
+
+        {user?.email ? (
+          <View style={styles.emailRow}>
+            <MaterialIcons name="email" size={16} color={Colors.textMuted} />
+            <Text style={styles.emailText} numberOfLines={1}>{user.email}</Text>
+          </View>
+        ) : null}
+
+        {/* Toggle visibilidad del email */}
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleInfo}>
+            <Text style={styles.toggleTitle}>Mostrar email en perfil público</Text>
+            <Text style={styles.toggleDesc}>
+              {emailPublic ? 'Tu email es visible para otros usuarios.' : 'Tu email está oculto (privado).'}
+            </Text>
+          </View>
+          <Switch
+            value={emailPublic}
+            onValueChange={setEmailPublic}
+            trackColor={{ false: Colors.border, true: Colors.emerald + '66' }}
+            thumbColor={emailPublic ? Colors.emerald : Colors.textMuted}
+          />
+        </View>
+
+        {/* ── Cerrar sesión ── */}
+        <TouchableOpacity style={styles.signOutBtn} activeOpacity={0.8} onPress={handleSignOut}>
+          <MaterialIcons name="logout" size={18} color="#FF6B6B" />
+          <Text style={styles.signOutText}>Cerrar sesión</Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container:  { flex: 1, backgroundColor: Colors.bg },
+  headerWrap: { backgroundColor: Colors.bg, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  headerBar:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+  backBtn:    { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  headerTitle:{ fontSize: 16, fontWeight: '600', color: Colors.textPrimary, letterSpacing: 0.3 },
+  saveBtn:    { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, backgroundColor: Colors.emerald },
+  saveBtnDisabled: { opacity: 0.4 },
+  saveBtnText:{ fontSize: 13, fontWeight: '700', color: '#000' },
+
+  scroll:       { flex: 1 },
+  scrollContent:{ paddingHorizontal: 20, paddingTop: 28 },
+
+  // Avatar
+  avatarSection: { alignItems: 'center', marginBottom: 32 },
+  avatarWrap:    { position: 'relative' },
+  avatar:        { width: 96, height: 96, borderRadius: 48, borderWidth: 2, borderColor: Colors.emerald },
+  avatarFallback:{ width: 96, height: 96, borderRadius: 48, backgroundColor: Colors.emerald + '22', borderWidth: 2, borderColor: Colors.emerald, alignItems: 'center', justifyContent: 'center' },
+  avatarInitial: { fontSize: 38, fontWeight: '700', color: Colors.emerald },
+  avatarEditOverlay: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: Colors.emerald,
+    borderWidth: 2, borderColor: Colors.bg,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarHint: { marginTop: 8, fontSize: 12, color: Colors.textMuted },
+
+  // Form
+  fieldLabel:     { fontSize: 12, fontWeight: '600', color: Colors.textSecondary, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8, marginTop: 4 },
+  input:          { backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderRadius: 6, paddingHorizontal: 14, paddingVertical: 12, color: Colors.textPrimary, fontSize: 14, marginBottom: 20 },
+  inputMultiline: { minHeight: 100, paddingTop: 12, marginBottom: 4 },
+  charCount:      { fontSize: 11, color: Colors.textMuted, textAlign: 'right', marginBottom: 20 },
+
+  // Cuenta
+  divider:    { height: 1, backgroundColor: Colors.border, marginBottom: 24 },
+  sectionLabel:{ fontSize: 10, fontWeight: '700', color: Colors.textMuted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 16 },
+  emailRow:   { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14, backgroundColor: Colors.card, borderRadius: 6, borderWidth: 1, borderColor: Colors.border, marginBottom: 12 },
+  emailText:  { fontSize: 14, color: Colors.textSecondary },
+
+  toggleRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 14, paddingHorizontal: 14,
+    backgroundColor: Colors.card, borderRadius: 6,
+    borderWidth: 1, borderColor: Colors.border, marginBottom: 12,
+  },
+  toggleInfo:  { flex: 1, marginRight: 12 },
+  toggleTitle: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary, marginBottom: 2 },
+  toggleDesc:  { fontSize: 12, color: Colors.textSecondary, lineHeight: 17 },
+
+  signOutBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, paddingHorizontal: 14, borderRadius: 6, borderWidth: 1, borderColor: '#FF6B6B22', backgroundColor: '#FF6B6B10' },
+  signOutText:{ fontSize: 14, fontWeight: '600', color: '#FF6B6B' },
+});
