@@ -467,6 +467,7 @@ export default function PageModernoReaderScreen() {
   const historyReadyRef = useRef(false); // ya se intentó recuperar el historial guardado
   const viewCountedRef = useRef(false);  // ya se intentó contar la lectura en esta apertura
   const historyRestoredRef = useRef(hist === '1'); // la recuperación terminó (se puede guardar en la nube)
+  const [historyRestoreTick, setHistoryRestoreTick] = useState(0); // cambia al recuperar el historial
 
   const [pages, setPages]       = useState<Page[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -837,24 +838,45 @@ export default function PageModernoReaderScreen() {
     stopBars();
   };
 
+  // ── Cadena de herencia ────────────────────────────────────────────────────
+  // Lo que una página no define (música, fondo, tamaño de texto, cuadro de texto,
+  // personajes) lo hereda de la página DESDE LA QUE SE LLEGÓ, no de la anterior en el
+  // orden del capítulo: a una página se puede llegar por enlaces o saltos.
+  // La cadena es: la página actual → las páginas del camino seguido (de la más reciente
+  // a la más antigua, dentro de este capítulo) → y, donde se acaba el camino conocido,
+  // las páginas anteriores en el orden del capítulo (como se hacía antes).
+  //
+  // Se recalcula al cambiar de página, no al tocar el historial: durante el fundido de
+  // salida el historial ya cambió pero la página aún no, y la herencia no debe saltar.
+  const inheritChain = useMemo(() => {
+    const chain: Page[] = [];
+    const seen = new Set<string>();
+    const add = (p?: Page) => { if (p && !seen.has(p.id)) { seen.add(p.id); chain.push(p); } };
+
+    add(pages[current]);
+    let oldestIdx = current;
+    for (let k = readerHistory.length - 1; k >= 0; k--) {
+      const entry = readerHistory[k];
+      if (entry.chapterId !== chapterId) break; // el camino viene de otro capítulo
+      const idx = pages.findIndex(p => p.id === entry.pageId);
+      if (idx < 0) continue; // página borrada
+      add(pages[idx]);
+      oldestIdx = idx;
+    }
+    for (let i = oldestIdx - 1; i >= 0; i--) add(pages[i]);
+    return chain;
+  }, [pages, current, chapterId, historyRestoreTick]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Efecto de música al cambiar de página ─────────────────────────────────
   useEffect(() => {
     if (pages.length === 0) return;
 
-    // Busca hacia atrás la pista efectiva para la página actual
-    let effectiveTrack: string | null = null;
-    let effectiveVolume = musicPlaybackVolume();
-    let found = false;
-    for (let i = current; i >= 0; i--) {
-      if (pages[i]?.musicUrl !== undefined) {
-        effectiveTrack = pages[i]?.musicUrl || null;
-        effectiveVolume = musicPlaybackVolume(pages[i]?.musicVolume);
-        found = true;
-        break;
-      }
-    }
+    // Pista efectiva: la de la primera página de la cadena de herencia que define música
+    const source = inheritChain.find(p => p.musicUrl !== undefined);
+    const effectiveTrack: string | null = source?.musicUrl || null;
+    const effectiveVolume = musicPlaybackVolume(source?.musicVolume);
 
-    if (!found || effectiveTrack === null) {
+    if (effectiveTrack === null) {
       // Sin música: detener si algo sonaba
       if (currentTrackRef.current !== null) stopTrack();
     } else if (effectiveTrack !== currentTrackRef.current) {
@@ -867,7 +889,7 @@ export default function PageModernoReaderScreen() {
       if (!isMutedRef.current && soundRef.current) fadeVolume(soundRef.current, from, effectiveVolume, 250);
     }
     // Si misma pista y mismo volumen: no hacer nada (sigue sonando)
-  }, [current, pages]);
+  }, [current, pages, inheritChain]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Efecto de sonido de la página: una vez al llegar; se corta al cambiar ──
   useEffect(() => {
@@ -893,18 +915,18 @@ export default function PageModernoReaderScreen() {
   // ── Precarga de audio: página actual y siguiente; se libera el resto ─────
   useEffect(() => {
     if (pages.length === 0) return;
-    const musicAt = (i: number): string | null => {
-      for (let k = i; k >= 0; k--) {
-        if (pages[k]?.musicUrl !== undefined) return pages[k]?.musicUrl || null;
-      }
-      return null;
-    };
+    const musicOf = (chain: Page[]) => chain.find(p => p.musicUrl !== undefined)?.musicUrl || null;
     const wanted = new Set<string>();
-    for (const i of [current, getNextPageIndex()]) {
-      if (i === null) continue;
-      const m = musicAt(i);
+    // Página actual, y la siguiente (que heredará de la actual al llegar desde ella)
+    const nextIdx = getNextPageIndex();
+    const targets: { page?: Page; chain: Page[] }[] = [{ page: pages[current], chain: inheritChain }];
+    if (nextIdx !== null && pages[nextIdx]) {
+      targets.push({ page: pages[nextIdx], chain: [pages[nextIdx], ...inheritChain] });
+    }
+    for (const t of targets) {
+      const m = musicOf(t.chain);
       if (m) wanted.add('music:' + m);
-      const s = pages[i]?.sfxUrl;
+      const s = t.page?.sfxUrl;
       if (s) wanted.add('sfx:' + s);
     }
     if (currentTrackRef.current) wanted.add('music:' + currentTrackRef.current);
@@ -916,7 +938,7 @@ export default function PageModernoReaderScreen() {
       else loadAudio(k.slice('sfx:'.length), false).catch(() => {});
     });
     [...audioCacheRef.current.keys()].forEach(k => { if (!wanted.has(k)) releaseAudio(k); });
-  }, [current, pages]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [current, pages, inheritChain]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Cleanup al salir del reader ───────────────────────────────────────────
   useEffect(() => {
@@ -951,6 +973,7 @@ export default function PageModernoReaderScreen() {
         const restore = (history: HistoryEntry[]) => {
           readerHistory = [...history, ...readerHistory].slice(-HISTORY_MAX);
           setHistoryLen(readerHistory.length);
+          setHistoryRestoreTick(t => t + 1);
         };
         try {
           const raw = await AsyncStorage.getItem(key);
@@ -1295,26 +1318,28 @@ export default function PageModernoReaderScreen() {
   const hasNextOverride = page?.nextPageIndex !== undefined && page?.nextPageIndex !== null;
   const showArrowRight  = !isLastPage || hasNextOverride;
 
-  // ── Herencia de imagen de fondo (como la música) ──────────────────────────
-  const effectiveBg = (() => {
-    for (let i = current; i >= 0; i--) {
-      if (pages[i]?.backgroundUrl) return {
-        url:    pages[i].backgroundUrl,
-        anchor: pages[i].imageAnchor ?? 'center',
-        fit:    pages[i].imageFit    ?? 'cover',
-        blur:   pages[i].bgBlur      ?? BG_BLUR_DEFAULT,
-      };
+  // Primer valor definido en la cadena de herencia (ver inheritChain)
+  const inherit = <T,>(pick: (p: Page) => T | undefined): T | undefined => {
+    for (const p of inheritChain) {
+      const value = pick(p);
+      if (value !== undefined) return value;
     }
-    return null;
-  })();
+    return undefined;
+  };
 
-  // ── Herencia de tamaño de texto (como la música) ──────────────────────────
-  const effectiveTextSize: TextSize = (() => {
-    for (let i = current; i >= 0; i--) {
-      if (pages[i]?.textSize !== undefined) return pages[i].textSize!;
-    }
-    return 'md';
-  })();
+  // ── Imagen de fondo heredada (con su encuadre y desenfoque) ───────────────
+  const bgSource = inheritChain.find(p => !!p.backgroundUrl);
+  const effectiveBg = bgSource
+    ? {
+        url:    bgSource.backgroundUrl,
+        anchor: bgSource.imageAnchor ?? 'center',
+        fit:    bgSource.imageFit    ?? 'cover',
+        blur:   bgSource.bgBlur      ?? BG_BLUR_DEFAULT,
+      }
+    : null;
+
+  // ── Tamaño de texto heredado ──────────────────────────────────────────────
+  const effectiveTextSize: TextSize = inherit(p => p.textSize) ?? 'md';
 
   // Estable entre renders para que el Typewriter (memo) no se repinte sin motivo
   const textFontSize = FONT_SIZES[effectiveTextSize] * TEXT_SCALE[textScale];
@@ -1329,51 +1354,16 @@ export default function PageModernoReaderScreen() {
   );
   const onParagraphComplete = useCallback(() => setParaComplete(true), []);
 
-  // ── Layout del cuadro de texto — heredado hacia atrás (como música y fondo) ─
-  const tbl = (() => {
-    for (let i = current; i >= 0; i--) {
-      if (pages[i]?.textBoxLayout !== undefined) return pages[i].textBoxLayout!;
-    }
-    return DEFAULT_TBL;
-  })();
-
-  // ── Nombres y posiciones de personaje — heredados hacia atrás ───────────
-  const effectiveLeftChar = (() => {
-    for (let i = current; i >= 0; i--) {
-      if (pages[i]?.leftChar !== undefined) return pages[i].leftChar || null;
-    }
-    return null;
-  })();
-  const effectiveRightChar = (() => {
-    for (let i = current; i >= 0; i--) {
-      if (pages[i]?.rightChar !== undefined) return pages[i].rightChar || null;
-    }
-    return null;
-  })();
-  const effectiveLeftCharPos = (() => {
-    for (let i = current; i >= 0; i--) {
-      if (pages[i]?.leftCharPos !== undefined) return pages[i].leftCharPos!;
-    }
-    return null;
-  })();
-  const effectiveRightCharPos = (() => {
-    for (let i = current; i >= 0; i--) {
-      if (pages[i]?.rightCharPos !== undefined) return pages[i].rightCharPos!;
-    }
-    return null;
-  })();
-  const effectiveLeftCharSide = (() => {
-    for (let i = current; i >= 0; i--) {
-      if (pages[i]?.leftCharSide !== undefined) return pages[i].leftCharSide!;
-    }
-    return 1; // default: pegado arriba (sin borde inferior)
-  })();
-  const effectiveRightCharSide = (() => {
-    for (let i = current; i >= 0; i--) {
-      if (pages[i]?.rightCharSide !== undefined) return pages[i].rightCharSide!;
-    }
-    return 1;
-  })();
+  // ── Cuadro de texto y personajes heredados ────────────────────────────────
+  const tbl = inherit(p => p.textBoxLayout) ?? DEFAULT_TBL;
+  // Nombre: undefined = heredar, '' = ocultar
+  const effectiveLeftChar     = inherit(p => p.leftChar)  || null;
+  const effectiveRightChar    = inherit(p => p.rightChar) || null;
+  const effectiveLeftCharPos  = inherit(p => p.leftCharPos)  ?? null;
+  const effectiveRightCharPos = inherit(p => p.rightCharPos) ?? null;
+  // Lado al que va pegada la etiqueta (por defecto arriba)
+  const effectiveLeftCharSide  = inherit(p => p.leftCharSide)  ?? 1;
+  const effectiveRightCharSide = inherit(p => p.rightCharSide) ?? 1;
   const tbPixels = {
     left:   (tbl.x / 100) * containerSize.width,
     top:    (tbl.y / 100) * containerSize.height,
