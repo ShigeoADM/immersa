@@ -1,10 +1,10 @@
 import { DarkTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 import * as NavigationBar from 'expo-navigation-bar';
-import { Platform, View } from 'react-native';
+import { Platform, View, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider, useAuth } from '@/context/AuthContext';
@@ -26,6 +26,7 @@ function RootNavigator() {
   const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const navReady = !!useRootNavigationState()?.key;
 
   // Pintar la barra de navegación Android del mismo color oscuro que la app
   useEffect(() => {
@@ -35,24 +36,21 @@ function RootNavigator() {
     }
   }, []);
 
+  // Redirigir solo cuando el navegador ya está montado: un replace durante el
+  // montaje inicial dejaba en Android una transición a medias que bloqueaba
+  // los toques hasta pulsar "atrás".
   useEffect(() => {
-    if (loading) return;
+    if (loading || !navReady) return;
     const inAuth = segments[0] === 'auth';
     if (!user && !inAuth) {
       router.replace('/auth/login');
     } else if (user && inAuth) {
       router.replace('/(tabs)');
     }
-  }, [user, loading]);   // ← sin 'segments': evita bucles de navegación
-
-  // Mientras Firebase resuelve el estado de auth, no renderizar el Stack.
-  // Esto evita que expo-router monte las tabs y las reemplace inmediatamente,
-  // lo que dejaba el gesture responder system en estado inconsistente en Android.
-  if (loading) {
-    return <View style={{ flex: 1, backgroundColor: '#0A0A0A' }} />;
-  }
+  }, [user, loading, navReady]);   // ← sin 'segments': evita bucles de navegación
 
   return (
+    <>
     <Stack>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="auth/login" options={{ headerShown: false }} />
@@ -66,11 +64,15 @@ function RootNavigator() {
       <Stack.Screen name="story/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="profile/settings" options={{ headerShown: false }} />
     </Stack>
+    {/* Pantalla de carga encima del Stack mientras Firebase resuelve la sesión */}
+    {loading && <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0A0A0A' }]} />}
+    </>
   );
 }
 
+// En expo-router v4 la clave es initialRouteName ('anchor' es de versiones posteriores)
 export const unstable_settings = {
-  anchor: '(tabs)',
+  initialRouteName: '(tabs)',
 };
 
 export default function RootLayout() {
