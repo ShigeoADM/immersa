@@ -343,6 +343,17 @@ export default function SettingsScreen() {
           <Text style={styles.signOutText}>Cerrar sesión</Text>
         </TouchableOpacity>
 
+        {/* ── Usuarios bloqueados ── */}
+        <TouchableOpacity
+          style={styles.blockedRow}
+          activeOpacity={0.8}
+          onPress={() => router.push('/profile/lists?tab=blocked' as Href)}
+        >
+          <MaterialIcons name="block" size={18} color={Colors.textSecondary} />
+          <Text style={styles.blockedText}>Usuarios bloqueados</Text>
+          <MaterialIcons name="chevron-right" size={20} color={Colors.textMuted} />
+        </TouchableOpacity>
+
         {/* ── Textos legales ── */}
         <View style={styles.legalRow}>
           <TouchableOpacity onPress={() => router.push('/auth/legal?doc=terms' as Href)} hitSlop={8}>
@@ -471,6 +482,8 @@ const styles = StyleSheet.create({
 
   signOutBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, paddingHorizontal: 14, borderRadius: 6, borderWidth: 1, borderColor: '#FF6B6B22', backgroundColor: '#FF6B6B10' },
   signOutText:{ fontSize: 14, fontWeight: '600', color: '#FF6B6B' },
+  blockedRow:  { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, marginTop: 12 },
+  blockedText: { flex: 1, fontSize: 14, color: Colors.textPrimary },
   legalRow:   { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 24 },
   legalLink:  { fontSize: 12, color: Colors.textSecondary, textDecorationLine: 'underline' },
   legalSep:   { fontSize: 12, color: Colors.textMuted },

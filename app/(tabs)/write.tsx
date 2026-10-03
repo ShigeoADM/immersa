@@ -52,7 +52,16 @@ interface Story {
 
 export default function WriteScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, suspended } = useAuth();
+
+  // Una cuenta suspendida no puede crear historias (las reglas también lo impiden)
+  const startStory = (format: string) => {
+    if (suspended) {
+      AppAlert.alert('Cuenta suspendida', 'Tu cuenta está suspendida: no puedes publicar ni editar historias.');
+      return;
+    }
+    router.push(`/create/moderno-details?format=${format}`);
+  };
 
   const [stories, setStories]               = useState<Story[]>([]);
   const [loadingStories, setLoadingStories] = useState(true);
@@ -159,7 +168,7 @@ export default function WriteScreen() {
               <TouchableOpacity
                 style={styles.formatCard}
                 activeOpacity={0.75}
-                onPress={() => router.push(`/create/moderno-details?format=${f.key}`)}
+                onPress={() => startStory(f.key)}
               >
                 <View style={[styles.cardTopBevel, { backgroundColor: f.color }]} />
                 <View style={styles.formatInfo}>
@@ -234,7 +243,7 @@ export default function WriteScreen() {
                 <TouchableOpacity
                   style={styles.formatCard}
                   activeOpacity={0.75}
-                  onPress={() => router.push(`/create/moderno-details?format=${f.key}`)}
+                  onPress={() => startStory(f.key)}
                 >
                   <View style={[styles.cardTopBevel, { backgroundColor: f.color }]} />
                   <View style={styles.formatInfo}>

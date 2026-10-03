@@ -195,7 +195,7 @@ export default function DiscoverScreen() {
   const [webnovelNew, setWebnovelNew] = useState<StoryCard[]>([]);
   const [popular, setPopular]         = useState<StoryCard[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(true);
-  const { isAdult } = useAuth();
+  const { isAdult, blocked } = useAuth();
 
   useFocusEffect(
     useCallback(() => {
@@ -210,7 +210,9 @@ export default function DiscoverScreen() {
           const all = snap.docs
             .map(d => ({ id: d.id, ...(d.data() as Omit<StoryCard, 'id'>) }))
             // Los menores de edad no ven las historias +18
-            .filter(s => !(s.isAdult && isAdult === false));
+            .filter(s => !(s.isAdult && isAdult === false))
+            // Tampoco se muestran las historias de usuarios bloqueados
+            .filter(s => !blocked.has(s.uid));
 
           const moderno  = all.filter(s => s.format === 'Moderno');
           const webnovel = all.filter(s => s.format === 'Webnovel');
@@ -236,7 +238,7 @@ export default function DiscoverScreen() {
         }
       })();
       return () => { cancelled = true; };
-    }, [isAdult])
+    }, [isAdult, blocked])
   );
 
   const handleStoryPress = (s: StoryCard) => router.push(`/story/${s.id}`);

@@ -71,7 +71,7 @@ const STATUS_LABELS: Record<string, string> = {
 export default function StoryDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user, can, publicName, isAdult } = useAuth();
+  const { user, can, publicName, isAdult, blocked } = useAuth();
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null); // denuncia en curso
   // Moderación (permiso 'deleteStories'): eliminar la historia con un motivo opcional
   const [moderating, setModerating]   = useState(false);
@@ -247,6 +247,9 @@ export default function StoryDetailScreen() {
       setLiking(false);
     }
   };
+
+  // Sin los comentarios de usuarios bloqueados
+  const visibleComments = comments.filter(c => !blocked.has(c.uid));
 
   const handleDeleteComment = (c: StoryComment) => {
     AppAlert.alert('Borrar comentario', '¿Seguro que quieres borrar este comentario?', [
@@ -537,15 +540,15 @@ export default function StoryDetailScreen() {
         {/* ── Comentarios de toda la novela (por página en Moderno, por capítulo en Webnovel) ── */}
         <View style={styles.section}>
           <Text style={[styles.sectionLabel, themed.muted]}>
-            Comentarios{comments.length > 0 ? ` · ${comments.length}` : ''}
+            Comentarios{visibleComments.length > 0 ? ` · ${visibleComments.length}` : ''}
           </Text>
-          {comments.length === 0 ? (
+          {visibleComments.length === 0 ? (
             <Text style={[styles.emptyChapters, themed.muted]}>
               {story.format === 'Webnovel'
                 ? 'Todavía no hay comentarios. Se escriben al final de cada capítulo.'
                 : 'Todavía no hay comentarios. Se escriben desde cada página, al leer.'}
             </Text>
-          ) : comments.map(c => (
+          ) : visibleComments.map(c => (
             <CommentItem
               key={c.id}
               comment={withCurrentLocation(c)}

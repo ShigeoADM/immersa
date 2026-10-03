@@ -494,7 +494,7 @@ export default function PageModernoReaderScreen() {
   const [nextChapter, setNextChapter] = useState<{ id: string; title: string } | null>(null);
   const [isAuthor, setIsAuthor] = useState(false);
   // Comentarios: se cargan los del capítulo y se reparten por página
-  const { publicName, publicAvatar, can } = useAuth();
+  const { publicName, publicAvatar, can, blocked, suspended } = useAuth();
   const [storyMeta, setStoryMeta]           = useState<{ title?: string; authorUid?: string | null }>({});
   const [chapterNumber, setChapterNumber]   = useState(1);
   const [chapterComments, setChapterComments] = useState<StoryComment[]>([]);
@@ -1145,6 +1145,10 @@ export default function PageModernoReaderScreen() {
     const me = auth.currentUser;
     const pg = pages[current];
     if (!text || !me || !pg || sendingComment) return;
+    if (suspended) {
+      AppAlert.alert('Cuenta suspendida', 'Tu cuenta está suspendida: no puedes comentar.');
+      return;
+    }
     setSendingComment(true);
     try {
       const created = await addComment(
@@ -1285,7 +1289,8 @@ export default function PageModernoReaderScreen() {
   const goNextPage = () => { const next = getNextPageIndex(); if (next !== null) fadeToPage(next); };
 
   const page       = pages[current];
-  const pageComments = page ? chapterComments.filter(c => c.pageId === page.id) : [];
+  // Comentarios de esta página, sin los de usuarios bloqueados
+  const pageComments = page ? chapterComments.filter(c => c.pageId === page.id && !blocked.has(c.uid)) : [];
   const isLastPage = current === pages.length - 1 && pages.length > 0;
   const hasNextOverride = page?.nextPageIndex !== undefined && page?.nextPageIndex !== null;
   const showArrowRight  = !isLastPage || hasNextOverride;

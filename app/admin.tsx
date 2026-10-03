@@ -25,6 +25,7 @@ import {
 } from '@/services/admin';
 import { type Report, dismissReport, listReports, reportReasonLabel } from '@/services/reports';
 import { deleteComment } from '@/services/comments';
+import { adminDeleteUserData } from '@/services/moderation';
 
 const TYPES: { value: AnnouncementType; label: string; icon: string }[] = [
   { value: 'news',  label: 'Noticia',                 icon: 'campaign' },
@@ -54,6 +55,11 @@ export default function AdminScreen() {
   const [email, setEmail]   = useState('');
   const [adding, setAdding] = useState(false);
   const [busyUid, setBusyUid] = useState<string | null>(null);
+
+  // Borrar los datos de un usuario (solo el dueño): peticiones de borrado por correo
+  const isOwner = staff.role === 'owner';
+  const [purgeEmail, setPurgeEmail] = useState('');
+  const [purging, setPurging]       = useState(false);
 
   // Cada sección solo se carga si se tiene el permiso (si no, las reglas lo rechazarían)
   const load = useCallback(async () => {
@@ -200,6 +206,51 @@ export default function AdminScreen() {
         },
       },
     ]);
+  };
+
+  const handlePurgeUser = async () => {
+    if (!purgeEmail.trim() || purging) return;
+    setPurging(true);
+    try {
+      const found = await findUserByEmail(purgeEmail);
+      if (!found) {
+        AppAlert.alert('Usuario no encontrado', 'No hay ninguna cuenta registrada con ese correo.');
+        return;
+      }
+      if (found.uid === user?.uid || found.role) {
+        AppAlert.alert('No permitido', 'No se pueden borrar desde aquí tus propios datos ni los de un miembro del equipo.');
+        return;
+      }
+      AppAlert.alert(
+        'Borrar datos del usuario',
+        `Se borrarán para siempre el perfil, las historias, la biblioteca y las notificaciones de ${found.name} (${found.email}). Sus lectores recibirán un aviso. No se puede deshacer.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Borrar todo', style: 'destructive',
+            onPress: async () => {
+              setPurging(true);
+              try {
+                await adminDeleteUserData(found.uid);
+                setPurgeEmail('');
+                AppAlert.alert(
+                  'Datos borrados',
+                  `Falta un paso que solo se puede hacer en la consola de Firebase: en Authentication → Users, busca ${found.email} y elimina la cuenta. Hasta entonces podría volver a iniciar sesión.`,
+                );
+              } catch (e: any) {
+                AppAlert.alert('Error', e?.message ?? 'No se pudieron borrar los datos.');
+              } finally {
+                setPurging(false);
+              }
+            },
+          },
+        ],
+      );
+    } catch (e: any) {
+      AppAlert.alert('Error', e?.message ?? 'No se pudo buscar al usuario.');
+    } finally {
+      setPurging(false);
+    }
   };
 
   const header = (
@@ -454,6 +505,38 @@ export default function AdminScreen() {
                 {adding
                   ? <ActivityIndicator size="small" color="#000" />
                   : <MaterialIcons name="person-add" size={18} color="#000" />}
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+        {/* ── Borrar los datos de un usuario (solo el dueño) ── */}
+        {isOwner && (
+          <>
+            <Text style={styles.sectionTitle}>Borrar los datos de un usuario</Text>
+            <Text style={styles.hint}>
+              Para peticiones de borrado de cuenta que lleguen por correo. Borra su perfil, sus historias,
+              su biblioteca y sus notificaciones. Después hay que eliminar su acceso en la consola de Firebase.
+            </Text>
+            <View style={styles.addRow}>
+              <TextInput
+                style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                value={purgeEmail}
+                onChangeText={setPurgeEmail}
+                placeholder="Correo de la cuenta a borrar"
+                placeholderTextColor={Colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+              />
+              <TouchableOpacity
+                style={[styles.addBtn, { backgroundColor: '#D9363E' }, (!purgeEmail.trim() || purging) && { opacity: 0.4 }]}
+                onPress={handlePurgeUser}
+                disabled={!purgeEmail.trim() || purging}
+                activeOpacity={0.85}
+              >
+                {purging
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <MaterialIcons name="delete-forever" size={20} color="#fff" />}
               </TouchableOpacity>
             </View>
           </>

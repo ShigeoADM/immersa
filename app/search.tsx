@@ -15,6 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 
 interface SearchStory {
   id: string;
+  uid?: string;
   title: string;
   subtitle?: string;
   format: string;
@@ -44,7 +45,7 @@ export default function SearchScreen() {
   const [format, setFormat]   = useState<string | null>(null);
   const [genres, setGenres]   = useState<string[]>([]);
   const [hideAdult, setHideAdult] = useState(false);
-  const { isAdult } = useAuth();
+  const { isAdult, blocked } = useAuth();
   const isMinor = isAdult === false; // los menores nunca ven historias +18
 
   useEffect(() => {
@@ -68,6 +69,7 @@ export default function SearchScreen() {
       .filter(s => {
         if (format && s.format !== format) return false;
         if ((hideAdult || isMinor) && s.isAdult) return false;
+        if (s.uid && blocked.has(s.uid)) return false; // autores bloqueados
         // La historia debe tener todos los géneros elegidos
         if (genres.length > 0 && !genres.every(g => s.genres?.includes(g))) return false;
         if (words.length === 0) return true;
@@ -77,7 +79,7 @@ export default function SearchScreen() {
       // Más gustadas primero; a igualdad, las más recientes
       .sort((a, b) =>
         (b.likeCount ?? 0) - (a.likeCount ?? 0) || (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
-  }, [stories, text, format, genres, hideAdult, isMinor]);
+  }, [stories, text, format, genres, hideAdult, isMinor, blocked]);
 
   const toggleGenre = (g: string) =>
     setGenres(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);

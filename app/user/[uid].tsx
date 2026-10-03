@@ -14,6 +14,7 @@ import { type PublicProfile, getPublicProfile } from '@/services/profiles';
 import { getFollowerCount, isFollowing, setFollow } from '@/services/social';
 import { useAuth } from '@/context/AuthContext';
 import { AppAlert } from '@/components/app-dialog';
+import { blockUser, isSuspended, setSuspended, unblockUser } from '@/services/moderation';
 
 interface StoryCard {
   id: string;
@@ -38,7 +39,7 @@ export default function PublicProfileScreen() {
   const [stories, setStories] = useState<StoryCard[]>([]);
   const [loading, setLoading] = useState(true);
   // Seguir al autor
-  const { user, publicName } = useAuth();
+  const { user, publicName, blocked, can } = useAuth();
   const isMe = !!user && user.uid === uid;
   const [following, setFollowing] = useState(false);
   const [followers, setFollowers] = useState(0);
@@ -51,6 +52,59 @@ export default function PublicProfileScreen() {
       isFollowing(user.uid, uid).then(setFollowing).catch(e => console.error('Error cargando seguimiento:', e));
     }
   }, [uid, user]);
+
+  // ── Bloquear (cualquier usuario) ──────────────────────────────────────────
+  const isBlocked = !!uid && blocked.has(uid);
+  const toggleBlock = () => {
+    if (!user || !uid || isMe) return;
+    if (isBlocked) {
+      unblockUser(user.uid, uid).catch(e => AppAlert.alert('Error', e?.message ?? 'No se pudo desbloquear.'));
+      return;
+    }
+    AppAlert.alert(
+      'Bloquear usuario',
+      `Dejarás de ver las historias y los comentarios de ${profile?.displayName ?? 'este usuario'}. No se le avisa, y puedes desbloquearlo cuando quieras.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Bloquear', style: 'destructive',
+          onPress: () => blockUser(user.uid, { uid, name: profile?.displayName ?? 'Usuario' })
+            .catch(e => AppAlert.alert('Error', e?.message ?? 'No se pudo bloquear.')),
+        },
+      ],
+    );
+  };
+
+  // ── Suspender (moderación) ────────────────────────────────────────────────
+  const canModerate = can('deleteStories') && !isMe && !profile?.role;
+  const [targetSuspended, setTargetSuspended] = useState(false);
+  useEffect(() => {
+    if (!uid || !can('deleteStories') || isMe) return;
+    isSuspended(uid).then(setTargetSuspended).catch(() => {});
+  }, [uid, isMe]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleSuspended = () => {
+    if (!uid || !canModerate) return;
+    const next = !targetSuspended;
+    AppAlert.alert(
+      next ? 'Suspender cuenta' : 'Quitar suspensión',
+      next
+        ? 'Esta persona podrá seguir leyendo, pero no publicar ni editar historias, ni comentar. Se le avisará.'
+        : 'Esta persona podrá volver a publicar y comentar. Se le avisará.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: next ? 'Suspender' : 'Quitar suspensión', style: next ? 'destructive' : 'default',
+          onPress: async () => {
+            try {
+              await setSuspended(uid, next);
+              setTargetSuspended(next);
+            } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo cambiar la suspensión.'); }
+          },
+        },
+      ],
+    );
+  };
 
   const toggleFollow = async () => {
     if (!user || !uid || isMe || followBusy) return;
@@ -149,6 +203,24 @@ export default function PublicProfileScreen() {
                   </Text>
                 </TouchableOpacity>
               )}
+              {/* Bloquear / suspender */}
+              {user && !isMe && (
+                <View style={styles.modRow}>
+                  <TouchableOpacity onPress={toggleBlock} hitSlop={8} activeOpacity={0.7}>
+                    <Text style={styles.modLink}>{isBlocked ? 'Desbloquear' : 'Bloquear'}</Text>
+                  </TouchableOpacity>
+                  {canModerate && (
+                    <TouchableOpacity onPress={toggleSuspended} hitSlop={8} activeOpacity={0.7}>
+                      <Text style={[styles.modLink, { color: '#FF6B6B' }]}>
+                        {targetSuspended ? 'Quitar suspensión' : 'Suspender cuenta'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+              {targetSuspended && canModerate && (
+                <Text style={styles.suspendedNote}>Cuenta suspendida</Text>
+              )}
             </>
           )}
         </View>
@@ -217,6 +289,9 @@ const styles = StyleSheet.create({
   },
   followBtnOn:   { backgroundColor: 'transparent' },
   followBtnText: { fontSize: 14, fontWeight: '700', color: '#000' },
+  modRow:        { flexDirection: 'row', gap: 22, marginTop: 14 },
+  modLink:       { fontSize: 12, color: Colors.textMuted, textDecorationLine: 'underline' },
+  suspendedNote: { fontSize: 12, fontWeight: '700', color: '#FF6B6B', marginTop: 8 },
   statNum:   { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
   statLabel: { fontSize: 11, color: Colors.textMuted },
   section:      { padding: 20 },

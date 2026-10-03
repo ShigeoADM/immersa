@@ -56,7 +56,7 @@ export default function WebnovelReaderScreen() {
   const theme = WEBNOVEL_THEMES[themeName];
 
   // Comentarios del capítulo (al final del texto)
-  const { publicName, publicAvatar, can } = useAuth();
+  const { publicName, publicAvatar, can, blocked, suspended } = useAuth();
   const [comments, setComments]       = useState<StoryComment[]>([]);
   const [staffRoles, setStaffRoles]   = useState<Map<string, Role>>(new Map());
   const [commentText, setCommentText] = useState('');
@@ -217,6 +217,10 @@ export default function WebnovelReaderScreen() {
     const text = commentText.trim();
     const me = auth.currentUser;
     if (!text || !me || !storyId || !chapterId || sending) return;
+    if (suspended) {
+      AppAlert.alert('Cuenta suspendida', 'Tu cuenta está suspendida: no puedes comentar.');
+      return;
+    }
     setSending(true);
     try {
       const created = await addComment(
@@ -250,6 +254,9 @@ export default function WebnovelReaderScreen() {
       },
     ]);
   };
+
+  // Sin los comentarios de usuarios bloqueados
+  const visibleComments = comments.filter(c => !blocked.has(c.uid));
 
   const goToChapter = (id: string) =>
     router.replace(`/reader/webnovel?storyId=${storyId}&chapterId=${id}${isPreview ? '&preview=1' : ''}`);
@@ -344,7 +351,7 @@ export default function WebnovelReaderScreen() {
           {!isPreview && (
             <View style={[styles.commentsBlock, { borderTopColor: theme.border }]}>
               <Text style={[styles.commentsTitle, { color: theme.text }]}>
-                Comentarios{comments.length > 0 ? ` · ${comments.length}` : ''}
+                Comentarios{visibleComments.length > 0 ? ` · ${visibleComments.length}` : ''}
               </Text>
               <View style={styles.commentInputRow}>
                 <TextInput
@@ -367,11 +374,11 @@ export default function WebnovelReaderScreen() {
                     : <MaterialIcons name="send" size={16} color="#000" />}
                 </TouchableOpacity>
               </View>
-              {comments.length === 0 ? (
+              {visibleComments.length === 0 ? (
                 <Text style={[styles.commentsEmpty, { color: theme.muted }]}>
                   Nadie ha comentado este capítulo todavía.
                 </Text>
-              ) : comments.map(c => (
+              ) : visibleComments.map(c => (
                 <CommentItem
                   key={c.id}
                   comment={c}

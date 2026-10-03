@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
 import { type Permission, type Staff, hasPermission } from '@/constants/permissions';
 import { syncPublicProfile } from '@/services/profiles';
@@ -20,13 +20,17 @@ interface AuthContextType {
   // Mayoría de edad según la fecha de nacimiento: true / false, o null si aún no la ha
   // indicado (cuentas anteriores a pedirla en el registro)
   isAdult: boolean | null;
+  // Cuenta suspendida por moderación: puede leer, pero no publicar ni comentar
+  suspended: boolean;
+  // Usuarios que este usuario ha bloqueado (no ve sus historias ni sus comentarios)
+  blocked: Set<string>;
 }
 
 const NO_STAFF: Staff = { role: null, permissions: [] };
 
 const AuthContext = createContext<AuthContextType>({
   user: null, loading: true, staff: NO_STAFF, isStaff: false, can: () => false,
-  publicName: '', publicAvatar: '', isAdult: null,
+  publicName: '', publicAvatar: '', isAdult: null, suspended: false, blocked: new Set<string>(),
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -35,6 +39,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [staff, setStaff] = useState<Staff>(NO_STAFF);
   const [publicInfo, setPublicInfo] = useState({ name: '', avatar: '' });
   const [isAdult, setIsAdult] = useState<boolean | null>(null);
+  const [suspended, setSuspended] = useState(false);
+  const [blocked, setBlocked] = useState<Set<string>>(new Set());
+
+  // Lista de bloqueados, en vivo
+  useEffect(() => {
+    if (!user) { setBlocked(new Set()); return; }
+    return onSnapshot(
+      collection(db, 'users', user.uid, 'blocked'),
+      snap => setBlocked(new Set(snap.docs.map(d => d.id))),
+      () => setBlocked(new Set()),
+    );
+  }, [user]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -46,7 +62,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Se escucha en vivo: un cambio de rol o permisos se refleja sin reiniciar la app
   useEffect(() => {
-    if (!user) { setStaff(NO_STAFF); setPublicInfo({ name: '', avatar: '' }); setIsAdult(null); return; }
+    if (!user) {
+      setStaff(NO_STAFF); setPublicInfo({ name: '', avatar: '' }); setIsAdult(null); setSuspended(false);
+      return;
+    }
     return onSnapshot(
       doc(db, 'users', user.uid),
       snap => {
@@ -58,6 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           avatar: d?.avatarUrl || user.photoURL || '',
         });
         setIsAdult(isAdultFrom(d?.birthDate));
+        setSuspended(d?.suspended === true);
         // Mantener al día el perfil público (lo que ven los demás usuarios)
         syncPublicProfile(user, d).catch(e => console.error('Error sincronizando el perfil público:', e));
       },
@@ -69,9 +89,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       user, loading, staff, isStaff: staff.role !== null, can,
-      publicName: publicInfo.name, publicAvatar: publicInfo.avatar, isAdult,
+      publicName: publicInfo.name, publicAvatar: publicInfo.avatar, isAdult, suspended, blocked,
     }),
-    [user, loading, staff, can, publicInfo, isAdult],
+    [user, loading, staff, can, publicInfo, isAdult, suspended, blocked],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
