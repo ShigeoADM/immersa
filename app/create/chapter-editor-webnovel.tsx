@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,7 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { AppAlert, useDialogAccent } from '@/components/app-dialog';
-import { WEBNOVEL_FONT, stripRichText } from '@/constants/webnovel';
+import { WEBNOVEL_FONT, findRichMarks, stripRichText } from '@/constants/webnovel';
 import { RichText } from '@/components/rich-text';
 import { countWords, formatReadingStats } from '@/services/stories';
 
@@ -156,6 +156,51 @@ export default function ChapterEditorWebnovelScreen() {
     }
   };
 
+  // ── Formato visible mientras se escribe ───────────────────────────────────
+  // El texto se guarda con marcas (**negrita**, *cursiva*), pero el campo las pinta ya
+  // con su estilo y esconde los asteriscos (letra diminuta y transparente: siguen en el
+  // texto, pero no se ven ni ocupan sitio).
+  const styledContent = useMemo(() => {
+    const out: React.ReactNode[] = [];
+    let pos = 0;
+    findRichMarks(content).forEach((m, i) => {
+      if (m.start > pos) out.push(content.slice(pos, m.start));
+      const mark = content.slice(m.start, m.start + m.n);
+      out.push(
+        <Text key={`o${i}`} style={styles.hiddenMark}>{mark}</Text>,
+        <Text
+          key={`t${i}`}
+          style={{ fontWeight: m.n >= 2 ? '700' : undefined, fontStyle: m.n !== 2 ? 'italic' : undefined }}
+        >{content.slice(m.start + m.n, m.end - m.n)}</Text>,
+        <Text key={`c${i}`} style={styles.hiddenMark}>{mark}</Text>,
+      );
+      pos = m.end;
+    });
+    if (pos < content.length) out.push(content.slice(pos));
+    return out;
+  }, [content]);
+
+  // Si al borrar se toca una marca oculta, se quita el formato entero de ese tramo
+  // (si no, quedaría una marca suelta y aparecerían asteriscos sin sentido).
+  const handleChangeText = (next: string) => {
+    if (next.length === content.length - 1) {
+      let p = 0;
+      while (p < next.length && next[p] === content[p]) p++;
+      if (content[p] === '*') {
+        const m = findRichMarks(content).find(x =>
+          (p >= x.start && p < x.start + x.n) || (p >= x.end - x.n && p < x.end));
+        if (m) {
+          const inner = content.slice(m.start + m.n, m.end - m.n);
+          setContent(content.slice(0, m.start) + inner + content.slice(m.end));
+          const cursor = p < m.start + m.n ? m.start : m.start + inner.length;
+          setForcedSelection({ start: cursor, end: cursor });
+          return;
+        }
+      }
+    }
+    setContent(next);
+  };
+
   // ── Negrita / cursiva ─────────────────────────────────────────────────────
   // Envuelve la selección con la marca (** o *). Si ya estaba envuelta, la quita.
   // Sin selección, inserta las marcas y deja el cursor en medio.
@@ -262,8 +307,7 @@ export default function ChapterEditorWebnovelScreen() {
         ) : (
           <TextInput
             style={styles.contentInput}
-            value={content}
-            onChangeText={setContent}
+            onChangeText={handleChangeText}
             selection={forcedSelection}
             onSelectionChange={e => {
               selectionRef.current = e.nativeEvent.selection;
@@ -274,7 +318,9 @@ export default function ChapterEditorWebnovelScreen() {
             multiline
             textAlignVertical="top"
             scrollEnabled
-          />
+          >
+            {styledContent}
+          </TextInput>
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -321,6 +367,8 @@ const styles = StyleSheet.create({
     flex: 1, paddingHorizontal: 20, paddingVertical: 14,
     fontSize: 16, lineHeight: 25, color: Colors.textPrimary,
   },
+  // Marcas de formato dentro del campo: presentes en el texto, pero invisibles
+  hiddenMark: { fontSize: 1, color: 'transparent' },
   previewContent: { paddingHorizontal: 20, paddingVertical: 14 },
   previewText:    { fontFamily: WEBNOVEL_FONT, fontSize: 17, lineHeight: 28, color: Colors.textPrimary },
   hint:           { fontSize: 13, color: Colors.textMuted },

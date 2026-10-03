@@ -1,0 +1,184 @@
+import React, { useCallback, useState } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, FlatList, StatusBar, ActivityIndicator,
+} from 'react-native';
+import { Image } from 'expo-image';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useAuth } from '@/context/AuthContext';
+import { Colors } from '@/constants/theme';
+import { RoleBadge } from '@/components/role-badge';
+import type { PublicProfile } from '@/services/profiles';
+import { type LikedStory, listFollowing, listLikedStories } from '@/services/social';
+
+type Tab = 'following' | 'liked';
+
+// Listas del propio usuario: autores que sigue e historias que le gustan.
+export default function ProfileListsScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
+
+  const [tab, setTab] = useState<Tab>(tabParam === 'liked' ? 'liked' : 'following');
+  const [following, setFollowing] = useState<PublicProfile[]>([]);
+  const [liked, setLiked]         = useState<LikedStory[]>([]);
+  const [loading, setLoading]     = useState(true);
+
+  // Se recarga al volver (p. ej. tras dejar de seguir a alguien desde su perfil)
+  useFocusEffect(useCallback(() => {
+    if (!user) { setLoading(false); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [f, l] = await Promise.all([listFollowing(user.uid), listLikedStories(user.uid)]);
+        if (cancelled) return;
+        setFollowing(f);
+        setLiked(l);
+      } catch (e) {
+        console.error('Error cargando listas:', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user]));
+
+  const tabs: { key: Tab; label: string; count: number }[] = [
+    { key: 'following', label: 'Siguiendo', count: following.length },
+    { key: 'liked',     label: 'Me gusta',  count: liked.length },
+  ];
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      <SafeAreaView edges={['top']} style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+          <MaterialIcons name="arrow-back" size={22} color={Colors.textPrimary} />
+        </TouchableOpacity>
+        <View style={styles.tabs}>
+          {tabs.map(t => (
+            <TouchableOpacity
+              key={t.key}
+              style={[styles.tab, tab === t.key && styles.tabActive]}
+              onPress={() => setTab(t.key)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>
+                {t.label}{loading ? '' : ` · ${t.count}`}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.backBtn} />
+      </SafeAreaView>
+
+      {loading ? (
+        <View style={styles.centered}><ActivityIndicator color={Colors.emerald} /></View>
+      ) : tab === 'following' ? (
+        <FlatList
+          data={following}
+          keyExtractor={p => p.uid}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={
+            <Text style={styles.empty}>Todavía no sigues a ningún autor. Puedes seguirlos desde su perfil.</Text>
+          }
+          renderItem={({ item: p }) => (
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.8}
+              onPress={() => router.push({ pathname: '/user/[uid]', params: { uid: p.uid } })}
+            >
+              {p.avatarUrl
+                ? <Image source={{ uri: p.avatarUrl }} style={styles.avatar} contentFit="cover" transition={150} />
+                : <View style={[styles.avatar, styles.avatarFallback]}>
+                    <Text style={styles.avatarInitial}>{p.displayName.trim().charAt(0).toUpperCase() || '?'}</Text>
+                  </View>
+              }
+              <View style={styles.rowInfo}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.rowTitle} numberOfLines={1}>{p.displayName}</Text>
+                  <RoleBadge role={p.role} size="sm" />
+                </View>
+                {p.bio ? <Text style={styles.rowSub} numberOfLines={1}>{p.bio}</Text> : null}
+              </View>
+              <MaterialIcons name="chevron-right" size={20} color={Colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        />
+      ) : (
+        <FlatList
+          data={liked}
+          keyExtractor={s => s.storyId}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={
+            <Text style={styles.empty}>Todavía no le has dado me gusta a ninguna historia.</Text>
+          }
+          renderItem={({ item: s }) => {
+            const fmtColor = Colors.formatColors[s.format as keyof typeof Colors.formatColors] ?? Colors.emerald;
+            return (
+              <TouchableOpacity style={styles.row} activeOpacity={0.8} onPress={() => router.push(`/story/${s.storyId}`)}>
+                <View style={styles.cover}>
+                  {s.coverUrl
+                    ? <Image source={{ uri: s.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+                    : <View style={[StyleSheet.absoluteFill, styles.coverPlaceholder]}>
+                        <MaterialIcons name="menu-book" size={18} color={fmtColor + '60'} />
+                      </View>
+                  }
+                </View>
+                <View style={styles.rowInfo}>
+                  <Text style={styles.rowTitle} numberOfLines={2}>{s.title}</Text>
+                  {s.format ? (
+                    <View style={[styles.fmtBadge, { backgroundColor: fmtColor + 'CC' }]}>
+                      <Text style={styles.fmtBadgeText}>{s.format}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <MaterialIcons name="favorite" size={16} color="#FF69B4" />
+              </TouchableOpacity>
+            );
+          }}
+        />
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.bg },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 12, paddingBottom: 10,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  tabs:    { flexDirection: 'row', gap: 6 },
+  tab: {
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16,
+    borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card,
+  },
+  tabActive:     { backgroundColor: Colors.emerald, borderColor: Colors.emerald },
+  tabText:       { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
+  tabTextActive: { color: '#000' },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  list:     { paddingHorizontal: 16, paddingBottom: 32, flexGrow: 1 },
+  empty:    { fontSize: 13, color: Colors.textMuted, textAlign: 'center', marginTop: 40, paddingHorizontal: 24, lineHeight: 19 },
+  row: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: Colors.border + '60',
+  },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.card },
+  avatarFallback: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border },
+  avatarInitial:  { fontSize: 17, fontWeight: '700', color: Colors.textSecondary },
+  cover: {
+    width: 44, height: 66, borderRadius: 4, overflow: 'hidden', backgroundColor: Colors.card,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  coverPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  rowInfo:  { flex: 1, gap: 4 },
+  nameRow:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  rowTitle: { flexShrink: 1, fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
+  rowSub:   { fontSize: 12, color: Colors.textSecondary },
+  fmtBadge: { alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  fmtBadgeText: { fontSize: 9, fontWeight: '700', color: '#000', letterSpacing: 0.4 },
+});

@@ -23,7 +23,7 @@ import { db, storage } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { AppAlert } from '@/components/app-dialog';
 import {
-  countWords, duplicatePage, formatReadingStats, migrateChapterRefsToIds, saveOrder,
+  countWords, duplicatePage, formatReadingStats, isBackgroundUsedElsewhere, migrateChapterRefsToIds, saveOrder,
 } from '@/services/stories';
 
 function confirmAction(title: string, message: string, confirmText: string, onConfirm: () => void) {
@@ -183,8 +183,13 @@ export default function ChapterEditorModernoScreen() {
       async () => {
         try {
           await ensureRefsById();
+          // El archivo del fondo solo se borra de Storage si ninguna otra página lo usa
+          // (se puede reutilizar con "Ya subidos" o al duplicar una página)
           if (page.backgroundUrl) {
-            try { await deleteObject(ref(storage, page.backgroundUrl)); } catch (_) {}
+            try {
+              const shared = await isBackgroundUsedElsewhere(storyId as string, page.backgroundUrl, page.id);
+              if (!shared) await deleteObject(ref(storage, page.backgroundUrl));
+            } catch (_) {}
           }
           await deleteDoc(
             doc(db, 'stories', storyId as string, 'chapters', chapterId as string, 'pages', page.id)

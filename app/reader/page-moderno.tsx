@@ -29,6 +29,8 @@ import { useKeepAwake } from 'expo-keep-awake';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '@/constants/theme';
 import { AppAlert, AppDialogHost } from '@/components/app-dialog';
+import { ReportModal } from '@/components/report-modal';
+import type { ReportTarget } from '@/services/reports';
 import { sortChapters } from '@/services/stories';
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -36,6 +38,7 @@ import {
 } from '@/services/comments';
 import { CommentItem } from '@/components/comment-item';
 import { getStaffRoles } from '@/services/profiles';
+import { enterReading, leaveReading } from '@/services/social';
 import type { Role } from '@/constants/permissions';
 import {
   FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, MUSIC_FADE_MS, musicPlaybackVolume, sfxPlaybackVolume,
@@ -279,9 +282,12 @@ let mountedReaders = 0;
 type HistoryEntry = { chapterId: string; pageId: string };
 let readerHistory: HistoryEntry[] = [];
 const HISTORY_MAX = 300;
-// El historial se guarda en el móvil (por usuario e historia) junto con la posición a la
-// que corresponde. Al volver a entrar en esa misma página se recupera, así "atrás" sigue
-// deshaciendo el camino aunque se salga del lector o se cierre la app.
+// El historial se guarda junto con la posición a la que corresponde, en dos sitios:
+//   · en el móvil, en cada cambio de página (aguanta aunque la app se cierre de golpe);
+//   · en la biblioteca del usuario en Firestore, con el progreso (al salir o pasar a
+//     segundo plano), para poder seguir en otro dispositivo.
+// Al volver a entrar en esa misma página se recupera, así "atrás" sigue deshaciendo el
+// camino aunque se salga del lector, se cierre la app o se cambie de móvil.
 const historyKey = (uid: string, storyId: string) => `immersa_reader_history:${uid}:${storyId}`;
 type SavedHistory = { chapterId: string; pageId: string; history: HistoryEntry[] };
 
@@ -459,6 +465,8 @@ export default function PageModernoReaderScreen() {
   });
   const fadingRef = useRef(false); // hay una transición de página en curso
   const historyReadyRef = useRef(false); // ya se intentó recuperar el historial guardado
+  const viewCountedRef = useRef(false);  // ya se intentó contar la lectura en esta apertura
+  const historyRestoredRef = useRef(hist === '1'); // la recuperación terminó (se puede guardar en la nube)
 
   const [pages, setPages]       = useState<Page[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -493,6 +501,7 @@ export default function PageModernoReaderScreen() {
   const [showComments, setShowComments]     = useState(false);
   const [commentText, setCommentText]       = useState('');
   const [sendingComment, setSendingComment] = useState(false);
+  const [reportTarget, setReportTarget]     = useState<ReportTarget | null>(null);
   const [staffRoles, setStaffRoles]         = useState<Map<string, Role>>(new Map());
   const uiOpacity   = useRef(new Animated.Value(1)).current;
   const cursorAnim  = useRef(new Animated.Value(1)).current;
@@ -936,15 +945,26 @@ export default function PageModernoReaderScreen() {
       // hist=1: se viene de otro capítulo dentro del lector, el historial ya está en memoria
       if (hist === '1') return;
       (async () => {
+        // Solo vale un historial que termina exactamente en la página a la que se vuelve
+        const matches = (s: any): s is SavedHistory =>
+          !!s && s.chapterId === chapterId && s.pageId === pageId && Array.isArray(s.history);
+        const restore = (history: HistoryEntry[]) => {
+          readerHistory = [...history, ...readerHistory].slice(-HISTORY_MAX);
+          setHistoryLen(readerHistory.length);
+        };
         try {
           const raw = await AsyncStorage.getItem(key);
-          const saved: SavedHistory | null = raw ? JSON.parse(raw) : null;
-          // Solo vale si se vuelve exactamente a la página en la que se dejó
-          if (saved && saved.chapterId === chapterId && saved.pageId === pageId && Array.isArray(saved.history)) {
-            readerHistory = [...saved.history, ...readerHistory].slice(-HISTORY_MAX);
-            setHistoryLen(readerHistory.length);
+          const local = raw ? JSON.parse(raw) : null;
+          if (matches(local)) {
+            restore(local.history);
+          } else {
+            // En este móvil no está: puede venir de otro dispositivo (biblioteca en Firestore)
+            const lib = (await getDoc(doc(db, 'users', uid, 'library', storyId as string))).data();
+            const cloud = lib ? { chapterId: lib.lastChapterId, pageId: lib.lastPageId, history: lib.history } : null;
+            if (matches(cloud)) restore(cloud.history);
           }
         } catch (_) {}
+        historyRestoredRef.current = true;
       })();
       return;
     }
@@ -985,10 +1005,17 @@ export default function PageModernoReaderScreen() {
           lastChapterId: chapterId,
           lastPageIndex: pageIdx,
           lastPageId: pages[pageIdx]?.id ?? null,
+          ...(historyRestoredRef.current ? { history: readerHistory } : {}),
           lastChapterTitle: cd?.title ?? null,
           lastReadAt: now,
           addedAt: existing?.addedAt ?? now,
         }, { merge: true });
+        // Lecturas (estadística del autor): se intenta una vez por apertura del lector,
+        // no en cada guardado (al salir tras leer un rato contaría una lectura de más)
+        if (!viewCountedRef.current) {
+          viewCountedRef.current = true;
+          enterReading(storyId as string, user.uid, sd.uid);
+        }
       } catch (e) {
         console.error('Error guardando progreso de lectura:', e);
       }
@@ -1011,14 +1038,19 @@ export default function PageModernoReaderScreen() {
 
     // Guardar también al mandar la app a segundo plano: si se cierra desde ahí,
     // el lector no llega a desmontarse y se perdería la posición
+    const readerUid = auth.currentUser?.uid;
     const appStateSub = AppState.addEventListener('change', state => {
-      if (state === 'background') saveProgress(currentRef.current);
+      if (state !== 'background') return;
+      saveProgress(currentRef.current);
+      // Apunta la hora por si la app se cierra desde el fondo (la sesión sigue abierta)
+      if (readerUid) leaveReading(storyId as string, readerUid, false);
     });
 
-    // Guardar al salir (posición final)
+    // Guardar al salir (posición final) y apuntar que se deja de leer
     return () => {
       appStateSub.remove();
       saveProgress(currentRef.current);
+      if (readerUid) leaveReading(storyId as string, readerUid);
     };
   }, [pages]); // Solo cuando carguen las páginas
 
@@ -1666,6 +1698,7 @@ export default function PageModernoReaderScreen() {
       >
         <View style={styles.commentsOverlay}>
           <AppDialogHost />
+          <ReportModal target={reportTarget} onClose={() => setReportTarget(null)} />
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowComments(false)} />
           <KeyboardAvoidingView
             style={styles.commentsPanel}
@@ -1694,6 +1727,12 @@ export default function PageModernoReaderScreen() {
                   showLocation={false}
                   canDelete={item.uid === auth.currentUser?.uid || isAuthor || can('deleteStories')}
                   onDelete={handleDeleteComment}
+                  onReport={item.uid !== auth.currentUser?.uid
+                    ? () => setReportTarget({
+                        type: 'comment', storyId: storyId as string, storyTitle: storyMeta.title ?? '',
+                        commentId: item.id, commentText: item.text, targetUid: item.uid,
+                      })
+                    : undefined}
                 />
               )}
             />

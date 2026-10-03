@@ -108,6 +108,58 @@ function confirmAction(title: string, message: string, confirmText: string, onCo
   }
 }
 
+// De dónde sale un fondo, una pista o un sonido
+const MEDIA_SOURCES = ['file', 'url', 'library'] as const;
+type MediaSource = typeof MEDIA_SOURCES[number];
+const MEDIA_SOURCE_ICON  = { file: 'upload-file', url: 'link', library: 'collections' } as const;
+const MEDIA_SOURCE_LABEL = { file: 'Archivo', url: 'URL / Drive', library: 'Ya subidos' } as const;
+
+// Archivos ya usados en la historia (para reutilizarlos sin volver a subirlos)
+type MediaLibrary = { images: string[]; music: string[]; sfx: string[] };
+
+// Lista de archivos ya usados en la historia, para elegir uno
+function MediaLibraryPicker({ kind, loading, urls, onPick }: {
+  kind: 'image' | 'audio';
+  loading: boolean;
+  urls: string[];
+  onPick: (url: string) => void;
+}) {
+  if (loading) {
+    return <ActivityIndicator color={Colors.emerald} style={{ marginVertical: 12 }} />;
+  }
+  if (urls.length === 0) {
+    return (
+      <Text style={styles.libraryEmpty}>
+        {kind === 'image'
+          ? 'Todavía no hay imágenes en esta historia.'
+          : 'Todavía no hay audios de este tipo en esta historia.'}
+      </Text>
+    );
+  }
+  if (kind === 'image') {
+    return (
+      <View style={styles.libraryGrid}>
+        {urls.map(url => (
+          <TouchableOpacity key={url} style={styles.libraryThumb} onPress={() => onPick(url)} activeOpacity={0.8}>
+            <Image source={{ uri: url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  }
+  return (
+    <View>
+      {urls.map(url => (
+        <TouchableOpacity key={url} style={styles.libraryRow} onPress={() => onPick(url)} activeOpacity={0.8}>
+          <MaterialIcons name="audiotrack" size={14} color={Colors.aqua} />
+          <Text style={styles.libraryRowText} numberOfLines={1}>{fileNameFromUrl(url, 'Audio')}</Text>
+          <Text style={styles.libraryRowUse}>Usar</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
 // Nombre legible de un archivo a partir de su URL
 const fileNameFromUrl = (url: string, fallback: string) => {
   try { return decodeURIComponent(url.split('/').pop()?.split('?')[0] ?? fallback); }
@@ -175,13 +227,13 @@ export default function PageEditorScreen() {
   const [imageFit, setImageFit]         = useState<ImageFit>('cover');
   const [bgBlur, setBgBlur]             = useState(BG_BLUR_DEFAULT);
   const [uploadingBg, setUploadingBg]   = useState(false);
-  const [imageSource, setImageSource]   = useState<'file' | 'url'>('file');
+  const [imageSource, setImageSource]   = useState<MediaSource>('file');
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [musicMode, setMusicMode]       = useState<MusicMode>('inherit');
   const [editMusicUrl, setEditMusicUrl] = useState('');
   const [musicFileName, setMusicFileName] = useState('');
   const [uploadingMusic, setUploadingMusic] = useState(false);
-  const [musicSource, setMusicSource]   = useState<'file' | 'url'>('file');
+  const [musicSource, setMusicSource]   = useState<MediaSource>('file');
   const [musicUrlInput, setMusicUrlInput] = useState('');
   const [musicVolume, setMusicVolume]   = useState(1);       // ajuste del autor (1 = 100 %)
   const [previewingMusic, setPreviewingMusic] = useState(false);
@@ -200,11 +252,14 @@ export default function PageEditorScreen() {
   const [sfxUrl, setSfxUrl]             = useState('');
   const [sfxFileName, setSfxFileName]   = useState('');
   const [uploadingSfx, setUploadingSfx] = useState(false);
-  const [sfxSource, setSfxSource]       = useState<'file' | 'url'>('file');
+  const [sfxSource, setSfxSource]       = useState<MediaSource>('file');
   const [sfxUrlInput, setSfxUrlInput]   = useState('');
   const [sfxVolume, setSfxVolume]       = useState(1);       // ajuste del autor (1 = 100 %)
   const [previewingSfx, setPreviewingSfx] = useState(false);
   const sfxPreviewRef = useRef<Audio.Sound | null>(null);
+  // Archivos ya usados en la historia: se cargan la primera vez que se elige "Ya subidos"
+  const [mediaLibrary, setMediaLibrary]     = useState<MediaLibrary | null>(null);
+  const [loadingLibrary, setLoadingLibrary] = useState(false);
   // Cambia al recuperar un borrador: fuerza a recrear los campos de nombre (no controlados)
   const [draftNonce, setDraftNonce]     = useState(0);
   // Personajes
@@ -840,6 +895,34 @@ export default function PageEditorScreen() {
   // Al salir de la pantalla (también al ir a "Probar") se para lo que esté sonando
   useFocusEffect(useCallback(() => () => { stopMusicPreview(); stopSfxPreview(); }, [stopMusicPreview, stopSfxPreview]));
 
+  // ── Biblioteca de archivos de la historia ─────────────────────────────────
+  // Recorre las páginas de todos los capítulos y reúne los fondos, pistas y sonidos
+  // que ya se usan, sin repetir. Elegir uno reutiliza el mismo archivo: no ocupa más.
+  const usesLibrary = imageSource === 'library' || musicSource === 'library' || sfxSource === 'library';
+  useEffect(() => {
+    if (!usesLibrary || mediaLibrary || loadingLibrary || !storyId) return;
+    setLoadingLibrary(true);
+    (async () => {
+      const images = new Set<string>(), music = new Set<string>(), sfx = new Set<string>();
+      try {
+        const chaptersSnap = await getDocs(collection(db, 'stories', storyId as string, 'chapters'));
+        await Promise.all(chaptersSnap.docs.map(async ch => {
+          const pagesSnap = await getDocs(collection(db, 'stories', storyId as string, 'chapters', ch.id, 'pages'));
+          pagesSnap.docs.forEach(p => {
+            const d = p.data();
+            if (d.backgroundUrl) images.add(d.backgroundUrl);
+            if (typeof d.musicUrl === 'string' && d.musicUrl) music.add(d.musicUrl);
+            if (d.sfxUrl) sfx.add(d.sfxUrl);
+          });
+        }));
+      } catch (e) {
+        console.error('Error cargando los archivos de la historia:', e);
+      }
+      setMediaLibrary({ images: [...images], music: [...music], sfx: [...sfx] });
+      setLoadingLibrary(false);
+    })();
+  }, [usesLibrary]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Handlers de efecto de sonido ──────────────────────────────────────────
   const handleUseSfxUrl = () => {
     if (!sfxUrlInput.trim()) return;
@@ -1397,21 +1480,28 @@ export default function PageEditorScreen() {
           ) : (
             <>
               <View style={styles.sourceToggleRow}>
-                {(['file', 'url'] as const).map(src => (
+                {MEDIA_SOURCES.map(src => (
                   <TouchableOpacity
                     key={src}
                     style={[styles.sourceBtn, imageSource === src && styles.sourceBtnActive]}
                     onPress={() => setImageSource(src)}
                     activeOpacity={0.75}
                   >
-                    <MaterialIcons name={src === 'file' ? 'upload-file' : 'link'} size={13} color={imageSource === src ? '#000' : Colors.textSecondary} />
+                    <MaterialIcons name={MEDIA_SOURCE_ICON[src]} size={13} color={imageSource === src ? '#000' : Colors.textSecondary} />
                     <Text style={[styles.sourceBtnText, imageSource === src && styles.sourceBtnTextActive]}>
-                      {src === 'file' ? 'Archivo' : 'URL / Drive'}
+                      {MEDIA_SOURCE_LABEL[src]}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
-              {imageSource === 'file' ? (
+              {imageSource === 'library' ? (
+                <MediaLibraryPicker
+                  kind="image"
+                  loading={loadingLibrary}
+                  urls={mediaLibrary?.images ?? []}
+                  onPick={url => { setBgUri(url); setBgUrl(url); }}
+                />
+              ) : imageSource === 'file' ? (
                 <TouchableOpacity style={styles.pickBtn} onPress={handlePickImage} disabled={uploadingBg} activeOpacity={0.7}>
                   <MaterialIcons name="add-photo-alternate" size={18} color={Colors.textSecondary} />
                   <Text style={styles.pickBtnText}>Añadir imagen de fondo</Text>
@@ -1494,21 +1584,28 @@ export default function PageEditorScreen() {
             ) : (
               <>
                 <View style={styles.sourceToggleRow}>
-                  {(['file', 'url'] as const).map(src => (
+                  {MEDIA_SOURCES.map(src => (
                     <TouchableOpacity
                       key={src}
                       style={[styles.sourceBtn, musicSource === src && styles.sourceBtnActive]}
                       onPress={() => setMusicSource(src)}
                       activeOpacity={0.75}
                     >
-                      <MaterialIcons name={src === 'file' ? 'upload-file' : 'link'} size={13} color={musicSource === src ? '#000' : Colors.textSecondary} />
+                      <MaterialIcons name={MEDIA_SOURCE_ICON[src]} size={13} color={musicSource === src ? '#000' : Colors.textSecondary} />
                       <Text style={[styles.sourceBtnText, musicSource === src && styles.sourceBtnTextActive]}>
-                        {src === 'file' ? 'Archivo' : 'URL / Drive'}
+                        {MEDIA_SOURCE_LABEL[src]}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
-                {musicSource === 'file' ? (
+                {musicSource === 'library' ? (
+                  <MediaLibraryPicker
+                    kind="audio"
+                    loading={loadingLibrary}
+                    urls={mediaLibrary?.music ?? []}
+                    onPick={url => { setEditMusicUrl(url); setMusicFileName(fileNameFromUrl(url, 'Pista')); setMusicMode('play'); }}
+                  />
+                ) : musicSource === 'file' ? (
                   <TouchableOpacity
                     style={[styles.pickBtn, uploadingMusic && { opacity: 0.5 }]}
                     onPress={handlePickAudio}
@@ -1589,21 +1686,28 @@ export default function PageEditorScreen() {
           ) : (
             <>
               <View style={styles.sourceToggleRow}>
-                {(['file', 'url'] as const).map(src => (
+                {MEDIA_SOURCES.map(src => (
                   <TouchableOpacity
                     key={src}
                     style={[styles.sourceBtn, sfxSource === src && styles.sourceBtnActive]}
                     onPress={() => setSfxSource(src)}
                     activeOpacity={0.75}
                   >
-                    <MaterialIcons name={src === 'file' ? 'upload-file' : 'link'} size={13} color={sfxSource === src ? '#000' : Colors.textSecondary} />
+                    <MaterialIcons name={MEDIA_SOURCE_ICON[src]} size={13} color={sfxSource === src ? '#000' : Colors.textSecondary} />
                     <Text style={[styles.sourceBtnText, sfxSource === src && styles.sourceBtnTextActive]}>
-                      {src === 'file' ? 'Archivo' : 'URL / Drive'}
+                      {MEDIA_SOURCE_LABEL[src]}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
-              {sfxSource === 'file' ? (
+              {sfxSource === 'library' ? (
+                <MediaLibraryPicker
+                  kind="audio"
+                  loading={loadingLibrary}
+                  urls={mediaLibrary?.sfx ?? []}
+                  onPick={url => { setSfxUrl(url); setSfxFileName(fileNameFromUrl(url, 'Efecto')); }}
+                />
+              ) : sfxSource === 'file' ? (
                 <TouchableOpacity
                   style={[styles.pickBtn, uploadingSfx && { opacity: 0.5 }]}
                   onPress={handlePickSfx}
@@ -2172,6 +2276,13 @@ const styles = StyleSheet.create({
   anchorBtnActive:   { backgroundColor: Colors.emerald, borderColor: Colors.emerald },
   anchorBtnText:     { fontSize: 12, color: Colors.textSecondary, fontWeight: '600' },
   anchorBtnTextActive: { color: '#000' },
+  // Biblioteca de archivos ya usados
+  libraryEmpty:   { fontSize: 12, color: Colors.textMuted, fontStyle: 'italic', paddingVertical: 8 },
+  libraryGrid:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  libraryThumb:   { width: 96, height: 54, borderRadius: 4, overflow: 'hidden', backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
+  libraryRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.border + '60' },
+  libraryRowText: { flex: 1, fontSize: 13, color: Colors.textPrimary },
+  libraryRowUse:  { fontSize: 12, fontWeight: '700', color: Colors.emerald },
   blurBlock:     { gap: 8 },
   blurStepBtn:   { width: 26, height: 26, borderRadius: 13, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card, alignItems: 'center', justifyContent: 'center' },
   blurValue:     { minWidth: 28, textAlign: 'center', fontSize: 13, fontWeight: '700', color: Colors.textPrimary },

@@ -9,10 +9,11 @@ import {
   StatusBar,
   ActivityIndicator,
   Switch,
+  Modal,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as ImagePicker from 'expo-image-picker';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -22,6 +23,7 @@ import { auth, db, storage } from '@/config/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { AppAlert } from '@/components/app-dialog';
+import { deleteAccount } from '@/services/account';
 import {
   WEBNOVEL_THEMES, WEBNOVEL_THEME_DEFAULT, WEBNOVEL_THEME_ORDER,
   type WebnovelTheme, getWebnovelTheme, setWebnovelTheme,
@@ -133,6 +135,29 @@ export default function SettingsScreen() {
       AppAlert.alert('Error', e?.message ?? 'No se pudieron guardar los cambios.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ── Eliminar cuenta ─────────────────────────────────────────────────────────
+  // Pide la contraseña (Firebase exige haberse autenticado hace poco para borrar)
+  const [deleteOpen, setDeleteOpen]         = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError]       = useState('');
+  const [deleting, setDeleting]             = useState(false);
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword || deleting) return;
+    setDeleteError('');
+    setDeleting(true);
+    try {
+      await deleteAccount(deletePassword);
+      setDeleteOpen(false);
+      router.replace('/auth/login');
+    } catch (e: any) {
+      const wrong = e?.code === 'auth/wrong-password' || e?.code === 'auth/invalid-credential';
+      setDeleteError(wrong ? 'La contraseña no es correcta.' : (e?.message ?? 'No se pudo eliminar la cuenta.'));
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -318,6 +343,71 @@ export default function SettingsScreen() {
           <Text style={styles.signOutText}>Cerrar sesión</Text>
         </TouchableOpacity>
 
+        {/* ── Textos legales ── */}
+        <View style={styles.legalRow}>
+          <TouchableOpacity onPress={() => router.push('/auth/legal?doc=terms' as Href)} hitSlop={8}>
+            <Text style={styles.legalLink}>Términos de uso</Text>
+          </TouchableOpacity>
+          <Text style={styles.legalSep}>·</Text>
+          <TouchableOpacity onPress={() => router.push('/auth/legal?doc=privacy' as Href)} hitSlop={8}>
+            <Text style={styles.legalLink}>Política de privacidad</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Eliminar cuenta ── */}
+        <TouchableOpacity
+          style={styles.deleteAccountBtn}
+          activeOpacity={0.8}
+          onPress={() => { setDeletePassword(''); setDeleteError(''); setDeleteOpen(true); }}
+        >
+          <Text style={styles.deleteAccountText}>Eliminar mi cuenta</Text>
+        </TouchableOpacity>
+
+        <Modal
+          visible={deleteOpen}
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={() => { if (!deleting) setDeleteOpen(false); }}
+        >
+          <View style={styles.deleteOverlay}>
+            <View style={styles.deleteBox}>
+              <Text style={styles.deleteTitle}>Eliminar cuenta</Text>
+              <Text style={styles.deleteText}>
+                Se borrarán para siempre tu perfil, tus historias con todos sus capítulos, tu biblioteca,
+                tus me gusta y tus notificaciones. Los lectores de tus historias recibirán un aviso.
+                No se puede deshacer.
+              </Text>
+              <Text style={styles.deleteText}>Escribe tu contraseña para confirmar:</Text>
+              <TextInput
+                style={styles.deleteInput}
+                value={deletePassword}
+                onChangeText={setDeletePassword}
+                placeholder="Contraseña"
+                placeholderTextColor={Colors.textMuted}
+                secureTextEntry
+                autoCapitalize="none"
+                editable={!deleting}
+              />
+              {deleteError ? <Text style={styles.deleteErrorText}>{deleteError}</Text> : null}
+              <View style={styles.deleteActions}>
+                <TouchableOpacity style={styles.deleteCancel} onPress={() => setDeleteOpen(false)} disabled={deleting}>
+                  <Text style={styles.deleteCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.deleteConfirm, (!deletePassword || deleting) && { opacity: 0.4 }]}
+                  onPress={handleDeleteAccount}
+                  disabled={!deletePassword || deleting}
+                >
+                  {deleting
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={styles.deleteConfirmText}>Eliminar</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
@@ -381,4 +471,26 @@ const styles = StyleSheet.create({
 
   signOutBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, paddingHorizontal: 14, borderRadius: 6, borderWidth: 1, borderColor: '#FF6B6B22', backgroundColor: '#FF6B6B10' },
   signOutText:{ fontSize: 14, fontWeight: '600', color: '#FF6B6B' },
+  legalRow:   { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 24 },
+  legalLink:  { fontSize: 12, color: Colors.textSecondary, textDecorationLine: 'underline' },
+  legalSep:   { fontSize: 12, color: Colors.textMuted },
+  deleteAccountBtn:  { alignSelf: 'center', marginTop: 18, paddingVertical: 8, paddingHorizontal: 12 },
+  deleteAccountText: { fontSize: 12, color: Colors.textMuted, textDecorationLine: 'underline' },
+  deleteOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  deleteBox: {
+    width: '100%', maxWidth: 400, gap: 10,
+    backgroundColor: Colors.surface, borderRadius: 10, padding: 20, borderWidth: 1, borderColor: Colors.border,
+  },
+  deleteTitle: { fontSize: 17, fontWeight: '700', color: Colors.textPrimary },
+  deleteText:  { fontSize: 13, color: Colors.textSecondary, lineHeight: 19 },
+  deleteInput: {
+    backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderRadius: 6,
+    paddingHorizontal: 12, paddingVertical: 10, color: Colors.textPrimary, fontSize: 14,
+  },
+  deleteErrorText:   { fontSize: 13, color: '#FF6B6B' },
+  deleteActions:     { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 4 },
+  deleteCancel:      { paddingHorizontal: 16, paddingVertical: 10 },
+  deleteCancelText:  { fontSize: 14, color: Colors.textSecondary, fontWeight: '600' },
+  deleteConfirm:     { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 6, backgroundColor: '#D9363E', minWidth: 90, alignItems: 'center' },
+  deleteConfirmText: { fontSize: 14, color: '#fff', fontWeight: '700' },
 });

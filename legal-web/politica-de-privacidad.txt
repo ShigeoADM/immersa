@@ -1,0 +1,59 @@
+POLÍTICA DE PRIVACIDAD
+Immersa
+Última actualización: 3 de octubre de 2026
+
+1. Quién es el responsable
+Enrique Echevarría Pérez (en adelante, "nosotros") desarrolla y opera la aplicación móvil Immersa y es el responsable del tratamiento de los datos personales de sus usuarios. Esta política explica qué datos recogemos, para qué los usamos y qué puedes hacer con ellos. Al usar Immersa aceptas lo que se describe aquí.
+
+2. Qué datos recogemos
+Datos de cuenta: correo electrónico, nombre de usuario, contraseña (cifrada, no podemos verla) y fecha de nacimiento.
+
+Datos de perfil que tú decides añadir: foto, biografía y si quieres mostrar tu correo.
+
+Contenido que publicas: historias, capítulos, imágenes, audios y comentarios.
+
+Actividad en la app: historias que guardas o lees y por dónde vas, marcadores, me gusta, autores que sigues y notificaciones.
+
+Datos técnicos: los servicios de Google que usa la app pueden registrar automáticamente datos como la dirección IP, el modelo del dispositivo o la versión del sistema operativo, necesarios para prestar el servicio.
+
+3. Para qué los usamos
+Únicamente para que la app funcione: identificarte, guardar tu progreso de lectura, mostrar tu contenido a otros lectores, avisarte de novedades (capítulos nuevos, comentarios, avisos del equipo), comprobar la edad para el contenido +18, mostrar a cada autor estadísticas agregadas de sus historias y moderar el contenido. No vendemos tus datos, no los usamos para publicidad y la app no incluye herramientas de analítica ni de seguimiento publicitario.
+
+4. Qué ven los demás
+Es público dentro de la app: tu nombre de usuario, foto, biografía, las historias que publicas, tus comentarios y, si tienes un cargo, tu insignia. Tu correo solo es visible si lo activas en Ajustes.
+
+Es privado: tu fecha de nacimiento, tu biblioteca, tu progreso de lectura, tus marcadores y tus notificaciones. Los autores ven cuántas personas leen o guardan sus historias, pero no quiénes son.
+
+5. Dónde se guardan y servicios de terceros
+Los datos se almacenan en Firebase, un servicio de Google (autenticación, base de datos y almacenamiento de archivos), que actúa como proveedor técnico y puede tratar datos en servidores fuera de tu país con las garantías que exige la normativa. En Android la app usa además los Servicios de Google Play, necesarios para su funcionamiento.
+
+Puedes consultar cómo tratan los datos en la Política de Privacidad de Google (https://policies.google.com/privacy) y en la página de privacidad y seguridad de Firebase (https://firebase.google.com/support/privacy).
+
+Algunas preferencias (tema de lectura, tamaño de letra, borradores) se guardan solo en tu dispositivo.
+
+6. Permisos que pide la app
+Notificaciones: para avisarte de novedades (capítulos nuevos, comentarios, avisos del equipo). Las genera tu propio móvil al comprobar si hay novedades y puedes desactivarlas en los ajustes del sistema en cualquier momento.
+
+Galería de imágenes: solo cuando eliges una foto de perfil, una portada o un fondo para una historia. La app solo accede a la imagen que tú seleccionas.
+
+Archivos de audio: solo cuando eliges una pista de música o un efecto de sonido para una historia.
+
+La app no accede a tus fotos ni a tus archivos por su cuenta: únicamente a los que tú eliges, y solo se suben cuando los añades.
+
+7. Contenido y enlaces externos
+Los autores pueden incluir en sus historias imágenes o audios alojados en servicios externos (por ejemplo, un enlace de Google Drive). Al leer esas historias, tu dispositivo se conecta a esos servicios para descargarlos, y estos pueden registrar datos técnicos como tu dirección IP. Esos sitios no están operados por nosotros y se rigen por sus propias políticas de privacidad.
+
+8. Seguridad
+Aplicamos medidas razonables para proteger tus datos: las conexiones van cifradas, las contraseñas se guardan cifradas y el acceso a la información está limitado por reglas de seguridad (por ejemplo, nadie más puede leer tu biblioteca ni tu fecha de nacimiento). Aun así, ningún método de transmisión por internet ni de almacenamiento electrónico es 100 % seguro, por lo que no podemos garantizar una seguridad absoluta.
+
+9. Cuánto tiempo los conservamos
+Mientras tengas la cuenta. Al eliminarla desde Perfil → Ajustes se borran tu perfil, tus historias, tu biblioteca, tus notificaciones y tus me gusta. Los comentarios que hayas dejado en historias de otras personas pueden permanecer; si quieres que se retiren, escríbenos.
+
+10. Tus derechos
+Puedes acceder a tus datos, corregirlos, pedir su eliminación, oponerte a su uso o solicitar una copia. La mayoría de estas acciones puedes hacerlas tú mismo desde la app; para el resto, contacta escribiendo a elcodemh@gmail.com. También tienes derecho a reclamar ante la autoridad de protección de datos de tu país.
+
+11. Menores
+La app no está dirigida a menores de 14 años y no se permite crear una cuenta por debajo de esa edad. Si descubrimos que un menor de esa edad nos ha facilitado datos, eliminaremos su cuenta. El contenido marcado como +18 solo se muestra a usuarios de 18 años o más.
+
+12. Cambios en esta política y contacto
+Si cambia la forma en que tratamos tus datos, actualizaremos esta política y avisaremos dentro de la app cuando el cambio sea relevante. Para cualquier pregunta sobre esta política puedes contactar escribiendo a elcodemh@gmail.com.

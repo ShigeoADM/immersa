@@ -43,10 +43,30 @@ service cloud.firestore {
       allow read: if signedIn()
                   && (resource == null || resource.data.published == true
                       || resource.data.uid == request.auth.uid || can('deleteStories'));
-      allow create: if signedIn() && request.auth.uid == request.resource.data.uid;
-      // El autor no puede cambiar el dueño de la historia
-      allow update: if signedIn() && resource.data.uid == request.auth.uid
-                    && request.resource.data.uid == resource.data.uid;
+      // Una historia nace sin "me gusta"
+      allow create: if signedIn() && request.auth.uid == request.resource.data.uid
+                    && request.resource.data.get('likeCount', 0) == 0;
+
+      // Contador de "me gusta": cualquier lector puede cambiarlo, pero solo ese campo,
+      // de uno en uno y en la misma operación en la que crea (+1) o borra (-1) su
+      // propio "me gusta". Así no se puede inflar ni vaciar.
+      function likeCountChange() {
+        let likePath = /databases/$(database)/documents/stories/$(storyId)/likes/$(request.auth.uid);
+        let before = resource.data.get('likeCount', 0);
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
+          && (
+            (request.resource.data.likeCount == before + 1 && !exists(likePath) && existsAfter(likePath))
+            || (request.resource.data.likeCount == before - 1 && exists(likePath) && !existsAfter(likePath))
+          );
+      }
+
+      // El autor edita su historia, pero no puede cambiar su dueño ni tocar el contador
+      allow update: if signedIn() && (
+        (resource.data.uid == request.auth.uid
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.get('likeCount', 0) == resource.data.get('likeCount', 0))
+        || likeCountChange()
+      );
       // Borrar: el autor, o moderación
       allow delete: if signedIn() && (resource.data.uid == request.auth.uid || can('deleteStories'));
 
@@ -62,6 +82,54 @@ service cloud.firestore {
           allow create, update: if ownsStory(storyId);
           allow delete: if ownsStory(storyId) || can('deleteStories');
         }
+      }
+
+      // ── Me gusta ────────────────────────────────────────────────────────────
+      // Un documento por lector (id = su uid). Crear o borrar el propio exige mover el
+      // contador de la historia en la misma operación (ver likeCountChange). El autor y
+      // moderación pueden borrarlos al eliminar la historia.
+      match /likes/{userId} {
+        function storyPath() { return /databases/$(database)/documents/stories/$(storyId); }
+        allow read: if signedIn();
+        allow create: if isUser(userId) && storyPublished(storyId)
+                      && getAfter(storyPath()).data.likeCount == get(storyPath()).data.get('likeCount', 0) + 1;
+        allow delete: if (isUser(userId)
+                          && getAfter(storyPath()).data.likeCount == get(storyPath()).data.get('likeCount', 0) - 1)
+                      || ownsStory(storyId) || can('deleteStories');
+      }
+
+      // ── Estadísticas: lecturas y guardados ──────────────────────────────────
+      // Solo el autor y moderación pueden leerlas: en la app se muestran como recuento,
+      // nunca quién es cada uno.
+      //
+      // Ficha de lector (id = su uid): { views, lastAt }. lastAt es siempre la hora del
+      // servidor, así no se puede falsear con el reloj del móvil.
+      match /readers/{userId} {
+        allow read: if isUser(userId) || ownsStory(storyId) || can('deleteStories');
+        // Primera lectura: cuenta 1 (también para el autor en su propia historia)
+        allow create: if isUser(userId)
+                      && (storyPublished(storyId) || ownsStory(storyId))
+                      && request.resource.data.views == 1
+                      && request.resource.data.lastAt == request.time;
+        allow update: if isUser(userId)
+                      && request.resource.data.lastAt == request.time
+                      && (
+                        // Salir de la lectura: solo se apunta la hora
+                        request.resource.data.views == resource.data.views
+                        // Lectura nueva: +1, si han pasado 10 min desde que salió.
+                        // El autor no suma más lecturas a su propia historia.
+                        || (!ownsStory(storyId)
+                            && request.resource.data.views == resource.data.views + 1
+                            && request.time > resource.data.lastAt + duration.value(10, 'm'))
+                        // Fichas antiguas sin contador: se inician en 1
+                        || (!('views' in resource.data) && request.resource.data.views == 1)
+                      );
+        allow delete: if isUser(userId) || ownsStory(storyId) || can('deleteStories');
+      }
+      match /saves/{userId} {
+        allow read: if isUser(userId) || ownsStory(storyId) || can('deleteStories');
+        allow create, update: if isUser(userId) && storyPublished(storyId);
+        allow delete: if isUser(userId) || ownsStory(storyId) || can('deleteStories');
       }
 
       // ── Comentarios ─────────────────────────────────────────────────────────
@@ -88,6 +156,14 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create, update: if isUser(userId) && request.resource.data.get('role', '') == myRole();
       allow delete: if isUser(userId);
+
+      // Seguidores (id = uid de quien sigue): cada uno se apunta y se borra a sí mismo
+      match /followers/{followerId} {
+        allow read: if signedIn();
+        allow create: if isUser(followerId) && followerId != userId;
+        // También el dueño del perfil, al eliminar su cuenta
+        allow delete: if isUser(followerId) || isUser(userId);
+      }
     }
 
     // ── Usuarios ──────────────────────────────────────────────────────────────
@@ -121,9 +197,13 @@ service cloud.firestore {
       allow create: if isUser(userId)
                     && !('role' in request.resource.data)
                     && !('permissions' in request.resource.data);
+      // La fecha de nacimiento se puede indicar una vez, pero no cambiar después
+      // (decide el acceso al contenido +18)
       allow update: if (isUser(userId)
                         && request.resource.data.get('role', null) == resource.data.get('role', null)
-                        && request.resource.data.get('permissions', null) == resource.data.get('permissions', null))
+                        && request.resource.data.get('permissions', null) == resource.data.get('permissions', null)
+                        && (!('birthDate' in resource.data)
+                            || request.resource.data.get('birthDate', null) == resource.data.birthDate))
                     || (signedIn() && request.auth.uid != userId
                         && (staffChangeByOwner() || staffChangeByManager()));
       allow delete: if isUser(userId);
@@ -134,12 +214,12 @@ service cloud.firestore {
       }
 
       // Notificaciones que crea OTRO usuario:
-      //  · likes y comentarios, firmados con el uid de quien los envía
+      //  · me gusta, comentarios y nuevos seguidores, firmados con el uid de quien los envía
       //  · aviso al autor de que moderación eliminó su novela
       match /notifications/{notificationId} {
         allow create: if signedIn() && request.auth.uid != userId && (
           (request.resource.data.fromUid == request.auth.uid
-            && request.resource.data.type in ['like', 'comment']
+            && request.resource.data.type in ['like', 'comment', 'follow']
             && request.resource.data.read == false)
           || (request.resource.data.type == 'admin' && can('deleteStories'))
         );
@@ -154,6 +234,17 @@ service cloud.firestore {
       allow create: if (ownsStory(storyId) && request.resource.data.deletedBy == 'author')
                     || (can('deleteStories') && request.resource.data.deletedBy == 'admin');
       allow update, delete: if false;
+    }
+
+    // ── Denuncias ─────────────────────────────────────────────────────────────
+    // Cualquier usuario denuncia (una vez por contenido: el id es fijo y no se puede
+    // sobrescribir). Solo moderación las lee y las cierra.
+    match /reports/{reportId} {
+      allow create: if signedIn()
+                    && request.resource.data.reporterUid == request.auth.uid
+                    && request.resource.data.type in ['story', 'comment'];
+      allow read, delete: if can('deleteStories');
+      allow update: if false;
     }
 
     // ── Noticias y avisos de administración ───────────────────────────────────

@@ -20,6 +20,10 @@ import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { AppAlert, AppDialogHost } from '@/components/app-dialog';
 import { adultContentLabel, audienceLabel } from '@/constants/story-meta';
+import { hasLiked, setLike, setSaved } from '@/services/social';
+import { AdultGate } from '@/components/adult-gate';
+import { ReportModal } from '@/components/report-modal';
+import type { ReportTarget } from '@/services/reports';
 import { formatReadingStats, sortChapters } from '@/services/stories';
 import { adminDeleteStory } from '@/services/admin';
 import { type PublicProfile, getPublicProfile, getStaffRoles } from '@/services/profiles';
@@ -39,6 +43,8 @@ interface Story {
   coverUrl?: string;
   publishedAt?: string;
   uid?: string;
+  published?: boolean;
+  likeCount?: number;
   genres?: string[];
   audience?: string;
   isAdult?: boolean;
@@ -65,7 +71,8 @@ const STATUS_LABELS: Record<string, string> = {
 export default function StoryDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user, can } = useAuth();
+  const { user, can, publicName, isAdult } = useAuth();
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null); // denuncia en curso
   // Moderación (permiso 'deleteStories'): eliminar la historia con un motivo opcional
   const [moderating, setModerating]   = useState(false);
   const [removeReason, setRemoveReason] = useState('');
@@ -74,6 +81,10 @@ export default function StoryDetailScreen() {
   const [author, setAuthor]     = useState<PublicProfile | null>(null);
   const [comments, setComments] = useState<StoryComment[]>([]);
   const [staffRoles, setStaffRoles] = useState<Map<string, Role>>(new Map());
+  // Me gusta
+  const [liked, setLiked]         = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+  const [liking, setLiking]       = useState(false);
   // Tema de lectura Webnovel del lector (se relee al volver, por si lo cambió en ajustes)
   const [wnTheme, setWnTheme] = useState<WebnovelTheme>(WEBNOVEL_THEME_DEFAULT);
   useFocusEffect(useCallback(() => { getWebnovelTheme().then(setWnTheme); }, []));
@@ -120,6 +131,11 @@ export default function StoryDetailScreen() {
           if (authorUid) {
             getPublicProfile(authorUid).then(setAuthor)
               .catch(e => console.error('Error cargando autor:', e));
+          }
+          setLikeCount(storySnap.data().likeCount ?? 0);
+          if (user) {
+            hasLiked(id as string, user.uid).then(setLiked)
+              .catch(e => console.error('Error cargando me gusta:', e));
           }
           listStoryComments(id as string).then(setComments)
             .catch(e => console.error('Error cargando comentarios:', e));
@@ -174,6 +190,7 @@ export default function StoryDetailScreen() {
         });
       }
       setIsInterested(newVal);
+      if (story.uid !== user.uid) setSaved(story.id, user.uid, newVal); // estadística para el autor
     } catch (e) {
       console.error('Error actualizando biblioteca:', e);
     } finally {
@@ -207,6 +224,28 @@ export default function StoryDetailScreen() {
       chapterNumber: chapterIdx >= 0 ? chapterIdx + 1 : c.chapterNumber,
       pageNumber: pageIdx >= 0 ? pageIdx + 1 : c.pageNumber,
     };
+  };
+
+  // Me gusta: se pinta al instante y se deshace si falla
+  const toggleLike = async () => {
+    if (!user || !story || liking) return;
+    const next = !liked;
+    setLiking(true);
+    setLiked(next);
+    setLikeCount(c => Math.max(0, c + (next ? 1 : -1)));
+    try {
+      await setLike(
+        story.id, next,
+        { uid: user.uid, name: publicName || 'Alguien' },
+        { authorUid: story.uid, title: story.title, coverUrl: story.coverUrl, format: story.format },
+      );
+    } catch (e: any) {
+      setLiked(!next);
+      setLikeCount(c => Math.max(0, c + (next ? -1 : 1)));
+      AppAlert.alert('Error', e?.message ?? 'No se pudo guardar tu me gusta.');
+    } finally {
+      setLiking(false);
+    }
   };
 
   const handleDeleteComment = (c: StoryComment) => {
@@ -260,9 +299,17 @@ export default function StoryDetailScreen() {
     );
   }
 
+  // Contenido +18: solo para mayores de edad (el autor y moderación siempre pueden verla)
+  const isOwnStory = !!user && story.uid === user.uid;
+  if (story.isAdult && !isOwnStory && !can('deleteStories') && isAdult !== true) {
+    return <AdultGate onBack={() => router.back()} />;
+  }
+
   return (
     <View style={[styles.container, themed.container]}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
+
+      <ReportModal target={reportTarget} onClose={() => setReportTarget(null)} />
 
       {/* ── Moderación: eliminar como administrador ── */}
       <Modal visible={moderating} transparent animationType="fade" onRequestClose={() => setModerating(false)}>
@@ -311,6 +358,16 @@ export default function StoryDetailScreen() {
             <MaterialIcons name="arrow-back" size={22} color="#fff" />
           </TouchableOpacity>
           <View style={styles.heroActions}>
+          {/* Denunciar la historia (no la propia) */}
+          {user && !isOwnStory && (
+            <TouchableOpacity
+              style={[styles.bookmarkBtn, { marginRight: 0 }]}
+              onPress={() => setReportTarget({ type: 'story', storyId: story.id, storyTitle: story.title, targetUid: story.uid })}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="outlined-flag" size={20} color="#fff" />
+            </TouchableOpacity>
+          )}
           {can('deleteStories') && story.uid !== user?.uid && (
             <TouchableOpacity
               style={[styles.bookmarkBtn, { marginRight: 0 }]}
@@ -359,7 +416,21 @@ export default function StoryDetailScreen() {
           {story.subtitle ? (
             <Text style={styles.heroSubtitle}>{story.subtitle}</Text>
           ) : null}
-          <Text style={styles.heroStatus}>{STATUS_LABELS[story.status] ?? story.status ?? 'En curso'}</Text>
+          <View style={styles.heroBottomRow}>
+            <Text style={styles.heroStatus}>{STATUS_LABELS[story.status] ?? story.status ?? 'En curso'}</Text>
+            {/* Me gusta (solo en historias publicadas) */}
+            {story.published && (
+              <TouchableOpacity
+                style={[styles.likeBtn, liked && styles.likeBtnOn]}
+                onPress={toggleLike}
+                disabled={!user || liking}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name={liked ? 'favorite' : 'favorite-border'} size={16} color={liked ? '#FF69B4' : '#fff'} />
+                <Text style={styles.likeCountText}>{likeCount}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
 
@@ -463,15 +534,16 @@ export default function StoryDetailScreen() {
           )}
         </View>
 
-        {/* ── Comentarios de toda la novela (por página: solo formato Moderno) ── */}
-        {story.format !== 'Webnovel' && (
+        {/* ── Comentarios de toda la novela (por página en Moderno, por capítulo en Webnovel) ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>
+          <Text style={[styles.sectionLabel, themed.muted]}>
             Comentarios{comments.length > 0 ? ` · ${comments.length}` : ''}
           </Text>
           {comments.length === 0 ? (
-            <Text style={styles.emptyChapters}>
-              Todavía no hay comentarios. Se escriben desde cada página, al leer.
+            <Text style={[styles.emptyChapters, themed.muted]}>
+              {story.format === 'Webnovel'
+                ? 'Todavía no hay comentarios. Se escriben al final de cada capítulo.'
+                : 'Todavía no hay comentarios. Se escriben desde cada página, al leer.'}
             </Text>
           ) : comments.map(c => (
             <CommentItem
@@ -480,11 +552,17 @@ export default function StoryDetailScreen() {
               role={staffRoles.get(c.uid)}
               canDelete={!!user && (c.uid === user.uid || story.uid === user.uid || can('deleteStories'))}
               onDelete={handleDeleteComment}
+              onReport={user && c.uid !== user.uid
+                ? () => setReportTarget({
+                    type: 'comment', storyId: story.id, storyTitle: story.title,
+                    commentId: c.id, commentText: c.text, targetUid: c.uid,
+                  })
+                : undefined}
               onPressUser={uid => router.push({ pathname: '/user/[uid]', params: { uid } })}
+              colors={wn ? { name: wn.text, text: wn.text, muted: wn.muted } : undefined}
             />
           ))}
         </View>
-        )}
 
       </ScrollView>
 
@@ -554,6 +632,14 @@ const styles = StyleSheet.create({
   heroTitle:    { fontSize: 24, fontWeight: '700', color: '#fff', letterSpacing: 0.3, lineHeight: 30 },
   heroSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.75)', fontStyle: 'italic' },
   heroStatus:   { fontSize: 13, color: 'rgba(255,255,255,0.6)' },
+  heroBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  likeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+  },
+  likeBtnOn:     { borderColor: '#FF69B4' },
+  likeCountText: { fontSize: 13, fontWeight: '700', color: '#fff' },
 
   // Contenido
   scroll:        { flex: 1 },

@@ -20,13 +20,8 @@ import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, storage } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { AppAlert, useDialogAccent } from '@/components/app-dialog';
-import { ADULT_AUDIENCES, ADULT_CONTENT, AUDIENCES } from '@/constants/story-meta';
-
-const GENRES = [
-  'Fantasía', 'Romance', 'Acción', 'Aventura', 'Misterio',
-  'Terror', 'Ciencia Ficción', 'Drama', 'Comedia', 'Thriller',
-  'Histórico', 'Sobrenatural', 'Slice of Life', 'Cyberpunk',
-];
+import { ADULT_AUDIENCES, ADULT_CONTENT, AUDIENCES, GENRES } from '@/constants/story-meta';
+import { useAuth } from '@/context/AuthContext';
 
 const LANGUAGES = ['Español', 'English', 'Português', 'Français', 'Deutsch', 'Otro'];
 
@@ -51,6 +46,7 @@ export default function ModernoDetailsScreen() {
   const router = useRouter();
   const { storyId, format: formatParam } = useLocalSearchParams<{ storyId?: string; format?: string }>();
   const isEditing = !!storyId;
+  const { publicName } = useAuth(); // nombre del autor en la historia (para el buscador)
   // Formato de la historia: al crear viene de la pestaña Escribir; al editar, del documento
   const [format, setFormat] = useState<'Moderno' | 'Webnovel'>(formatParam === 'Webnovel' ? 'Webnovel' : 'Moderno');
   // Color de acento del formato (verde Moderno, morado Webnovel) para toda la pantalla
@@ -178,6 +174,7 @@ export default function ModernoDetailsScreen() {
         // ── Actualizar historia existente ──
         await updateDoc(doc(db, 'stories', storyId as string), {
           title: title.trim(),
+          authorName: publicName,
           subtitle: subtitle.trim(),
           synopsis: synopsis.trim(),
           language,
@@ -198,6 +195,7 @@ export default function ModernoDetailsScreen() {
           uid: auth.currentUser?.uid,
           format,
           title: title.trim(),
+          authorName: publicName,
           subtitle: subtitle.trim(),
           synopsis: synopsis.trim(),
           language,

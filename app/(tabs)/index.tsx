@@ -11,12 +11,13 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { useNotifications } from '@/context/NotificationsContext';
+import { useAuth } from '@/context/AuthContext';
 
 interface StoryCard {
   id: string;
@@ -28,6 +29,8 @@ interface StoryCard {
   uid: string;
   coverUrl?: string;
   coverOrientation?: 'vertical' | 'horizontal';
+  likeCount?: number;
+  isAdult?: boolean;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -190,7 +193,9 @@ export default function DiscoverScreen() {
   const [webnovelAll, setWebnovelAll] = useState<StoryCard[]>([]);
   const [modernoNew,  setModernoNew]  = useState<StoryCard[]>([]);
   const [webnovelNew, setWebnovelNew] = useState<StoryCard[]>([]);
+  const [popular, setPopular]         = useState<StoryCard[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(true);
+  const { isAdult } = useAuth();
 
   useFocusEffect(
     useCallback(() => {
@@ -202,7 +207,10 @@ export default function DiscoverScreen() {
             query(collection(db, 'stories'), where('published', '==', true), limit(200))
           );
           if (cancelled) return;
-          const all = snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<StoryCard, 'id'>) }));
+          const all = snap.docs
+            .map(d => ({ id: d.id, ...(d.data() as Omit<StoryCard, 'id'>) }))
+            // Los menores de edad no ven las historias +18
+            .filter(s => !(s.isAdult && isAdult === false));
 
           const moderno  = all.filter(s => s.format === 'Moderno');
           const webnovel = all.filter(s => s.format === 'Webnovel');
@@ -211,6 +219,12 @@ export default function DiscoverScreen() {
           const byNewest = (a: StoryCard, b: StoryCard) =>
             (b.publishedAt ?? '').localeCompare(a.publishedAt ?? '');
 
+          // Más populares: las que tienen algún me gusta, de más a menos
+          setPopular(
+            all.filter(s => (s.likeCount ?? 0) > 0)
+              .sort((a, b) => (b.likeCount ?? 0) - (a.likeCount ?? 0) || byNewest(a, b))
+              .slice(0, 20)
+          );
           setModernoAll([...moderno].sort(byTitle).slice(0, 20));
           setWebnovelAll([...webnovel].sort(byTitle).slice(0, 20));
           setModernoNew([...moderno].sort(byNewest).slice(0, 20));
@@ -222,7 +236,7 @@ export default function DiscoverScreen() {
         }
       })();
       return () => { cancelled = true; };
-    }, [])
+    }, [isAdult])
   );
 
   const handleStoryPress = (s: StoryCard) => router.push(`/story/${s.id}`);
@@ -248,7 +262,7 @@ export default function DiscoverScreen() {
                 </View>
               )}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.searchBtn} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.searchBtn} activeOpacity={0.8} onPress={() => router.push('/search' as Href)}>
               <MaterialIcons name="search" size={18} color={Colors.emerald} />
             </TouchableOpacity>
           </View>
@@ -256,6 +270,13 @@ export default function DiscoverScreen() {
       </SafeAreaView>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+
+        {popular.length > 0 && (
+          <View style={styles.section}>
+            <SectionHeader title="Más populares" color="#FF69B4" />
+            <StoryRow stories={popular} loading={false} onPress={handleStoryPress} />
+          </View>
+        )}
 
         <View style={styles.section}>
           <SectionHeader title="Novelas Modernas" color={Colors.formatColors.Moderno} />

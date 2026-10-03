@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList, StatusBar, ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
+import { AppHeader } from '@/components/app-header';
 import {
   type AppNotification, type NotificationType,
   deleteNotification, markAllNotificationsRead, markNotificationRead,
@@ -16,6 +16,9 @@ import {
 
 const TYPE_ICON: Record<NotificationType, { icon: string; color: string }> = {
   story_deleted: { icon: 'delete-outline',   color: '#FF6B6B' },
+  chapter:       { icon: 'auto-stories',     color: Colors.emerald },
+  new_story:     { icon: 'menu-book',        color: '#7B68EE' },
+  follow:        { icon: 'person-add',       color: '#4A90D9' },
   like:          { icon: 'favorite',         color: '#FF69B4' },
   comment:       { icon: 'chat-bubble',      color: '#4A90D9' },
   news:          { icon: 'campaign',         color: Colors.emerald },
@@ -55,9 +58,12 @@ export default function NotificationsScreen() {
   const handlePress = (n: AppNotification) => {
     if (!user) return;
     if (!n.read) markNotificationRead(user.uid, n.id).catch(() => {});
-    // Likes y comentarios llevan a la historia; una historia borrada ya no existe
-    if (n.storyId && (n.type === 'like' || n.type === 'comment')) {
+    // Lo que tiene que ver con una historia lleva a ella (una borrada ya no existe);
+    // un seguidor nuevo, a su perfil
+    if (n.storyId && ['like', 'comment', 'chapter', 'new_story'].includes(n.type)) {
       router.push(`/story/${n.storyId}`);
+    } else if (n.type === 'follow' && n.fromUid) {
+      router.push({ pathname: '/user/[uid]', params: { uid: n.fromUid } });
     }
   };
 
@@ -65,8 +71,8 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <SafeAreaView edges={['top']} style={styles.header}>
+      <AppHeader onBack={() => router.back()} />
+      <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
           <MaterialIcons name="arrow-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
@@ -79,7 +85,7 @@ export default function NotificationsScreen() {
         >
           <MaterialIcons name="done-all" size={20} color={Colors.emerald} />
         </TouchableOpacity>
-      </SafeAreaView>
+      </View>
 
       {loading ? (
         <View style={styles.centered}><ActivityIndicator color={Colors.emerald} /></View>
@@ -130,7 +136,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 12, paddingBottom: 10,
+    paddingHorizontal: 12, paddingTop: 12, paddingBottom: 10,
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backBtn:     { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },

@@ -12,7 +12,7 @@ export type Role = 'owner' | 'admin';
 export type Permission = 'deleteStories' | 'announcements' | 'manageAdmins';
 
 export const PERMISSIONS: { key: Permission; label: string; description: string }[] = [
-  { key: 'deleteStories', label: 'Eliminar historias',        description: 'Borrar historias de cualquier autor' },
+  { key: 'deleteStories', label: 'Moderar contenido',         description: 'Atender denuncias y borrar historias y comentarios' },
   { key: 'announcements', label: 'Publicar avisos',           description: 'Enviar noticias y avisos a todos' },
   { key: 'manageAdmins',  label: 'Gestionar administradores', description: 'Nombrar admins y cambiar sus permisos' },
 ];

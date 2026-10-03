@@ -12,9 +12,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
+import { AppAlert } from '@/components/app-dialog';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -38,6 +39,21 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Recuperar contraseña: Firebase envía un correo con un enlace para crear una nueva.
+  // El mensaje es el mismo exista o no la cuenta, para no revelar qué correos están registrados.
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setError('Escribe tu correo y pulsa de nuevo "¿Olvidaste tu contraseña?".');
+      return;
+    }
+    setError('');
+    try { await sendPasswordResetEmail(auth, email.trim()); } catch { /* mismo mensaje */ }
+    AppAlert.alert(
+      'Revisa tu correo',
+      'Si hay una cuenta con ese correo, te hemos enviado un enlace para crear una contraseña nueva. Mira también en la carpeta de spam.',
+    );
   };
 
   return (
@@ -79,6 +95,9 @@ export default function LoginScreen() {
               placeholderTextColor={Colors.textMuted}
               secureTextEntry
             />
+            <TouchableOpacity onPress={handleForgotPassword} style={{ alignSelf: 'flex-end' }} hitSlop={8}>
+              <Text style={styles.footerLink}>¿Olvidaste tu contraseña?</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.btn, loading && styles.btnDisabled]}

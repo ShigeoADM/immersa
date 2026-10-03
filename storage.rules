@@ -1,0 +1,53 @@
+// Reglas de seguridad de Firebase Storage para Immersa.
+// Se publican en la consola de Firebase → Storage → Reglas.
+//
+// Usan firestore.get() para comprobar quién es el autor de una historia. La primera vez
+// que se publican, la consola pide permiso para que Storage pueda leer Firestore: hay
+// que aceptarlo.
+
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() { return request.auth != null; }
+
+    // Borrar no lleva archivo (request.resource == null); subir sí, y se limita su tamaño
+    function deletingOr(maxMb) {
+      return request.resource == null || request.resource.size < maxMb * 1024 * 1024;
+    }
+
+    function ownsStory(storyId) {
+      return signedIn()
+        && firestore.get(/databases/(default)/documents/stories/$(storyId)).data.uid == request.auth.uid;
+    }
+
+    // Por defecto: se puede descargar un archivo conociendo su dirección (así la app
+    // muestra portadas, fondos y audios), pero nadie puede listar carpetas ni escribir.
+    match /{allPaths=**} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ── Fotos de perfil y portadas: solo su dueño ────────────────────────────
+    match /avatars/{userId}/{file} {
+      allow write: if signedIn() && request.auth.uid == userId && deletingOr(8);
+    }
+    match /covers/{userId}/{file} {
+      allow write: if signedIn() && request.auth.uid == userId && deletingOr(8);
+    }
+
+    // ── Archivos de una historia: solo su autor ──────────────────────────────
+    // Fondos de página
+    match /pages/{storyId}/{chapterId}/{file} {
+      allow write: if ownsStory(storyId) && deletingOr(8);
+    }
+    // Música y efectos de sonido
+    match /music/{storyId}/{chapterId}/{file} {
+      allow write: if ownsStory(storyId) && deletingOr(25);
+    }
+    match /sfx/{storyId}/{chapterId}/{file} {
+      allow write: if ownsStory(storyId) && deletingOr(10);
+    }
+  }
+}

@@ -23,6 +23,8 @@ import {
   addAdmin, deleteAnnouncement, findUserByEmail, listAnnouncements, listStaff,
   publishAnnouncement, removeAdmin, setAdminPermission,
 } from '@/services/admin';
+import { type Report, dismissReport, listReports, reportReasonLabel } from '@/services/reports';
+import { deleteComment } from '@/services/comments';
 
 const TYPES: { value: AnnouncementType; label: string; icon: string }[] = [
   { value: 'news',  label: 'Noticia',                 icon: 'campaign' },
@@ -34,6 +36,8 @@ export default function AdminScreen() {
   const { user, staff, isStaff, can, loading: authLoading } = useAuth();
   const canAnnounce = can('announcements');
   const canManageAdmins = can('manageAdmins');
+  const canModerate = can('deleteStories');
+  const [reports, setReports] = useState<Report[]>([]);
 
   // Publicar aviso
   const [type, setType]   = useState<AnnouncementType>('news');
@@ -54,20 +58,48 @@ export default function AdminScreen() {
   // Cada sección solo se carga si se tiene el permiso (si no, las reglas lo rechazarían)
   const load = useCallback(async () => {
     try {
-      const [a, t] = await Promise.all([
+      const [a, t, r] = await Promise.all([
         canAnnounce ? listAnnouncements() : Promise.resolve([]),
         canManageAdmins ? listStaff() : Promise.resolve([]),
+        canModerate ? listReports() : Promise.resolve([]),
       ]);
       setAnnouncements(a);
       setTeam(t);
+      setReports(r);
     } catch (e) {
       console.error('Error cargando el panel de administración:', e);
     } finally {
       setLoading(false);
     }
-  }, [canAnnounce, canManageAdmins]);
+  }, [canAnnounce, canManageAdmins, canModerate]);
 
   useFocusEffect(useCallback(() => { if (isStaff) load(); }, [isStaff, load]));
+
+  // ── Denuncias ─────────────────────────────────────────────────────────────
+  const closeReport = async (r: Report) => {
+    try {
+      await dismissReport(r.id);
+      setReports(prev => prev.filter(x => x.id !== r.id));
+    } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo cerrar la denuncia.'); }
+  };
+
+  const handleDeleteReportedComment = (r: Report) => {
+    AppAlert.alert('Borrar comentario', 'Se borrará el comentario denunciado y se cerrará la denuncia.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Borrar', style: 'destructive',
+        onPress: async () => {
+          try {
+            if (r.commentId) await deleteComment(r.storyId, r.commentId);
+            // Se cierran todas las denuncias sobre ese mismo comentario
+            const same = reports.filter(x => x.type === 'comment' && x.commentId === r.commentId);
+            await Promise.all(same.map(x => dismissReport(x.id)));
+            setReports(prev => prev.filter(x => !same.includes(x)));
+          } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo borrar el comentario.'); }
+        },
+      },
+    ]);
+  };
 
   // ── Avisos ────────────────────────────────────────────────────────────────
   const handlePublish = async () => {
@@ -218,10 +250,52 @@ export default function AdminScreen() {
           </View>
         </View>
 
-        {can('deleteStories') && (
-          <Text style={styles.hint}>
-            Para eliminar una historia, ábrela: verás un botón de moderación (mazo) arriba a la derecha.
-          </Text>
+        {/* ── Denuncias ── */}
+        {canModerate && (
+          <>
+            <Text style={styles.sectionTitle}>
+              Denuncias{reports.length > 0 ? ` · ${reports.length}` : ''}
+            </Text>
+            <Text style={styles.hint}>
+              Para eliminar una historia, ábrela: verás el botón de moderación (mazo) arriba a la derecha.
+            </Text>
+            {loading ? (
+              <ActivityIndicator color={Colors.emerald} style={{ marginVertical: 12 }} />
+            ) : reports.length === 0 ? (
+              <Text style={styles.muted}>No hay denuncias pendientes.</Text>
+            ) : reports.map(r => (
+              <View key={r.id} style={styles.memberCard}>
+                <View style={styles.memberHeader}>
+                  <MaterialIcons name={r.type === 'comment' ? 'chat-bubble' : 'menu-book'} size={16} color="#FF6B6B" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle} numberOfLines={1}>
+                      {r.type === 'comment' ? 'Comentario en ' : ''}{r.storyTitle || 'Historia'}
+                    </Text>
+                    <Text style={styles.rowSub}>{reportReasonLabel(r.reason)}</Text>
+                  </View>
+                  <Text style={styles.rowDate}>{new Date(r.createdAt).toLocaleDateString()}</Text>
+                </View>
+                {r.commentText ? <Text style={styles.reportQuote} numberOfLines={4}>"{r.commentText}"</Text> : null}
+                {r.details ? <Text style={styles.rowSub}>Detalles: {r.details}</Text> : null}
+                <View style={styles.permRow}>
+                  <TouchableOpacity style={styles.permChip} onPress={() => router.push(`/story/${r.storyId}`)} activeOpacity={0.8}>
+                    <MaterialIcons name="open-in-new" size={13} color={Colors.textSecondary} />
+                    <Text style={styles.permChipText}>Abrir historia</Text>
+                  </TouchableOpacity>
+                  {r.type === 'comment' && (
+                    <TouchableOpacity style={styles.permChip} onPress={() => handleDeleteReportedComment(r)} activeOpacity={0.8}>
+                      <MaterialIcons name="delete-outline" size={13} color="#FF6B6B" />
+                      <Text style={[styles.permChipText, { color: '#FF6B6B' }]}>Borrar comentario</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity style={styles.permChip} onPress={() => closeReport(r)} activeOpacity={0.8}>
+                    <MaterialIcons name="check" size={13} color={Colors.textSecondary} />
+                    <Text style={styles.permChipText}>Cerrar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </>
         )}
 
         {/* ── Avisos ── */}
@@ -393,7 +467,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 12, paddingBottom: 10,
+    paddingHorizontal: 12, paddingTop: 14, paddingBottom: 12,
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backBtn:     { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
@@ -435,6 +509,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card, borderRadius: 8, borderWidth: 1, borderColor: Colors.border,
   },
   memberHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  reportQuote:  { fontSize: 13, color: Colors.textMuted, fontStyle: 'italic', lineHeight: 19 },
   permRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   permChip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,

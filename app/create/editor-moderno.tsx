@@ -40,6 +40,7 @@ import { AppAlert, useDialogAccent } from '@/components/app-dialog';
 import {
   deleteChapterWithCascade, deleteStoryWithCascade, formatReadingStats, saveOrder, sortChapters,
 } from '@/services/stories';
+import { type StoryStats, getStoryStats } from '@/services/social';
 
 interface Chapter {
   id: string;
@@ -65,6 +66,8 @@ export default function EditorModernoScreen() {
   const [publishingChapter, setPublishingChapter] = useState<string | null>(null);
   const [reorderMode, setReorderMode]             = useState(false);
   const [reordering, setReordering]               = useState(false);
+  // Estadísticas de la historia (lectores, guardados, me gusta, comentarios)
+  const [stats, setStats] = useState<(StoryStats & { likes: number }) | null>(null);
   // El formato llega por la ruta (para pintar el color correcto desde el principio) y se
   // confirma al cargar la historia
   const [format, setFormat] = useState<'Moderno' | 'Webnovel'>(formatParam === 'Webnovel' ? 'Webnovel' : 'Moderno');
@@ -92,6 +95,10 @@ export default function EditorModernoScreen() {
         if (storySnap.exists()) {
           setPublished(storySnap.data().published === true);
           setFormat(storySnap.data().format === 'Webnovel' ? 'Webnovel' : 'Moderno');
+          const likes = storySnap.data().likeCount ?? 0;
+          getStoryStats(storyId as string)
+            .then(s => setStats({ ...s, likes }))
+            .catch(e => console.error('Error cargando estadísticas:', e));
         }
 
         // Capítulos
@@ -171,13 +178,14 @@ export default function EditorModernoScreen() {
           doc(db, 'stories', storyId as string, 'chapters', chapter.id),
           { published: true, publishedAt: now }
         );
-        // Publicar el libro automáticamente si no lo estaba
-        if (!published) {
-          await updateDoc(doc(db, 'stories', storyId as string), {
-            published: true, publishedAt: now, updatedAt: now,
-          });
-          setPublished(true);
-        }
+        // La historia apunta su último capítulo publicado: con eso el móvil de cada lector
+        // que la tiene guardada le avisa del capítulo nuevo. Si el libro no estaba
+        // publicado, se publica automáticamente.
+        await updateDoc(doc(db, 'stories', storyId as string), {
+          lastChapterAt: now, lastChapterTitle: chapter.title, updatedAt: now,
+          ...(published ? {} : { published: true, publishedAt: now }),
+        });
+        if (!published) setPublished(true);
         setChapters(prev => prev.map(c =>
           c.id === chapter.id ? { ...c, published: true, publishedAt: now } : c
         ));
@@ -331,6 +339,23 @@ export default function EditorModernoScreen() {
 
       <View style={styles.titleArea}>
         <Text style={styles.storyTitle} numberOfLines={1}>{storyTitle}</Text>
+        {stats && (
+          <View style={styles.statsRow}>
+            {([
+              { icon: 'visibility',     value: stats.views,    label: stats.views === 1 ? 'lectura' : 'lecturas' },
+              { icon: 'person',         value: stats.readers,  label: stats.readers === 1 ? 'lector' : 'lectores' },
+              { icon: 'bookmark',       value: stats.saves,    label: stats.saves === 1 ? 'guardado' : 'guardados' },
+              { icon: 'favorite',       value: stats.likes,    label: 'me gusta' },
+              { icon: 'chat-bubble',    value: stats.comments, label: stats.comments === 1 ? 'comentario' : 'comentarios' },
+            ] as const).map(s => (
+              <View key={s.icon} style={styles.statItem}>
+                <MaterialIcons name={s.icon} size={14} color={accent} />
+                <Text style={styles.statValue}>{s.value}</Text>
+                <Text style={styles.statLabel}>{s.label}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
       <View style={styles.divider} />
 
@@ -503,6 +528,10 @@ const makeStyles = (accent: string) => StyleSheet.create({
   chapterRow:       { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: Colors.border },
   chapterRowInner:  { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 },
   chapterDeleteBtn: { paddingHorizontal: 14, paddingVertical: 14 },
+  statsRow:  { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 16, marginTop: 12 },
+  statItem:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statValue: { fontSize: 13, fontWeight: '700', color: Colors.textPrimary },
+  statLabel: { fontSize: 11, color: Colors.textMuted },
   // Barra sobre la lista: contador + modo ordenar
   listToolbar:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 4 },
   listCount:           { fontSize: 12, color: Colors.textMuted },

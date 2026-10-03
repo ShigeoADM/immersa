@@ -12,11 +12,14 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
+import { MIN_AGE, ageOf, buildBirthDate } from '@/constants/age';
+import { BirthDateInput, EMPTY_BIRTH_DATE } from '@/components/birth-date-input';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -24,6 +27,8 @@ export default function RegisterScreen() {
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm]   = useState('');
+  const [birth, setBirth]       = useState(EMPTY_BIRTH_DATE);
+  const [accepted, setAccepted] = useState(false); // términos de uso y política de privacidad
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
 
@@ -40,6 +45,19 @@ export default function RegisterScreen() {
       setError('La contraseña debe tener al menos 6 caracteres.');
       return;
     }
+    const birthDate = buildBirthDate(birth.day, birth.month, birth.year);
+    if (!birthDate) {
+      setError('Introduce una fecha de nacimiento válida.');
+      return;
+    }
+    if (ageOf(birthDate) < MIN_AGE) {
+      setError(`Debes tener al menos ${MIN_AGE} años para crear una cuenta.`);
+      return;
+    }
+    if (!accepted) {
+      setError('Tienes que aceptar los términos de uso y la política de privacidad.');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
@@ -51,6 +69,8 @@ export default function RegisterScreen() {
         username: username.trim(),
         displayName: username.trim(),
         email: email.trim(),
+        birthDate,                                  // privado: decide el acceso al contenido +18
+        acceptedTermsAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
         stories: [],
       });
@@ -133,6 +153,34 @@ export default function RegisterScreen() {
                 secureTextEntry
               />
 
+              <Text style={styles.label}>Fecha de nacimiento</Text>
+              <BirthDateInput value={birth} onChange={setBirth} />
+              <Text style={styles.hint}>
+                No se muestra a nadie. Se usa para el contenido +18 y no se puede cambiar después.
+              </Text>
+
+              {/* Aceptación de los textos legales */}
+              <View style={styles.acceptRow}>
+                <TouchableOpacity onPress={() => setAccepted(v => !v)} hitSlop={8} activeOpacity={0.7}>
+                  <MaterialIcons
+                    name={accepted ? 'check-box' : 'check-box-outline-blank'}
+                    size={22}
+                    color={accepted ? Colors.emerald : Colors.textMuted}
+                  />
+                </TouchableOpacity>
+                <Text style={styles.acceptText}>
+                  Acepto los{' '}
+                  <Text style={styles.footerLink} onPress={() => router.push('/auth/legal?doc=terms' as Href)}>
+                    términos de uso
+                  </Text>
+                  {' '}y la{' '}
+                  <Text style={styles.footerLink} onPress={() => router.push('/auth/legal?doc=privacy' as Href)}>
+                    política de privacidad
+                  </Text>
+                  .
+                </Text>
+              </View>
+
               <TouchableOpacity
                 style={[styles.btn, loading && styles.btnDisabled]}
                 onPress={handleRegister}
@@ -206,6 +254,9 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: 14,
   },
+  hint:       { fontSize: 11, color: Colors.textMuted, marginTop: 4, lineHeight: 16 },
+  acceptRow:  { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+  acceptText: { flex: 1, fontSize: 13, color: Colors.textSecondary, lineHeight: 19 },
   errorText: {
     fontSize: 13,
     color: '#FF6B6B',

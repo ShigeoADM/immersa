@@ -10,7 +10,10 @@
 //   · Historias borradas: lápidas en deletedStories/{storyId} (services/stories.ts).
 //   · Noticias / avisos de administración: colección global announcements/{id},
 //     que se crea desde la consola de Firebase con { title, body, createdAt, type }.
-//   · Likes y comentarios (cuando existan): notifyUser(), que escribe en las
+//   · Capítulo nuevo: al publicar un capítulo la historia apunta la fecha
+//     (lastChapterAt); cada lector la compara con la última que vio.
+//   · Historia nueva de un autor seguido: se consultan sus historias publicadas.
+//   · Likes, comentarios y seguidores: los escribe el móvil de quien los hace en las
 //     notificaciones del destinatario (las reglas solo lo permiten para esos tipos).
 
 import { Platform } from 'react-native';
@@ -20,11 +23,14 @@ import * as BackgroundFetch from 'expo-background-fetch';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, orderBy, query,
-  setDoc, updateDoc, where, writeBatch,
+  setDoc, updateDoc, where, writeBatch, type DocumentReference,
 } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
 
-export type NotificationType = 'story_deleted' | 'like' | 'comment' | 'news' | 'admin';
+export type NotificationType =
+  | 'story_deleted' | 'chapter' | 'new_story'   // sobre historias que sigues
+  | 'like' | 'comment' | 'follow'               // de otros usuarios hacia ti
+  | 'news' | 'admin';                           // del equipo
 
 export interface AppNotification {
   id: string;
@@ -68,6 +74,76 @@ export async function setupNotificationPermissions(): Promise<boolean> {
   return (await Notifications.requestPermissionsAsync()).granted;
 }
 
+// ── Capítulo nuevo ───────────────────────────────────────────────────────────
+// La historia guarda cuándo se publicó su último capítulo (lastChapterAt). Si es
+// posterior a lo último que este lector vio, se le avisa. Devuelve true si creó aviso.
+async function notifyNewChapter(
+  uid: string, entryRef: DocumentReference, entry: any, storyId: string, story: any,
+): Promise<boolean> {
+  const latest: string | undefined = story.lastChapterAt;
+  if (!latest || story.uid === uid || !(entry.isReading || entry.isInterested)) return false;
+
+  // Sin referencia previa se usa la última lectura o cuándo se guardó la historia
+  const seen: string = entry.notifiedChapterAt ?? entry.lastReadAt ?? entry.addedAt ?? latest;
+  if (latest <= seen) {
+    if (!entry.notifiedChapterAt) await updateDoc(entryRef, { notifiedChapterAt: latest });
+    return false;
+  }
+
+  const chapterTitle = story.lastChapterTitle ? `: ${story.lastChapterTitle}` : '';
+  await setDoc(doc(db, 'users', uid, 'notifications', `chapter_${storyId}_${latest}`), {
+    type: 'chapter',
+    title: 'Nuevo capítulo',
+    body: `"${story.title ?? entry.title ?? ''}" tiene un capítulo nuevo${chapterTitle}.`,
+    createdAt: new Date().toISOString(),
+    read: false,
+    storyId,
+  });
+  await updateDoc(entryRef, { notifiedChapterAt: latest });
+  return true;
+}
+
+// ── Historias nuevas de autores seguidos ─────────────────────────────────────
+// Como mucho cada 30 min: una consulta por autor seguido.
+const FOLLOWING_CHECK_MS = 30 * 60 * 1000;
+const followingCheckKey = (uid: string) => `notifications:followingCheckAt:${uid}`;
+
+async function syncFollowing(uid: string): Promise<number> {
+  const key = followingCheckKey(uid);
+  const last = Number(await AsyncStorage.getItem(key)) || 0;
+  if (Date.now() - last < FOLLOWING_CHECK_MS) return 0;
+  await AsyncStorage.setItem(key, String(Date.now()));
+
+  const followingSnap = await getDocs(collection(db, 'users', uid, 'following'));
+  let created = 0;
+  await Promise.all(followingSnap.docs.map(async f => {
+    const authorUid = f.id;
+    const since: string = f.data().lastNotifiedAt ?? f.data().createdAt ?? '';
+    try {
+      const storiesSnap = await getDocs(query(
+        collection(db, 'stories'), where('uid', '==', authorUid), where('published', '==', true),
+      ));
+      const fresh = storiesSnap.docs.filter(s => (s.data().publishedAt ?? '') > since);
+      if (fresh.length === 0) return;
+      for (const s of fresh) {
+        const d = s.data();
+        await setDoc(doc(db, 'users', uid, 'notifications', `new_story_${s.id}`), {
+          type: 'new_story',
+          title: 'Nueva historia',
+          body: `${d.authorName ?? 'Un autor que sigues'} ha publicado "${d.title ?? ''}".`,
+          createdAt: new Date().toISOString(),
+          read: false,
+          storyId: s.id,
+          fromUid: authorUid,
+        });
+        created++;
+      }
+      await updateDoc(f.ref, { lastNotifiedAt: new Date().toISOString() });
+    } catch { /* sin red o sin permiso: se reintenta en la próxima comprobación */ }
+  }));
+  return created;
+}
+
 // ── Historias borradas ───────────────────────────────────────────────────────
 // Quita de la biblioteca las historias que ya no existen y crea el aviso
 // correspondiente si estaban en "Seguir leyendo" o "Leer más tarde".
@@ -77,13 +153,17 @@ async function cleanupDeletedStoriesImpl(uid: string): Promise<number> {
 
   await Promise.all(librarySnap.docs.map(async entry => {
     const storyId = entry.id;
+    const e = entry.data();
     try {
-      if ((await getDoc(doc(db, 'stories', storyId))).exists()) return;
+      const storySnap = await getDoc(doc(db, 'stories', storyId));
+      if (storySnap.exists()) {
+        if (await notifyNewChapter(uid, entry.ref, e, storyId, storySnap.data())) created++;
+        return;
+      }
     } catch {
       return; // sin red o sin permiso: no tocar nada
     }
 
-    const e = entry.data();
     let title: string = e.title ?? '';
     let deletedBy: 'author' | 'admin' | null = null;
     try {
@@ -204,7 +284,8 @@ export async function syncNotifications(uid: string): Promise<number> {
   }
   const created =
     (await cleanupDeletedStories(uid)) +
-    (await syncAnnouncements(uid));
+    (await syncAnnouncements(uid)) +
+    (await syncFollowing(uid).catch(() => 0));
   await showNewNativeNotifications(uid);
   return created;
 }
@@ -255,7 +336,7 @@ export async function markAllNotificationsRead(uid: string) {
 // notificaciones de otro usuario, y con fromUid = quien lo envía.
 export async function notifyUser(
   toUid: string,
-  n: { type: 'like' | 'comment'; title: string; body: string; storyId?: string },
+  n: { type: 'like' | 'comment' | 'follow'; title: string; body: string; storyId?: string },
 ) {
   const me = auth.currentUser;
   if (!me || me.uid === toUid) return;

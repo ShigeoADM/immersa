@@ -75,6 +75,21 @@ export function parseRichText(line: string): RichSegment[] {
   });
 }
 
+// Tramos con formato dentro de un texto completo, con su posición:
+//   start/end → el tramo entero, marcas incluidas · n → longitud de cada marca (1, 2 o 3)
+export type RichMark = { start: number; end: number; n: number };
+
+export function findRichMarks(text: string): RichMark[] {
+  const marks: RichMark[] = [];
+  const re = new RegExp(MARK_RE.source, 'g');
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const n = m[0].startsWith('***') ? 3 : m[0].startsWith('**') ? 2 : 1;
+    marks.push({ start: m.index, end: m.index + m[0].length, n });
+  }
+  return marks;
+}
+
 // Texto sin marcas (para contar palabras)
 export const stripRichText = (content: string) =>
   content.split('\n').map(line => parseRichText(line).map(s => s.text).join('')).join('\n');

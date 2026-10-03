@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, AppState,
+  TextInput, KeyboardAvoidingView, Platform,
   type NativeScrollEvent, type NativeSyntheticEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,7 +15,19 @@ import {
   type WebnovelTheme, getWebnovelFontSize, getWebnovelTheme, setWebnovelFontSize,
 } from '@/constants/webnovel';
 import { RichText } from '@/components/rich-text';
+import { Colors } from '@/constants/theme';
 import { sortChapters } from '@/services/stories';
+import { useAuth } from '@/context/AuthContext';
+import type { Role } from '@/constants/permissions';
+import {
+  type StoryComment, COMMENT_MAX_LENGTH, addComment, deleteComment, listChapterComments,
+} from '@/services/comments';
+import { getStaffRoles } from '@/services/profiles';
+import { enterReading, leaveReading } from '@/services/social';
+import { CommentItem } from '@/components/comment-item';
+import { AppAlert } from '@/components/app-dialog';
+import { ReportModal } from '@/components/report-modal';
+import type { ReportTarget } from '@/services/reports';
 
 type ChapterRef = { id: string; title: string };
 
@@ -42,6 +55,15 @@ export default function WebnovelReaderScreen() {
   const [fontSize, setFontSize]   = useState(WEBNOVEL_FONT_SIZE_DEFAULT);
   const theme = WEBNOVEL_THEMES[themeName];
 
+  // Comentarios del capítulo (al final del texto)
+  const { publicName, publicAvatar, can } = useAuth();
+  const [comments, setComments]       = useState<StoryComment[]>([]);
+  const [staffRoles, setStaffRoles]   = useState<Map<string, Role>>(new Map());
+  const [commentText, setCommentText] = useState('');
+  const [sending, setSending]         = useState(false);
+  const [isAuthor, setIsAuthor]       = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+
   // Datos de la historia para guardar el progreso sin lecturas extra
   const storyRef = useRef<Record<string, any> | null>(null);
   // Scroll: posición actual (0–1) y posición a restaurar al abrir
@@ -49,6 +71,7 @@ export default function WebnovelReaderScreen() {
   const progressRef   = useRef(0);
   const restoreRef    = useRef<number | null>(null);
   const viewportRef   = useRef(0);
+  const viewCountedRef = useRef(false); // ya se intentó contar la lectura en esta apertura
 
   // ── Preferencias del lector ───────────────────────────────────────────────
   useEffect(() => {
@@ -87,6 +110,12 @@ export default function WebnovelReaderScreen() {
 
         // Capítulo anterior / siguiente (publicados; el autor ve también los borradores)
         const isAuthor = !!uid && storyRef.current?.uid === uid;
+        setIsAuthor(isAuthor);
+        // Comentarios (si fallan, el lector funciona igual)
+        listChapterComments(storyId, chapterId).then(setComments)
+          .catch(e => console.error('Error cargando comentarios:', e));
+        getStaffRoles().then(setStaffRoles)
+          .catch(e => console.error('Error cargando el equipo:', e));
         const visible = sortChapters(chaptersSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) })))
           .filter(c => isAuthor || c.published === true || c.id === chapterId);
         const idx = visible.findIndex(c => c.id === chapterId);
@@ -136,6 +165,12 @@ export default function WebnovelReaderScreen() {
         lastReadAt: now,
         addedAt: existing.exists() ? existing.data().addedAt ?? now : now,
       }, { merge: true });
+      // Lecturas (estadística del autor): se intenta una vez por apertura del lector,
+      // no en cada guardado (al salir tras leer un rato contaría una lectura de más)
+      if (!viewCountedRef.current) {
+        viewCountedRef.current = true;
+        enterReading(storyId, uid, story.uid);
+      }
     } catch (e) {
       console.error('Error guardando progreso de lectura:', e);
     }
@@ -147,10 +182,19 @@ export default function WebnovelReaderScreen() {
   useEffect(() => {
     if (loading) return;
     saveProgressRef.current();
+    const readerUid = isPreview ? undefined : auth.currentUser?.uid;
     const sub = AppState.addEventListener('change', state => {
-      if (state === 'background') saveProgressRef.current();
+      if (state !== 'background') return;
+      saveProgressRef.current();
+      // Apunta la hora por si la app se cierra desde el fondo (la sesión sigue abierta)
+      if (readerUid) leaveReading(storyId, readerUid, false);
     });
-    return () => { sub.remove(); saveProgressRef.current(); };
+    // Al salir: guardar la posición y apuntar que se deja de leer
+    return () => {
+      sub.remove();
+      saveProgressRef.current();
+      if (readerUid) leaveReading(storyId, readerUid);
+    };
   }, [loading]);
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -168,6 +212,45 @@ export default function WebnovelReaderScreen() {
     restoreRef.current = null;
   };
 
+  // ── Comentarios ───────────────────────────────────────────────────────────
+  const handleSendComment = async () => {
+    const text = commentText.trim();
+    const me = auth.currentUser;
+    if (!text || !me || !storyId || !chapterId || sending) return;
+    setSending(true);
+    try {
+      const created = await addComment(
+        storyId,
+        {
+          uid: me.uid, userName: publicName || 'Sin nombre', userAvatar: publicAvatar, text,
+          chapterId, pageId: '', chapterNumber, pageNumber: 0, // sin página: es del capítulo
+        },
+        { authorUid: storyRef.current?.uid, title: storyRef.current?.title },
+      );
+      setComments(prev => [created, ...prev]);
+      setCommentText('');
+    } catch (e: any) {
+      AppAlert.alert('Error', e?.message ?? 'No se pudo publicar el comentario.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleDeleteComment = (c: StoryComment) => {
+    AppAlert.alert('Borrar comentario', '¿Seguro que quieres borrar este comentario?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Borrar', style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteComment(storyId, c.id);
+            setComments(prev => prev.filter(x => x.id !== c.id));
+          } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo borrar el comentario.'); }
+        },
+      },
+    ]);
+  };
+
   const goToChapter = (id: string) =>
     router.replace(`/reader/webnovel?storyId=${storyId}&chapterId=${id}${isPreview ? '&preview=1' : ''}`);
 
@@ -177,6 +260,7 @@ export default function WebnovelReaderScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.bar} />
+      <ReportModal target={reportTarget} onClose={() => setReportTarget(null)} />
 
       {/* ── Cabecera ── */}
       <SafeAreaView edges={['top']} style={[styles.header, { backgroundColor: theme.bar, borderBottomColor: theme.border }]}>
@@ -209,9 +293,11 @@ export default function WebnovelReaderScreen() {
       {loading ? (
         <View style={styles.centered}><ActivityIndicator color={theme.muted} /></View>
       ) : (
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           ref={scrollRef}
           contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
           onScroll={handleScroll}
           scrollEventThrottle={64}
           onLayout={e => { viewportRef.current = e.nativeEvent.layout.height; }}
@@ -253,7 +339,60 @@ export default function WebnovelReaderScreen() {
               </TouchableOpacity>
             )}
           </View>
+
+          {/* ── Comentarios del capítulo (no en el modo prueba del autor) ── */}
+          {!isPreview && (
+            <View style={[styles.commentsBlock, { borderTopColor: theme.border }]}>
+              <Text style={[styles.commentsTitle, { color: theme.text }]}>
+                Comentarios{comments.length > 0 ? ` · ${comments.length}` : ''}
+              </Text>
+              <View style={styles.commentInputRow}>
+                <TextInput
+                  style={[styles.commentInput, { color: theme.text, backgroundColor: theme.bar, borderColor: theme.border }]}
+                  value={commentText}
+                  onChangeText={setCommentText}
+                  placeholder="Escribe un comentario…"
+                  placeholderTextColor={theme.muted}
+                  maxLength={COMMENT_MAX_LENGTH}
+                  multiline
+                />
+                <TouchableOpacity
+                  style={[styles.commentSendBtn, (!commentText.trim() || sending) && { opacity: 0.4 }]}
+                  onPress={handleSendComment}
+                  disabled={!commentText.trim() || sending}
+                  activeOpacity={0.8}
+                >
+                  {sending
+                    ? <ActivityIndicator size="small" color="#000" />
+                    : <MaterialIcons name="send" size={16} color="#000" />}
+                </TouchableOpacity>
+              </View>
+              {comments.length === 0 ? (
+                <Text style={[styles.commentsEmpty, { color: theme.muted }]}>
+                  Nadie ha comentado este capítulo todavía.
+                </Text>
+              ) : comments.map(c => (
+                <CommentItem
+                  key={c.id}
+                  comment={c}
+                  role={staffRoles.get(c.uid)}
+                  showLocation={false}
+                  canDelete={c.uid === auth.currentUser?.uid || isAuthor || can('deleteStories')}
+                  onDelete={handleDeleteComment}
+                  onReport={c.uid !== auth.currentUser?.uid
+                    ? () => setReportTarget({
+                        type: 'comment', storyId, storyTitle: storyRef.current?.title ?? '',
+                        commentId: c.id, commentText: c.text, targetUid: c.uid,
+                      })
+                    : undefined}
+                  onPressUser={uid => router.push({ pathname: '/user/[uid]', params: { uid } })}
+                  colors={{ name: theme.text, text: theme.text, muted: theme.muted }}
+                />
+              ))}
+            </View>
+          )}
         </ScrollView>
+        </KeyboardAvoidingView>
       )}
     </View>
   );
@@ -285,4 +424,16 @@ const styles = StyleSheet.create({
   endText:  { fontSize: 13, textAlign: 'center', fontStyle: 'italic' },
   prevBtn:  { flexDirection: 'row', alignItems: 'center', gap: 2, alignSelf: 'flex-start', paddingVertical: 6 },
   prevText: { fontSize: 13 },
+  commentsBlock:   { marginTop: 28, paddingTop: 20, borderTopWidth: 1, gap: 6 },
+  commentsTitle:   { fontSize: 16, fontWeight: '700', marginBottom: 6 },
+  commentsEmpty:   { fontSize: 13, fontStyle: 'italic', marginTop: 8 },
+  commentInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 6 },
+  commentInput: {
+    flex: 1, maxHeight: 110, fontSize: 14, borderRadius: 8, borderWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 9,
+  },
+  commentSendBtn: {
+    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.formatColors.Webnovel,
+  },
 });

@@ -19,7 +19,9 @@ import {
 import { db } from '@/config/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
+import { AppHeader } from '@/components/app-header';
 import { cleanupDeletedStories } from '@/services/notifications';
+import { setSaved } from '@/services/social';
 
 interface LibraryEntry {
   storyId: string;
@@ -194,6 +196,7 @@ export default function BibliotecaScreen() {
       await updateDoc(doc(db, 'users', user.uid, 'library', storyId), {
         isInterested: false,
       });
+      setSaved(storyId, user.uid, false); // estadística para el autor
       setEntries(prev =>
         prev.map(e => e.storyId === storyId ? { ...e, isInterested: false } : e)
       );
@@ -247,9 +250,10 @@ export default function BibliotecaScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      <SafeAreaView edges={['top']} style={styles.headerWrap}>
+      <AppHeader />
+      <View style={styles.headerWrap}>
         <Text style={styles.headerTitle}>Biblioteca</Text>
-      </SafeAreaView>
+      </View>
 
       {loading ? (
         <View style={styles.centered}>
@@ -330,7 +334,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
     paddingHorizontal: 20,
     paddingBottom: 14,
-    paddingTop: 4,
+    paddingTop: 14,
   },
   headerTitle: {
     fontSize: 22,

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -18,6 +18,7 @@ import { db } from '@/config/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { RoleBadge } from '@/components/role-badge';
+import { getFollowerCount, getFollowingCount, getLikedCount } from '@/services/social';
 
 interface UserProfile {
   displayName?: string;
@@ -84,6 +85,17 @@ export default function ProfileScreen() {
   const [profile,  setProfile]  = useState<UserProfile>({});
   const [stories,  setStories]  = useState<StoryCard[]>([]);
   const [loading,  setLoading]  = useState(true);
+  // Seguidores, autores que sigo e historias que me gustan
+  const [social, setSocial] = useState({ followers: 0, following: 0, liked: 0 });
+
+  useFocusEffect(useCallback(() => {
+    if (!user) return;
+    let cancelled = false;
+    Promise.all([getFollowerCount(user.uid), getFollowingCount(user.uid), getLikedCount(user.uid)])
+      .then(([followers, following, liked]) => { if (!cancelled) setSocial({ followers, following, liked }); })
+      .catch(e => console.error('Error cargando contadores del perfil:', e));
+    return () => { cancelled = true; };
+  }, [user]));
 
   useFocusEffect(
     useCallback(() => {
@@ -219,10 +231,29 @@ export default function ProfileScreen() {
           <View style={styles.statRow}>
             <View style={styles.stat}>
               <Text style={styles.statNum}>{stories.length}</Text>
-              <Text style={styles.statLabel}>
-                {stories.length === 1 ? 'libro publicado' : 'libros publicados'}
-              </Text>
+              <Text style={styles.statLabel}>{stories.length === 1 ? 'libro' : 'libros'}</Text>
             </View>
+            <View style={styles.stat}>
+              <Text style={styles.statNum}>{social.followers}</Text>
+              <Text style={styles.statLabel}>{social.followers === 1 ? 'seguidor' : 'seguidores'}</Text>
+            </View>
+            {/* Estas dos abren la lista correspondiente */}
+            <TouchableOpacity
+              style={styles.stat}
+              activeOpacity={0.7}
+              onPress={() => router.push('/profile/lists?tab=following' as Href)}
+            >
+              <Text style={[styles.statNum, styles.statLink]}>{social.following}</Text>
+              <Text style={styles.statLabel}>siguiendo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.stat}
+              activeOpacity={0.7}
+              onPress={() => router.push('/profile/lists?tab=liked' as Href)}
+            >
+              <Text style={[styles.statNum, styles.statLink]}>{social.liked}</Text>
+              <Text style={styles.statLabel}>me gusta</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -334,7 +365,8 @@ const styles = StyleSheet.create({
   bioEmpty:    { fontSize: 13, color: Colors.textMuted, fontStyle: 'italic', marginTop: 10, textDecorationLine: 'underline' },
 
   // Stats
-  statRow: { flexDirection: 'row', marginTop: 18, gap: 32 },
+  statRow: { flexDirection: 'row', marginTop: 18, gap: 24 },
+  statLink: { color: Colors.emerald },
   stat:    { alignItems: 'center', gap: 2 },
   statNum: { fontSize: 20, fontWeight: '700', color: Colors.textPrimary },
   statLabel:{ fontSize: 11, color: Colors.textMuted, letterSpacing: 0.5, textTransform: 'uppercase' },

@@ -88,6 +88,18 @@ export async function migrateChapterRefsToIds(storyId: string, chapterId: string
   if (changed > 0) await batch.commit();
 }
 
+// ¿Usa esta imagen de fondo alguna otra página de la historia? Los fondos se pueden
+// reutilizar entre páginas ("Ya subidos" o al duplicar), así que antes de borrar el
+// archivo de Storage hay que comprobar que nadie más lo necesita.
+export async function isBackgroundUsedElsewhere(storyId: string, url: string, exceptPageId: string) {
+  const chapters = await getDocs(collection(db, 'stories', storyId, 'chapters'));
+  for (const ch of chapters.docs) {
+    const pages = await getDocs(collection(db, 'stories', storyId, 'chapters', ch.id, 'pages'));
+    if (pages.docs.some(p => p.id !== exceptPageId && p.data().backgroundUrl === url)) return true;
+  }
+  return false;
+}
+
 // Duplica una página justo detrás de la original (con todo su contenido).
 export async function duplicatePage(storyId: string, chapterId: string, pageId: string) {
   await migrateChapterRefsToIds(storyId, chapterId);
@@ -132,9 +144,11 @@ export async function deleteStoryWithCascade(storyId: string, deletedBy: Deleted
   for (const ch of chaptersSnap.docs) {
     await deleteChapterWithCascade(storyId, ch.id);
   }
-  const commentsSnap = await getDocs(collection(db, 'stories', storyId, 'comments'));
-  for (const c of commentsSnap.docs) {
-    await deleteDoc(c.ref);
+  for (const sub of ['comments', 'likes', 'readers', 'saves']) {
+    const snap = await getDocs(collection(db, 'stories', storyId, sub));
+    for (const d of snap.docs) {
+      await deleteDoc(d.ref);
+    }
   }
   await deleteDoc(doc(db, 'stories', storyId));
 }

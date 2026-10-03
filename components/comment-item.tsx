@@ -9,13 +9,15 @@ import { RoleBadge } from '@/components/role-badge';
 
 // Un comentario: avatar a la izquierda, nombre arriba a la izquierda,
 // "Cap. 1 · Pág. 3" arriba a la derecha y el texto debajo.
-export function CommentItem({ comment, role, showLocation = true, canDelete, onDelete, onPressUser }: {
+export function CommentItem({ comment, role, showLocation = true, canDelete, onDelete, onReport, onPressUser, colors }: {
   comment: StoryComment;
   role?: Role | null;       // rol actual de quien comenta (insignia DUEÑO / ADMIN)
   showLocation?: boolean;
   canDelete?: boolean;
   onDelete?: (comment: StoryComment) => void;
+  onReport?: (comment: StoryComment) => void;   // si se pasa, muestra el botón de denunciar
   onPressUser?: (uid: string) => void;
+  colors?: { name: string; text: string; muted: string }; // para fondos que no son el oscuro
 }) {
   const initial = comment.userName.trim().charAt(0).toUpperCase() || '?';
   return (
@@ -37,21 +39,29 @@ export function CommentItem({ comment, role, showLocation = true, canDelete, onD
             disabled={!onPressUser}
             activeOpacity={0.7}
           >
-            <Text style={styles.name} numberOfLines={1}>{comment.userName}</Text>
+            <Text style={[styles.name, colors && { color: colors.name }]} numberOfLines={1}>{comment.userName}</Text>
             <RoleBadge role={role} size="sm" />
           </TouchableOpacity>
           <View style={styles.headerRight}>
             {showLocation && (
-              <Text style={styles.location}>Cap. {comment.chapterNumber} · Pág. {comment.pageNumber}</Text>
+              // Webnovel no tiene páginas: los comentarios son del capítulo
+              <Text style={styles.location}>
+                Cap. {comment.chapterNumber}{comment.pageNumber > 0 ? ` · Pág. ${comment.pageNumber}` : ''}
+              </Text>
+            )}
+            {onReport && (
+              <TouchableOpacity onPress={() => onReport(comment)} hitSlop={8}>
+                <MaterialIcons name="outlined-flag" size={15} color={colors?.muted ?? Colors.textMuted} />
+              </TouchableOpacity>
             )}
             {canDelete && (
               <TouchableOpacity onPress={() => onDelete?.(comment)} hitSlop={8}>
-                <MaterialIcons name="delete-outline" size={15} color={Colors.textMuted} />
+                <MaterialIcons name="delete-outline" size={15} color={colors?.muted ?? Colors.textMuted} />
               </TouchableOpacity>
             )}
           </View>
         </View>
-        <Text style={styles.text}>{comment.text}</Text>
+        <Text style={[styles.text, colors && { color: colors.text }]}>{comment.text}</Text>
       </View>
     </View>
   );

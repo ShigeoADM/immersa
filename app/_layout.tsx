@@ -76,6 +76,7 @@ function RootNavigator() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="auth/login" options={{ headerShown: false }} />
       <Stack.Screen name="auth/register" options={{ headerShown: false }} />
+      <Stack.Screen name="auth/legal" options={{ headerShown: false }} />
       <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       <Stack.Screen name="create/moderno-details" options={{ headerShown: false }} />
       <Stack.Screen name="create/editor-moderno" options={{ headerShown: false }} />
@@ -86,8 +87,10 @@ function RootNavigator() {
       <Stack.Screen name="reader/page-moderno" options={{ headerShown: false }} />
       <Stack.Screen name="story/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="profile/settings" options={{ headerShown: false }} />
+      <Stack.Screen name="profile/lists" options={{ headerShown: false }} />
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="admin" options={{ headerShown: false }} />
+      <Stack.Screen name="search" options={{ headerShown: false }} />
       <Stack.Screen name="user/[uid]" options={{ headerShown: false }} />
     </Stack>
     {/* Pantalla de carga encima del Stack mientras Firebase resuelve la sesión */}

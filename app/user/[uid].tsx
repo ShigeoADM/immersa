@@ -11,6 +11,9 @@ import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { RoleBadge } from '@/components/role-badge';
 import { type PublicProfile, getPublicProfile } from '@/services/profiles';
+import { getFollowerCount, isFollowing, setFollow } from '@/services/social';
+import { useAuth } from '@/context/AuthContext';
+import { AppAlert } from '@/components/app-dialog';
 
 interface StoryCard {
   id: string;
@@ -34,6 +37,37 @@ export default function PublicProfileScreen() {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [stories, setStories] = useState<StoryCard[]>([]);
   const [loading, setLoading] = useState(true);
+  // Seguir al autor
+  const { user, publicName } = useAuth();
+  const isMe = !!user && user.uid === uid;
+  const [following, setFollowing] = useState(false);
+  const [followers, setFollowers] = useState(0);
+  const [followBusy, setFollowBusy] = useState(false);
+
+  useEffect(() => {
+    if (!uid) return;
+    getFollowerCount(uid).then(setFollowers).catch(e => console.error('Error cargando seguidores:', e));
+    if (user && user.uid !== uid) {
+      isFollowing(user.uid, uid).then(setFollowing).catch(e => console.error('Error cargando seguimiento:', e));
+    }
+  }, [uid, user]);
+
+  const toggleFollow = async () => {
+    if (!user || !uid || isMe || followBusy) return;
+    const next = !following;
+    setFollowBusy(true);
+    setFollowing(next);
+    setFollowers(n => Math.max(0, n + (next ? 1 : -1)));
+    try {
+      await setFollow({ uid: user.uid, name: publicName || 'Alguien' }, uid, next);
+    } catch (e: any) {
+      setFollowing(!next);
+      setFollowers(n => Math.max(0, n + (next ? -1 : 1)));
+      AppAlert.alert('Error', e?.message ?? 'No se pudo actualizar el seguimiento.');
+    } finally {
+      setFollowBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!uid) return;
@@ -88,10 +122,33 @@ export default function PublicProfileScreen() {
               <RoleBadge role={profile?.role ?? null} />
               {profile?.email ? <Text style={styles.email}>{profile.email}</Text> : null}
               {profile?.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
-              <View style={styles.stat}>
-                <Text style={styles.statNum}>{stories.length}</Text>
-                <Text style={styles.statLabel}>{stories.length === 1 ? 'Historia' : 'Historias'}</Text>
+              <View style={styles.statRow}>
+                <View style={styles.stat}>
+                  <Text style={styles.statNum}>{stories.length}</Text>
+                  <Text style={styles.statLabel}>{stories.length === 1 ? 'Historia' : 'Historias'}</Text>
+                </View>
+                <View style={styles.stat}>
+                  <Text style={styles.statNum}>{followers}</Text>
+                  <Text style={styles.statLabel}>{followers === 1 ? 'Seguidor' : 'Seguidores'}</Text>
+                </View>
               </View>
+              {user && !isMe && (
+                <TouchableOpacity
+                  style={[styles.followBtn, following && styles.followBtnOn]}
+                  onPress={toggleFollow}
+                  disabled={followBusy}
+                  activeOpacity={0.85}
+                >
+                  <MaterialIcons
+                    name={following ? 'check' : 'person-add'}
+                    size={16}
+                    color={following ? Colors.emerald : '#000'}
+                  />
+                  <Text style={[styles.followBtnText, following && { color: Colors.emerald }]}>
+                    {following ? 'Siguiendo' : 'Seguir'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
         </View>
@@ -151,7 +208,15 @@ const styles = StyleSheet.create({
     fontSize: 14, color: Colors.textSecondary, fontStyle: 'italic', textAlign: 'center',
     lineHeight: 21, marginTop: 10, paddingHorizontal: 32,
   },
-  stat:      { alignItems: 'center', gap: 2, marginTop: 18 },
+  statRow:   { flexDirection: 'row', gap: 36, marginTop: 18 },
+  stat:      { alignItems: 'center', gap: 2 },
+  followBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 16,
+    paddingHorizontal: 22, paddingVertical: 9, borderRadius: 20,
+    backgroundColor: Colors.emerald, borderWidth: 1, borderColor: Colors.emerald,
+  },
+  followBtnOn:   { backgroundColor: 'transparent' },
+  followBtnText: { fontSize: 14, fontWeight: '700', color: '#000' },
   statNum:   { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
   statLabel: { fontSize: 11, color: Colors.textMuted },
   section:      { padding: 20 },
