@@ -1,8 +1,14 @@
 import React, { useCallback, useState } from 'react';
 import {
-  View, Text, Image, StyleSheet, TouchableOpacity,
-  ScrollView, StatusBar, ActivityIndicator,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  StatusBar,
+  ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -11,6 +17,7 @@ import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firesto
 import { db } from '@/config/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
+import { RoleBadge } from '@/components/role-badge';
 
 interface UserProfile {
   displayName?: string;
@@ -44,7 +51,7 @@ function StoryCard({ story, onPress }: { story: StoryCard; onPress: () => void }
       onPress={onPress}
     >
       {story.coverUrl
-        ? <Image source={{ uri: story.coverUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        ? <Image source={{ uri: story.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
         : <View style={[styles.storyCardPlaceholder, { backgroundColor: Colors.card }]}>
             <MaterialIcons name="menu-book" size={28} color={fmtColor + '60'} />
           </View>
@@ -71,7 +78,7 @@ function StoryCard({ story, onPress }: { story: StoryCard; onPress: () => void }
 
 // ── Pantalla principal ────────────────────────────────────────────────────────
 export default function ProfileScreen() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isStaff, staff } = useAuth();
   const router = useRouter();
 
   const [profile,  setProfile]  = useState<UserProfile>({});
@@ -159,6 +166,15 @@ export default function ProfileScreen() {
           <SafeAreaView edges={['top']}>
             {/* Engranaje de ajustes */}
             <View style={styles.heroTopBar}>
+              {isStaff && (
+                <TouchableOpacity
+                  style={styles.settingsBtn}
+                  activeOpacity={0.7}
+                  onPress={() => router.push('/admin')}
+                >
+                  <MaterialIcons name="admin-panel-settings" size={22} color={Colors.emerald} />
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.settingsBtn}
                 activeOpacity={0.7}
@@ -181,6 +197,7 @@ export default function ProfileScreen() {
 
           {/* Nombre y email */}
           <Text style={styles.displayName}>{displayName}</Text>
+          <RoleBadge role={staff.role} />
           {profile.emailPublic && email
             ? <Text style={styles.emailText}>{email}</Text>
             : null
@@ -283,6 +300,7 @@ const styles = StyleSheet.create({
   heroTopBar: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
   },

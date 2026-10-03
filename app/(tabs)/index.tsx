@@ -3,19 +3,20 @@ import { useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   TouchableOpacity,
   StatusBar,
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
+import { useNotifications } from '@/context/NotificationsContext';
 
 interface StoryCard {
   id: string;
@@ -66,7 +67,7 @@ function VerticalCard({ story, onPress }: { story: StoryCard; onPress: () => voi
     <TouchableOpacity style={styles.vCard} activeOpacity={0.8} onPress={onPress}>
       <View style={styles.vCardCover}>
         {story.coverUrl
-          ? <Image source={{ uri: story.coverUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          ? <Image source={{ uri: story.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
           : <View style={styles.cardPlaceholder}>
               <MaterialIcons name="menu-book" size={28} color={fmtColor + '60'} />
             </View>
@@ -96,7 +97,7 @@ function HorizontalCard({ story, onPress, single }: {
   return (
     <TouchableOpacity style={cardStyle} activeOpacity={0.8} onPress={onPress}>
       {story.coverUrl
-        ? <Image source={{ uri: story.coverUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        ? <Image source={{ uri: story.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
         : <View style={[styles.cardPlaceholder, { backgroundColor: Colors.card }]}>
             <MaterialIcons name="menu-book" size={single ? 24 : 16} color={fmtColor + '60'} />
           </View>
@@ -225,6 +226,7 @@ export default function DiscoverScreen() {
   );
 
   const handleStoryPress = (s: StoryCard) => router.push(`/story/${s.id}`);
+  const { unreadCount } = useNotifications();
 
   return (
     <View style={styles.container}>
@@ -232,10 +234,24 @@ export default function DiscoverScreen() {
 
       <SafeAreaView edges={['top']} style={styles.headerWrap}>
         <View style={styles.headerBar}>
-          <Image source={require('@/assets/images/logo.png')} style={styles.logo} resizeMode="contain" />
-          <TouchableOpacity style={styles.searchBtn} activeOpacity={0.8}>
-            <MaterialIcons name="search" size={18} color={Colors.emerald} />
-          </TouchableOpacity>
+          <Image source={require('@/assets/images/logo.png')} style={styles.logo} contentFit="contain" />
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.searchBtn}
+              activeOpacity={0.8}
+              onPress={() => router.push('/notifications')}
+            >
+              <MaterialIcons name="notifications" size={18} color={Colors.emerald} />
+              {unreadCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.searchBtn} activeOpacity={0.8}>
+              <MaterialIcons name="search" size={18} color={Colors.emerald} />
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
 
@@ -286,6 +302,14 @@ const styles = StyleSheet.create({
   },
   logo:      { height: 40, width: 40, borderRadius: 6 },
   searchBtn: { width: 34, height: 34, borderRadius: 6, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
+  headerActions: { flexDirection: 'row', gap: 8 },
+  badge: {
+    position: 'absolute', top: -5, right: -5,
+    minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3,
+    backgroundColor: '#FF4444', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: Colors.emerald,
+  },
+  badgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
   scroll:    { flex: 1 },
 
   section:       { marginTop: 28 },

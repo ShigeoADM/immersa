@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
-  Image,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -10,8 +9,8 @@ import {
   Switch,
   StatusBar,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -20,6 +19,8 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, storage } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
+import { AppAlert, useDialogAccent } from '@/components/app-dialog';
+import { ADULT_AUDIENCES, ADULT_CONTENT, AUDIENCES } from '@/constants/story-meta';
 
 const GENRES = [
   'Fantasía', 'Romance', 'Acción', 'Aventura', 'Misterio',
@@ -28,13 +29,6 @@ const GENRES = [
 ];
 
 const LANGUAGES = ['Español', 'English', 'Português', 'Français', 'Deutsch', 'Otro'];
-
-const AUDIENCES = [
-  { key: 'u15',   label: 'Menores de 15 años' },
-  { key: '15-18', label: 'Entre 15 y 18 años' },
-  { key: '18-25', label: 'Entre 18 y 25 años' },
-  { key: 'o25',   label: 'Más de 25 años' },
-];
 
 const STATUSES = [
   { key: 'ongoing',   label: 'En curso' },
@@ -53,16 +47,16 @@ const UI_DETAIL_COLORS: { hex: string; label: string }[] = [
   { hex: '#FFD700', label: 'Amarillo' },
 ];
 
-const ADULT_CONTENT = [
-  { key: 'sexual',    label: 'Contenido sexual' },
-  { key: 'gore',      label: 'Gore' },
-  { key: 'violence',  label: 'Violencia extrema' },
-];
-
 export default function ModernoDetailsScreen() {
   const router = useRouter();
-  const { storyId } = useLocalSearchParams<{ storyId?: string }>();
+  const { storyId, format: formatParam } = useLocalSearchParams<{ storyId?: string; format?: string }>();
   const isEditing = !!storyId;
+  // Formato de la historia: al crear viene de la pestaña Escribir; al editar, del documento
+  const [format, setFormat] = useState<'Moderno' | 'Webnovel'>(formatParam === 'Webnovel' ? 'Webnovel' : 'Moderno');
+  // Color de acento del formato (verde Moderno, morado Webnovel) para toda la pantalla
+  const accent = Colors.formatColors[format];
+  const styles = useMemo(() => makeStyles(accent), [accent]);
+  useDialogAccent(accent);
 
   const [loadingInitial, setLoadingInitial] = useState(isEditing);
   const [coverOrientation, setCoverOrientation] = useState<'vertical' | 'horizontal'>('vertical');
@@ -99,11 +93,14 @@ export default function ModernoDetailsScreen() {
           setSynopsis(d.synopsis ?? '');
           setLanguage(d.language ?? 'Español');
           setGenres(d.genres ?? []);
-          setAudience(d.audience ?? '');
-          setIsAdult(d.isAdult ?? false);
+          // Historias guardadas antes de esta regla: +18 con público menor → 18-25
+          const adult = d.isAdult ?? false;
+          setIsAdult(adult);
+          setAudience(adult && !ADULT_AUDIENCES.includes(d.audience) ? '18-25' : (d.audience ?? ''));
           setAdultContent(d.adultContent ?? []);
           setStatus(d.status ?? 'ongoing');
           setRecommendedUiColor(d.recommendedUiColor ?? null);
+          setFormat(d.format === 'Webnovel' ? 'Webnovel' : 'Moderno');
           if (d.coverUrl) { setCoverUri(d.coverUrl); setCoverUrl(d.coverUrl); }
         }
       } catch (e) {
@@ -114,6 +111,12 @@ export default function ModernoDetailsScreen() {
     })();
   }, []);
 
+  // Activar +18 obliga a un público adulto: si no lo era, pasa a 18-25
+  const handleAdultToggle = (value: boolean) => {
+    setIsAdult(value);
+    if (value && !ADULT_AUDIENCES.includes(audience)) setAudience('18-25');
+  };
+
   const toggleGenre = (g: string) =>
     setGenres(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
 
@@ -123,7 +126,7 @@ export default function ModernoDetailsScreen() {
   const handlePickCover = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permiso denegado', 'Necesitamos acceso a tu galería para añadir la portada.');
+      AppAlert.alert('Permiso denegado', 'Necesitamos acceso a tu galería para añadir la portada.');
       return;
     }
     const aspect: [number, number] = coverOrientation === 'vertical' ? [2, 3] : [16, 9];
@@ -156,7 +159,7 @@ export default function ModernoDetailsScreen() {
         setCoverUri(url);
       } catch (e: any) {
         console.error('Error subiendo portada:', e);
-        Alert.alert('Error al subir portada', e?.message ?? 'Inténtalo de nuevo.');
+        AppAlert.alert('Error al subir portada', e?.message ?? 'Inténtalo de nuevo.');
         setCoverUri(null);
         setCoverUrl('');
       } finally {
@@ -193,7 +196,7 @@ export default function ModernoDetailsScreen() {
         // ── Crear historia nueva ──
         const docRef = await addDoc(collection(db, 'stories'), {
           uid: auth.currentUser?.uid,
-          format: 'Moderno',
+          format,
           title: title.trim(),
           subtitle: subtitle.trim(),
           synopsis: synopsis.trim(),
@@ -211,11 +214,11 @@ export default function ModernoDetailsScreen() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
-        router.replace(`/create/editor-moderno?storyId=${docRef.id}&title=${encodeURIComponent(title.trim())}`);
+        router.replace(`/create/editor-moderno?storyId=${docRef.id}&title=${encodeURIComponent(title.trim())}&format=${format}`);
       }
     } catch (e) {
       console.error('Error guardando historia:', e);
-      Alert.alert('Error', 'No se pudieron guardar los cambios. Inténtalo de nuevo.');
+      AppAlert.alert('Error', 'No se pudieron guardar los cambios. Inténtalo de nuevo.');
     } finally {
       setSaving(false);
     }
@@ -225,7 +228,7 @@ export default function ModernoDetailsScreen() {
     return (
       <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
         <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
-        <ActivityIndicator color={Colors.emerald} />
+        <ActivityIndicator color={accent} />
       </View>
     );
   }
@@ -299,7 +302,7 @@ export default function ModernoDetailsScreen() {
                 <Image
                   source={{ uri: coverUri }}
                   style={[StyleSheet.absoluteFill, { borderRadius: 4 }]}
-                  resizeMode="cover"
+                  contentFit="cover" transition={150}
                 />
                 {/* Botón de cambio encima de la imagen */}
                 {!uploadingCover && (
@@ -317,7 +320,7 @@ export default function ModernoDetailsScreen() {
             )}
             {uploadingCover && (
               <View style={[StyleSheet.absoluteFill, styles.coverUploadingOverlay]}>
-                <ActivityIndicator color={Colors.emerald} />
+                <ActivityIndicator color={accent} />
                 <Text style={styles.coverUploadingText}>Subiendo…</Text>
               </View>
             )}
@@ -392,7 +395,7 @@ export default function ModernoDetailsScreen() {
                   {l}
                 </Text>
                 {language === l && (
-                  <MaterialIcons name="check" size={16} color={Colors.emerald} />
+                  <MaterialIcons name="check" size={16} color={accent} />
                 )}
               </TouchableOpacity>
             ))}
@@ -440,18 +443,28 @@ export default function ModernoDetailsScreen() {
         )}
 
         <Text style={styles.fieldLabel}>Público dirigido <Text style={styles.required}>*</Text></Text>
-        {AUDIENCES.map(a => (
-          <TouchableOpacity
-            key={a.key}
-            style={styles.radioRow}
-            onPress={() => setAudience(a.key)}
-          >
-            <View style={[styles.radio, audience === a.key && styles.radioActive]}>
-              {audience === a.key && <View style={styles.radioDot} />}
-            </View>
-            <Text style={styles.radioLabel}>{a.label}</Text>
-          </TouchableOpacity>
-        ))}
+        {AUDIENCES.map(a => {
+          const blocked = isAdult && !ADULT_AUDIENCES.includes(a.key);
+          return (
+            <TouchableOpacity
+              key={a.key}
+              style={[styles.radioRow, blocked && { opacity: 0.35 }]}
+              onPress={() => setAudience(a.key)}
+              disabled={blocked}
+            >
+              <View style={[styles.radio, audience === a.key && styles.radioActive]}>
+                {audience === a.key && <View style={styles.radioDot} />}
+              </View>
+              <Text style={styles.radioLabel}>{a.label}</Text>
+              {blocked && <MaterialIcons name="lock" size={14} color={Colors.textMuted} />}
+            </TouchableOpacity>
+          );
+        })}
+        {isAdult && (
+          <Text style={styles.toggleDesc}>
+            Con contenido +18 solo puede dirigirse a mayores de 18 años.
+          </Text>
+        )}
 
         {/* ─── CONTENIDO +18 ─── */}
         <Text style={styles.sectionLabel}>Contenido</Text>
@@ -465,9 +478,9 @@ export default function ModernoDetailsScreen() {
           </View>
           <Switch
             value={isAdult}
-            onValueChange={setIsAdult}
-            trackColor={{ false: Colors.border, true: Colors.emerald + '66' }}
-            thumbColor={isAdult ? Colors.emerald : Colors.textMuted}
+            onValueChange={handleAdultToggle}
+            trackColor={{ false: Colors.border, true: accent + '66' }}
+            thumbColor={isAdult ? accent : Colors.textMuted}
           />
         </View>
 
@@ -490,7 +503,9 @@ export default function ModernoDetailsScreen() {
           </View>
         )}
 
-        {/* ─── COLOR DE INTERFAZ RECOMENDADO ─── */}
+        {/* ─── COLOR DE INTERFAZ RECOMENDADO (solo formato Moderno) ─── */}
+        {format === 'Moderno' && (
+        <>
         <Text style={styles.sectionLabel}>Color de interfaz</Text>
         <Text style={styles.fieldLabel}>
           Recomienda un color de acento para el lector{' '}
@@ -503,8 +518,8 @@ export default function ModernoDetailsScreen() {
             onPress={() => setRecommendedUiColor(null)}
             activeOpacity={0.75}
           >
-            <MaterialIcons name="block" size={14} color={recommendedUiColor === null ? Colors.emerald : Colors.textMuted} />
-            <Text style={[styles.uiColorNoneText, recommendedUiColor === null && { color: Colors.emerald }]}>
+            <MaterialIcons name="block" size={14} color={recommendedUiColor === null ? accent : Colors.textMuted} />
+            <Text style={[styles.uiColorNoneText, recommendedUiColor === null && { color: accent }]}>
               Ninguno
             </Text>
           </TouchableOpacity>
@@ -526,6 +541,8 @@ export default function ModernoDetailsScreen() {
           <Text style={[styles.uiColorHint, { color: recommendedUiColor }]}>
             ● Los lectores verán la interfaz en este color por defecto
           </Text>
+        )}
+        </>
         )}
 
         {/* ─── ESTADO ─── */}
@@ -549,7 +566,7 @@ export default function ModernoDetailsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (accent: string) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.bg,
@@ -579,7 +596,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 4,
-    backgroundColor: Colors.emerald,
+    backgroundColor: accent,
   },
   nextBtnDisabled: {
     backgroundColor: Colors.border,
@@ -615,7 +632,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   required: {
-    color: Colors.emerald,
+    color: accent,
   },
   optional: {
     color: Colors.textMuted,
@@ -662,8 +679,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
   },
   orientationBtnActive: {
-    borderColor: Colors.emerald,
-    backgroundColor: Colors.emerald + '18',
+    borderColor: accent,
+    backgroundColor: accent + '18',
   },
   orientationText: {
     fontSize: 12,
@@ -671,7 +688,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   orientationTextActive: {
-    color: Colors.emerald,
+    color: accent,
   },
   coverPlaceholder: {
     borderWidth: 1.5,
@@ -721,7 +738,7 @@ const styles = StyleSheet.create({
   },
   coverUploadingText: {
     fontSize: 12,
-    color: Colors.emerald,
+    color: accent,
     fontWeight: '600',
   },
   chipsScroll: {
@@ -747,15 +764,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
   },
   chipActive: {
-    borderColor: Colors.emerald,
-    backgroundColor: Colors.emerald + '18',
+    borderColor: accent,
+    backgroundColor: accent + '18',
   },
   chipText: {
     fontSize: 13,
     color: Colors.textSecondary,
   },
   chipTextActive: {
-    color: Colors.emerald,
+    color: accent,
     fontWeight: '600',
   },
   radioRow: {
@@ -776,13 +793,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   radioActive: {
-    borderColor: Colors.emerald,
+    borderColor: accent,
   },
   radioDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: Colors.emerald,
+    backgroundColor: accent,
   },
   radioLabel: {
     fontSize: 14,
@@ -843,8 +860,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxActive: {
-    backgroundColor: Colors.emerald,
-    borderColor: Colors.emerald,
+    backgroundColor: accent,
+    borderColor: accent,
   },
   checkLabel: {
     fontSize: 14,
@@ -897,7 +914,7 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   dropdownRowTextActive: {
-    color: Colors.emerald,
+    color: accent,
     fontWeight: '600',
   },
 
@@ -921,8 +938,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
   },
   uiColorNoneActive: {
-    borderColor: Colors.emerald,
-    backgroundColor: Colors.emerald + '18',
+    borderColor: accent,
+    backgroundColor: accent + '18',
   },
   uiColorNoneText: {
     fontSize: 12,

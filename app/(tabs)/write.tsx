@@ -2,22 +2,23 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   TouchableOpacity,
   Animated,
   StatusBar,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { collection, query, where, onSnapshot, deleteDoc, doc, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
+import { AppAlert } from '@/components/app-dialog';
+import { deleteStoryWithCascade } from '@/services/stories';
 
 const FORMATS = [
   {
@@ -47,19 +48,6 @@ interface Story {
   format: string;
   status: string;
   published?: boolean;
-}
-
-// Borra historia + todos sus capítulos + todas sus páginas
-async function deleteStoryWithCascade(storyId: string) {
-  const chaptersSnap = await getDocs(collection(db, 'stories', storyId, 'chapters'));
-  for (const ch of chaptersSnap.docs) {
-    const pagesSnap = await getDocs(collection(db, 'stories', storyId, 'chapters', ch.id, 'pages'));
-    for (const pg of pagesSnap.docs) {
-      await deleteDoc(doc(db, 'stories', storyId, 'chapters', ch.id, 'pages', pg.id));
-    }
-    await deleteDoc(doc(db, 'stories', storyId, 'chapters', ch.id));
-  }
-  await deleteDoc(doc(db, 'stories', storyId));
 }
 
 export default function WriteScreen() {
@@ -114,7 +102,7 @@ export default function WriteScreen() {
   }, [loadingStories, activeTab, stories.length]);
 
   const handleDeleteStory = (story: Story) => {
-    Alert.alert(
+    AppAlert.alert(
       'Borrar libro',
       `¿Seguro que quieres borrar "${story.title}"? Se borrarán también todos sus capítulos y páginas.`,
       [
@@ -140,7 +128,7 @@ export default function WriteScreen() {
         <Image
           source={require('@/assets/images/logo.png')}
           style={styles.logo}
-          resizeMode="contain"
+          contentFit="contain"
         />
       </View>
     </SafeAreaView>
@@ -171,7 +159,7 @@ export default function WriteScreen() {
               <TouchableOpacity
                 style={styles.formatCard}
                 activeOpacity={0.75}
-                onPress={() => f.key === 'Moderno' ? router.push('/create/moderno-details') : null}
+                onPress={() => router.push(`/create/moderno-details?format=${f.key}`)}
               >
                 <View style={[styles.cardTopBevel, { backgroundColor: f.color }]} />
                 <View style={styles.formatInfo}>
@@ -212,7 +200,7 @@ export default function WriteScreen() {
                 <TouchableOpacity
                   style={styles.storyRowInner}
                   activeOpacity={0.8}
-                  onPress={() => router.push(`/create/editor-moderno?storyId=${story.id}&title=${encodeURIComponent(story.title)}`)}
+                  onPress={() => router.push(`/create/editor-moderno?storyId=${story.id}&title=${encodeURIComponent(story.title)}&format=${story.format}`)}
                 >
                   <View style={[styles.storyAccent, { backgroundColor: fmtColor }]} />
                   <View style={styles.storyInfo}>
@@ -246,7 +234,7 @@ export default function WriteScreen() {
                 <TouchableOpacity
                   style={styles.formatCard}
                   activeOpacity={0.75}
-                  onPress={() => f.key === 'Moderno' ? router.push('/create/moderno-details') : null}
+                  onPress={() => router.push(`/create/moderno-details?format=${f.key}`)}
                 >
                   <View style={[styles.cardTopBevel, { backgroundColor: f.color }]} />
                   <View style={styles.formatInfo}>

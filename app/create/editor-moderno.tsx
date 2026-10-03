@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   TouchableOpacity,
   StatusBar,
@@ -10,9 +9,9 @@ import {
   TextInput,
   Modal,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 
 // Alert.alert funciona en móvil pero las callbacks no se ejecutan bien en web.
 // Este helper usa window.confirm en web y Alert nativo en móvil.
@@ -25,48 +24,36 @@ function confirmAction(
   if (Platform.OS === 'web') {
     if ((window as any).confirm(`${title}\n\n${message}`)) onConfirm();
   } else {
-    Alert.alert(title, message, [
+    AppAlert.alert(title, message, [
       { text: 'Cancelar', style: 'cancel' },
       { text: confirmText, style: 'destructive', onPress: onConfirm },
     ]);
   }
 }
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { collection, addDoc, doc, updateDoc, deleteDoc, getDocs, getDoc, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, getDocs, getDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
+import { AppAlert, useDialogAccent } from '@/components/app-dialog';
+import {
+  deleteChapterWithCascade, deleteStoryWithCascade, formatReadingStats, saveOrder, sortChapters,
+} from '@/services/stories';
 
 interface Chapter {
   id: string;
   title: string;
   createdAt: string;
+  order?: number;
+  wordCount?: number;
   published?: boolean;
   publishedAt?: string;
 }
 
-// Borra capítulo + todas sus páginas
-async function deleteChapterWithCascade(storyId: string, chapterId: string) {
-  const pagesSnap = await getDocs(collection(db, 'stories', storyId, 'chapters', chapterId, 'pages'));
-  for (const pg of pagesSnap.docs) {
-    await deleteDoc(doc(db, 'stories', storyId, 'chapters', chapterId, 'pages', pg.id));
-  }
-  await deleteDoc(doc(db, 'stories', storyId, 'chapters', chapterId));
-}
-
-// Borra historia + todos sus capítulos + todas sus páginas
-async function deleteStoryWithCascade(storyId: string) {
-  const chaptersSnap = await getDocs(collection(db, 'stories', storyId, 'chapters'));
-  for (const ch of chaptersSnap.docs) {
-    await deleteChapterWithCascade(storyId, ch.id);
-  }
-  await deleteDoc(doc(db, 'stories', storyId));
-}
-
 export default function EditorModernoScreen() {
   const router = useRouter();
-  const { storyId, title } = useLocalSearchParams<{ storyId: string; title: string }>();
+  const { storyId, title, format: formatParam } = useLocalSearchParams<{ storyId: string; title: string; format?: string }>();
 
   const [chapters, setChapters]         = useState<Chapter[]>([]);
   const [loadingChapters, setLoadingChapters] = useState(true);
@@ -76,30 +63,49 @@ export default function EditorModernoScreen() {
   const [publishing, setPublishing]           = useState(false);
   const [published, setPublished]             = useState(false);
   const [publishingChapter, setPublishingChapter] = useState<string | null>(null);
+  const [reorderMode, setReorderMode]             = useState(false);
+  const [reordering, setReordering]               = useState(false);
+  // El formato llega por la ruta (para pintar el color correcto desde el principio) y se
+  // confirma al cargar la historia
+  const [format, setFormat] = useState<'Moderno' | 'Webnovel'>(formatParam === 'Webnovel' ? 'Webnovel' : 'Moderno');
+  // Color de acento del formato (verde Moderno, morado Webnovel) para toda la pantalla
+  const accent = Colors.formatColors[format];
+  const styles = useMemo(() => makeStyles(accent), [accent]);
+  useDialogAccent(accent);
+  // Editor de capítulo según el formato de la historia
+  const openChapter = (id: string, chTitle: string) => router.push(
+    format === 'Webnovel'
+      ? `/create/chapter-editor-webnovel?storyId=${storyId}&chapterId=${id}&chapterTitle=${encodeURIComponent(chTitle)}`
+      : `/create/chapter-editor-moderno?storyId=${storyId}&chapterId=${id}&chapterTitle=${encodeURIComponent(chTitle)}`
+  );
+  const chaptersPath = `stories/${storyId}/chapters`;
 
   const storyTitle = title ? decodeURIComponent(title) : 'Sin título';
 
-  // Cargar story + capítulos al entrar
-  useEffect(() => {
+  // Cargar story + capítulos al entrar y al volver (p. ej. tras renombrar un capítulo)
+  useFocusEffect(useCallback(() => {
     if (!storyId) return;
     (async () => {
       try {
         // Estado publicado del libro
         const storySnap = await getDoc(doc(db, 'stories', storyId as string));
-        if (storySnap.exists()) setPublished(storySnap.data().published === true);
+        if (storySnap.exists()) {
+          setPublished(storySnap.data().published === true);
+          setFormat(storySnap.data().format === 'Webnovel' ? 'Webnovel' : 'Moderno');
+        }
 
         // Capítulos
         const snap = await getDocs(
           query(collection(db, 'stories', storyId as string, 'chapters'), orderBy('createdAt', 'asc'))
         );
-        setChapters(snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<Chapter, 'id'>) })));
+        setChapters(sortChapters(snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<Chapter, 'id'>) }))));
       } catch (e) {
         console.error('Error cargando datos:', e);
       } finally {
         setLoadingChapters(false);
       }
     })();
-  }, [storyId]);
+  }, [storyId]));
 
   const handleDeleteStory = () => {
     confirmAction(
@@ -115,6 +121,27 @@ export default function EditorModernoScreen() {
         }
       },
     );
+  };
+
+  // ── Ordenar capítulos ─────────────────────────────────────────────────────
+  const moveChapter = async (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (reordering || j < 0 || j >= chapters.length) return;
+    const prev = chapters;
+    const next = [...chapters];
+    [next[i], next[j]] = [next[j], next[i]];
+    setChapters(next);
+    setReordering(true);
+    try {
+      await saveOrder(chaptersPath, next);
+      setChapters(next.map((c, k) => ({ ...c, order: k + 1 })));
+    } catch (e) {
+      console.error('Error ordenando capítulos:', e);
+      AppAlert.alert('Error', 'No se pudo cambiar el orden. Inténtalo de nuevo.');
+      setChapters(prev);
+    } finally {
+      setReordering(false);
+    }
   };
 
   const handleDeleteChapter = (chapter: Chapter) => {
@@ -236,7 +263,7 @@ export default function EditorModernoScreen() {
       );
     } catch (e) {
       console.error('Error publicando historia:', e);
-      Alert.alert('Error', 'No se pudo cambiar el estado de publicación. Inténtalo de nuevo.');
+      AppAlert.alert('Error', 'No se pudo cambiar el estado de publicación. Inténtalo de nuevo.');
     } finally {
       setPublishing(false);
     }
@@ -246,15 +273,18 @@ export default function EditorModernoScreen() {
     if (!chapterTitle.trim() || saving) return;
     setSaving(true);
     try {
+      await saveOrder(chaptersPath, chapters);
+      const order = chapters.length + 1;
+      const createdAt = new Date().toISOString();
       const docRef = await addDoc(
         collection(db, 'stories', storyId as string, 'chapters'),
-        { title: chapterTitle.trim(), pages: [], createdAt: new Date().toISOString() }
+        { title: chapterTitle.trim(), pages: [], createdAt, order }
       );
-      const newChapter = { id: docRef.id, title: chapterTitle.trim(), createdAt: new Date().toISOString() };
-      setChapters(prev => [...prev, newChapter]);
+      const newChapter = { id: docRef.id, title: chapterTitle.trim(), createdAt, order };
+      setChapters(prev => [...prev.map((c, k) => ({ ...c, order: k + 1 })), newChapter]);
       setChapterTitle('');
       setModalVisible(false);
-      router.push(`/create/chapter-editor-moderno?storyId=${storyId}&chapterId=${docRef.id}&chapterTitle=${encodeURIComponent(chapterTitle.trim())}`);
+      openChapter(docRef.id, chapterTitle.trim());
     } catch (e) {
       console.error('Error creando capítulo:', e);
     } finally {
@@ -264,12 +294,12 @@ export default function EditorModernoScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.emerald} />
+      <StatusBar barStyle="dark-content" backgroundColor={accent} />
 
       <SafeAreaView edges={['top']} style={styles.headerWrap}>
         <View style={styles.headerBar}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Image source={require('@/assets/images/logo.png')} style={styles.logo} resizeMode="contain" />
+            <Image source={require('@/assets/images/logo.png')} style={styles.logo} contentFit="contain" />
           </TouchableOpacity>
           <View style={styles.headerActions}>
             <TouchableOpacity
@@ -289,7 +319,7 @@ export default function EditorModernoScreen() {
               disabled={publishing}
             >
               {publishing
-                ? <ActivityIndicator size="small" color={Colors.emerald} />
+                ? <ActivityIndicator size="small" color={accent} />
                 : <Text style={[styles.publishBtnText, published && styles.publishBtnTextDone]}>
                     {published ? 'Despublicar' : 'Publicar'}
                   </Text>
@@ -304,10 +334,27 @@ export default function EditorModernoScreen() {
       </View>
       <View style={styles.divider} />
 
+      {/* Contador + modo ordenar */}
+      {chapters.length > 1 && (
+        <View style={styles.listToolbar}>
+          <Text style={styles.listCount}>{chapters.length} capítulos</Text>
+          <TouchableOpacity
+            style={[styles.reorderToggle, reorderMode && styles.reorderToggleActive]}
+            onPress={() => setReorderMode(v => !v)}
+            activeOpacity={0.75}
+          >
+            <MaterialIcons name={reorderMode ? 'check' : 'swap-vert'} size={14} color={reorderMode ? '#000' : Colors.textSecondary} />
+            <Text style={[styles.reorderToggleText, reorderMode && { color: '#000' }]}>
+              {reorderMode ? 'Listo' : 'Ordenar'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         {loadingChapters ? (
           <View style={styles.emptyState}>
-            <ActivityIndicator color={Colors.emerald} />
+            <ActivityIndicator color={accent} />
           </View>
         ) : chapters.length === 0 ? (
           <View style={styles.emptyState}>
@@ -321,7 +368,7 @@ export default function EditorModernoScreen() {
               <TouchableOpacity
                 style={styles.chapterRowInner}
                 activeOpacity={0.8}
-                onPress={() => router.push(`/create/chapter-editor-moderno?storyId=${storyId}&chapterId=${ch.id}&chapterTitle=${encodeURIComponent(ch.title)}`)}
+                onPress={() => openChapter(ch.id, ch.title)}
               >
                 <View style={styles.chapterNumber}>
                   <Text style={styles.chapterNumberText}>{i + 1}</Text>
@@ -332,10 +379,32 @@ export default function EditorModernoScreen() {
                     ? <Text style={styles.chapterPublishedLabel}>● Publicado</Text>
                     : <Text style={styles.chapterDraftLabel}>○ Borrador</Text>
                   }
+                  {ch.wordCount ? (
+                    <Text style={styles.chapterDraftLabel}>{formatReadingStats(ch.wordCount)}</Text>
+                  ) : null}
                 </View>
                 <MaterialIcons name="chevron-right" size={20} color={Colors.textMuted} />
               </TouchableOpacity>
 
+              {reorderMode ? (
+                <View style={styles.reorderBtns}>
+                  <TouchableOpacity
+                    style={[styles.reorderBtn, (i === 0 || reordering) && { opacity: 0.3 }]}
+                    disabled={i === 0 || reordering}
+                    onPress={() => moveChapter(i, -1)}
+                  >
+                    <MaterialIcons name="arrow-upward" size={18} color={Colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.reorderBtn, (i === chapters.length - 1 || reordering) && { opacity: 0.3 }]}
+                    disabled={i === chapters.length - 1 || reordering}
+                    onPress={() => moveChapter(i, 1)}
+                  >
+                    <MaterialIcons name="arrow-downward" size={18} color={Colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+              <>
               {/* Botón publicar / despublicar capítulo */}
               <TouchableOpacity
                 style={[styles.chapterPublishBtn, ch.published && styles.chapterPublishedBtn]}
@@ -344,7 +413,7 @@ export default function EditorModernoScreen() {
                 disabled={publishingChapter === ch.id}
               >
                 {publishingChapter === ch.id
-                  ? <ActivityIndicator size="small" color={Colors.emerald} />
+                  ? <ActivityIndicator size="small" color={accent} />
                   : <Text style={[styles.chapterPublishBtnText, ch.published && styles.chapterPublishedBtnText]}>
                       {ch.published ? 'Despublicar' : 'Publicar'}
                     </Text>
@@ -354,6 +423,8 @@ export default function EditorModernoScreen() {
               <TouchableOpacity style={styles.chapterDeleteBtn} activeOpacity={0.7} onPress={() => handleDeleteChapter(ch)}>
                 <MaterialIcons name="delete-outline" size={18} color="#FF6B6B" />
               </TouchableOpacity>
+              </>
+              )}
             </View>
           ))
         )}
@@ -401,10 +472,10 @@ export default function EditorModernoScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (accent: string) => StyleSheet.create({
   container:   { flex: 1, backgroundColor: Colors.bg },
   headerWrap: {
-    backgroundColor: Colors.emerald,
+    backgroundColor: accent,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
@@ -418,9 +489,9 @@ const styles = StyleSheet.create({
   headerActions:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
   deleteBtn:        { width: 34, height: 34, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center' },
   publishBtn:       { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, backgroundColor: '#000', minWidth: 80, alignItems: 'center' },
-  publishBtnDone:   { backgroundColor: Colors.emerald + '22', borderWidth: 1, borderColor: Colors.emerald + '55' },
-  publishBtnText:   { fontSize: 13, fontWeight: '700', color: Colors.emerald, letterSpacing: 0.5 },
-  publishBtnTextDone: { color: Colors.emerald },
+  publishBtnDone:   { backgroundColor: accent + '22', borderWidth: 1, borderColor: accent + '55' },
+  publishBtnText:   { fontSize: 13, fontWeight: '700', color: accent, letterSpacing: 0.5 },
+  publishBtnTextDone: { color: accent },
   titleArea:        { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14, alignItems: 'center' },
   storyTitle:       { fontSize: 20, fontWeight: '600', color: Colors.textPrimary, letterSpacing: 0.3, textAlign: 'center' },
   divider:          { height: 1, backgroundColor: Colors.border, marginHorizontal: 20, marginBottom: 8 },
@@ -432,26 +503,34 @@ const styles = StyleSheet.create({
   chapterRow:       { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: Colors.border },
   chapterRowInner:  { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 },
   chapterDeleteBtn: { paddingHorizontal: 14, paddingVertical: 14 },
+  // Barra sobre la lista: contador + modo ordenar
+  listToolbar:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 4 },
+  listCount:           { fontSize: 12, color: Colors.textMuted },
+  reorderToggle:       { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: Colors.border },
+  reorderToggleActive: { backgroundColor: accent, borderColor: accent },
+  reorderToggleText:   { fontSize: 12, fontWeight: '600', color: Colors.textSecondary },
+  reorderBtns:         { flexDirection: 'row', paddingRight: 4 },
+  reorderBtn:          { paddingHorizontal: 8, paddingVertical: 14 },
   chapterNumber: {
     width: 28,
     height: 28,
     borderRadius: 4,
-    backgroundColor: Colors.emerald + '20',
+    backgroundColor: accent + '20',
     borderWidth: 1,
-    borderColor: Colors.emerald + '40',
+    borderColor: accent + '40',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chapterNumberText:      { fontSize: 12, fontWeight: '700', color: Colors.emerald },
+  chapterNumberText:      { fontSize: 12, fontWeight: '700', color: accent },
   chapterTitle:           { fontSize: 15, color: Colors.textPrimary, fontWeight: '500' },
-  chapterPublishedLabel:  { fontSize: 11, color: Colors.emerald, fontWeight: '600', marginTop: 2 },
+  chapterPublishedLabel:  { fontSize: 11, color: accent, fontWeight: '600', marginTop: 2 },
   chapterDraftLabel:      { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
-  chapterPublishBtn:       { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 4, borderWidth: 1, borderColor: Colors.emerald, marginRight: 4 },
-  chapterPublishBtnText:   { fontSize: 11, color: Colors.emerald, fontWeight: '700', letterSpacing: 0.3 },
+  chapterPublishBtn:       { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 4, borderWidth: 1, borderColor: accent, marginRight: 4 },
+  chapterPublishBtnText:   { fontSize: 11, color: accent, fontWeight: '700', letterSpacing: 0.3 },
   chapterPublishedBtn:     { borderColor: Colors.textMuted, backgroundColor: 'transparent' },
   chapterPublishedBtnText: { color: Colors.textMuted },
   footer:            { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8, borderTopWidth: 1, borderTopColor: Colors.border, backgroundColor: Colors.bg },
-  addChapterBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.emerald, borderRadius: 6, paddingVertical: 14 },
+  addChapterBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: accent, borderRadius: 6, paddingVertical: 14 },
   addChapterText:    { fontSize: 15, fontWeight: '700', color: '#000' },
   modalOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   modalBox:          { width: '100%', backgroundColor: Colors.surface, borderRadius: 8, padding: 24, borderWidth: 1, borderColor: Colors.border, gap: 16 },
@@ -460,7 +539,7 @@ const styles = StyleSheet.create({
   modalActions:      { flexDirection: 'row', gap: 10 },
   modalCancelBtn:    { flex: 1, paddingVertical: 12, borderRadius: 4, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
   modalCancelText:   { fontSize: 14, color: Colors.textSecondary, fontWeight: '500' },
-  modalConfirmBtn:   { flex: 1, paddingVertical: 12, borderRadius: 4, backgroundColor: Colors.emerald, alignItems: 'center' },
+  modalConfirmBtn:   { flex: 1, paddingVertical: 12, borderRadius: 4, backgroundColor: accent, alignItems: 'center' },
   modalConfirmDisabled: { opacity: 0.4 },
   modalConfirmText:  { fontSize: 14, fontWeight: '700', color: '#000' },
 });

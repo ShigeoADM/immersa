@@ -49,6 +49,7 @@ export default function RegisterScreen() {
       await setDoc(doc(db, 'users', credential.user.uid), {
         uid: credential.user.uid,
         username: username.trim(),
+        displayName: username.trim(),
         email: email.trim(),
         createdAt: new Date().toISOString(),
         stories: [],

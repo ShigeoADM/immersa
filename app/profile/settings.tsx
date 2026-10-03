@@ -1,8 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, Image, StyleSheet, TouchableOpacity,
-  TextInput, ScrollView, StatusBar, ActivityIndicator, Alert, Switch,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  ScrollView,
+  StatusBar,
+  ActivityIndicator,
+  Switch,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -13,6 +21,11 @@ import { signOut, updateProfile } from 'firebase/auth';
 import { auth, db, storage } from '@/config/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
+import { AppAlert } from '@/components/app-dialog';
+import {
+  WEBNOVEL_THEMES, WEBNOVEL_THEME_DEFAULT, WEBNOVEL_THEME_ORDER,
+  type WebnovelTheme, getWebnovelTheme, setWebnovelTheme,
+} from '@/constants/webnovel';
 
 export default function SettingsScreen() {
   const router  = useRouter();
@@ -25,6 +38,10 @@ export default function SettingsScreen() {
   const [uploadingAvatar,setUploadingAvatar]= useState(false);
   const [saving,         setSaving]         = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
+  // Tema de lectura Webnovel: preferencia del lector, se guarda en el móvil al elegirla
+  const [webnovelTheme, setWebnovelThemeState] = useState<WebnovelTheme>(WEBNOVEL_THEME_DEFAULT);
+  useEffect(() => { getWebnovelTheme().then(setWebnovelThemeState); }, []);
+  const pickWebnovelTheme = (t: WebnovelTheme) => { setWebnovelThemeState(t); setWebnovelTheme(t); };
 
   // Cargar perfil existente
   useEffect(() => {
@@ -54,7 +71,7 @@ export default function SettingsScreen() {
   const handlePickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permiso denegado', 'Necesitamos acceso a tu galería.');
+      AppAlert.alert('Permiso denegado', 'Necesitamos acceso a tu galería.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -84,7 +101,7 @@ export default function SettingsScreen() {
         const url = await getDownloadURL(storageRef);
         setAvatarUrl(url);
       } catch (e: any) {
-        Alert.alert('Error al subir foto', e?.message ?? 'Inténtalo de nuevo.');
+        AppAlert.alert('Error al subir foto', e?.message ?? 'Inténtalo de nuevo.');
         setAvatarUrl(user?.photoURL ?? '');
       } finally {
         setUploadingAvatar(false);
@@ -113,7 +130,7 @@ export default function SettingsScreen() {
       router.back();
     } catch (e: any) {
       console.error('Error guardando ajustes:', e);
-      Alert.alert('Error', e?.message ?? 'No se pudieron guardar los cambios.');
+      AppAlert.alert('Error', e?.message ?? 'No se pudieron guardar los cambios.');
     } finally {
       setSaving(false);
     }
@@ -121,7 +138,7 @@ export default function SettingsScreen() {
 
   // ── Cerrar sesión ───────────────────────────────────────────────────────────
   const handleSignOut = () => {
-    Alert.alert(
+    AppAlert.alert(
       'Cerrar sesión',
       '¿Seguro que quieres cerrar sesión?',
       [
@@ -268,6 +285,33 @@ export default function SettingsScreen() {
           />
         </View>
 
+        {/* Tema de lectura de las novelas en formato Webnovel */}
+        <View style={styles.themeBlock}>
+          <Text style={styles.toggleTitle}>Lectura Webnovel · Tema</Text>
+          <Text style={styles.toggleDesc}>Colores con los que lees las novelas de scroll continuo.</Text>
+          <View style={styles.themeRow}>
+            {WEBNOVEL_THEME_ORDER.map(t => {
+              const th = WEBNOVEL_THEMES[t];
+              const active = webnovelTheme === t;
+              return (
+                <TouchableOpacity
+                  key={t}
+                  style={[
+                    styles.themeOption,
+                    { backgroundColor: th.background, borderColor: active ? Colors.emerald : th.border },
+                    active && { borderWidth: 2 },
+                  ]}
+                  onPress={() => pickWebnovelTheme(t)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.themeSample, { color: th.text }]}>Aa</Text>
+                  <Text style={[styles.themeLabel, { color: th.text }]}>{th.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
         {/* ── Cerrar sesión ── */}
         <TouchableOpacity style={styles.signOutBtn} activeOpacity={0.8} onPress={handleSignOut}>
           <MaterialIcons name="logout" size={18} color="#FF6B6B" />
@@ -320,6 +364,11 @@ const styles = StyleSheet.create({
   emailRow:   { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14, backgroundColor: Colors.card, borderRadius: 6, borderWidth: 1, borderColor: Colors.border, marginBottom: 12 },
   emailText:  { fontSize: 14, color: Colors.textSecondary },
 
+  themeBlock:  { marginTop: 22, gap: 4 },
+  themeRow:    { flexDirection: 'row', gap: 10, marginTop: 10 },
+  themeOption: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 8, borderWidth: 1, gap: 2 },
+  themeSample: { fontSize: 20, fontWeight: '700' },
+  themeLabel:  { fontSize: 12, fontWeight: '600' },
   toggleRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 14, paddingHorizontal: 14,

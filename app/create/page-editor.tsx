@@ -2,39 +2,49 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   ScrollView,
   TextInput,
   Pressable,
+  Image,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
+import { Audio } from 'expo-av';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useNavigation, useFocusEffect } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import {
   collection, addDoc, doc, updateDoc, getDoc, getDocs,
-  deleteField,
+  deleteField, query, orderBy,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/config/firebase';
+import { uploadLocalFile } from '@/services/media';
+import { sortChapters } from '@/services/stories';
 import { Colors } from '@/constants/theme';
-import Animated, { useSharedValue, useAnimatedStyle, runOnJS } from 'react-native-reanimated';
+import { AppAlert } from '@/components/app-dialog';
+import Animated, { useSharedValue, useAnimatedStyle, runOnJS, type SharedValue } from 'react-native-reanimated';
 // TouchableOpacity de RNGH: necesario para que los botones dentro del ScrollView funcionen
 // correctamente junto con los GestureDetectors del preview.
 // Para los TextInput de nombre usamos refs + .focus() programático que bypasea el sistema de gestos.
 import { GestureDetector, Gesture, TouchableOpacity } from 'react-native-gesture-handler';
+import {
+  REF_SCREEN, FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, BG_BLUR_MAX, BG_BLUR_PRESETS,
+  MUSIC_VOLUME_MIN, MUSIC_VOLUME_MAX, MUSIC_VOLUME_STEP, SFX_VOLUME_MAX,
+  musicPlaybackVolume, sfxPlaybackVolume,
+  charLabelPos, charLabelSideStyle,
+  type TextSize,
+} from '@/constants/reader-layout';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 type ImageAnchor   = 'top' | 'center' | 'bottom';
 type ImageFit      = 'cover' | 'contain';
 type MusicMode     = 'inherit' | 'play' | 'silence';
 type CharMode      = 'inherit' | 'show' | 'hide';
-type TextSize      = 'xs' | 'sm' | 'md' | 'lg';
 type TextBoxLayout = { x: number; y: number; w: number; h: number };
 
 const DEFAULT_TB: TextBoxLayout = { x: 11, y: 23, w: 78, h: 53 };
@@ -43,7 +53,8 @@ const DEFAULT_TB: TextBoxLayout = { x: 11, y: 23, w: 78, h: 53 };
 type PageLink = {
   word: string;
   color: string;
-  targetPageIndex: number;
+  targetPageId?: string;       // destino (enlaces antiguos solo tienen targetPageIndex)
+  targetPageIndex: number;     // número al crear el enlace: etiqueta y compatibilidad
   targetChapterId?: string;    // undefined = mismo capítulo
   targetChapterTitle?: string; // para mostrar en el chip
 };
@@ -67,12 +78,12 @@ const LINK_COLORS = [
   { hex: '#FF4444', label: 'Rojo'     },
 ];
 
-const TEXT_SIZE_OPTIONS: { value: TextSize | 'auto'; label: string; previewSize: number }[] = [
-  { value: 'auto', label: 'Auto', previewSize: 9  },
-  { value: 'xs',   label: 'XS',   previewSize: 7  },
-  { value: 'sm',   label: 'S',    previewSize: 8  },
-  { value: 'md',   label: 'M',    previewSize: 9  },
-  { value: 'lg',   label: 'L',    previewSize: 11 },
+const TEXT_SIZE_OPTIONS: { value: TextSize | 'auto'; label: string }[] = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'xs',   label: 'XS'   },
+  { value: 'sm',   label: 'S'    },
+  { value: 'md',   label: 'M'    },
+  { value: 'lg',   label: 'L'    },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -90,11 +101,58 @@ function confirmAction(title: string, message: string, confirmText: string, onCo
   if (Platform.OS === 'web') {
     if ((window as any).confirm(`${title}\n\n${message}`)) onConfirm();
   } else {
-    Alert.alert(title, message, [
+    AppAlert.alert(title, message, [
       { text: 'Cancelar', style: 'cancel' },
       { text: confirmText, style: 'destructive', onPress: onConfirm },
     ]);
   }
+}
+
+// Nombre legible de un archivo a partir de su URL
+const fileNameFromUrl = (url: string, fallback: string) => {
+  try { return decodeURIComponent(url.split('/').pop()?.split('?')[0] ?? fallback); }
+  catch { return fallback; }
+};
+
+// Fila "Volumen: − 100% +  [Escuchar]" (música y efecto de sonido).
+// Ajusta cómo suena en el lector; no modifica el archivo de audio.
+function VolumeRow({ value, min, max, onStep, playing, onTogglePlay }: {
+  value: number; min: number; max: number;
+  onStep: (delta: number) => void;
+  playing: boolean; onTogglePlay: () => void;
+}) {
+  return (
+    <View style={styles.anchorRow}>
+      <Text style={styles.anchorLabel}>Volumen:</Text>
+      <TouchableOpacity
+        style={[styles.blurStepBtn, value <= min && { opacity: 0.35 }]}
+        onPress={() => onStep(-MUSIC_VOLUME_STEP)}
+        disabled={value <= min}
+        hitSlop={6}
+      >
+        <MaterialIcons name="volume-down" size={14} color={Colors.textSecondary} />
+      </TouchableOpacity>
+      <Text style={[styles.blurValue, { minWidth: 44 }]}>{Math.round(value * 100)}%</Text>
+      <TouchableOpacity
+        style={[styles.blurStepBtn, value >= max && { opacity: 0.35 }]}
+        onPress={() => onStep(MUSIC_VOLUME_STEP)}
+        disabled={value >= max}
+        hitSlop={6}
+      >
+        <MaterialIcons name="volume-up" size={14} color={Colors.textSecondary} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.anchorBtn, playing && styles.anchorBtnActive, { marginLeft: 'auto' }]}
+        onPress={onTogglePlay}
+        activeOpacity={0.75}
+      >
+        <MaterialIcons name={playing ? 'stop' : 'play-arrow'} size={14} color={playing ? '#000' : Colors.textSecondary} />
+        <Text style={[styles.anchorBtnText, playing && styles.anchorBtnTextActive]}>
+          {playing ? 'Parar' : 'Escuchar'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 // ─── Pantalla ─────────────────────────────────────────────────────────────────
@@ -115,6 +173,7 @@ export default function PageEditorScreen() {
   const [bgUrl, setBgUrl]               = useState('');
   const [imageAnchor, setImageAnchor]   = useState<ImageAnchor>('center');
   const [imageFit, setImageFit]         = useState<ImageFit>('cover');
+  const [bgBlur, setBgBlur]             = useState(BG_BLUR_DEFAULT);
   const [uploadingBg, setUploadingBg]   = useState(false);
   const [imageSource, setImageSource]   = useState<'file' | 'url'>('file');
   const [imageUrlInput, setImageUrlInput] = useState('');
@@ -124,11 +183,30 @@ export default function PageEditorScreen() {
   const [uploadingMusic, setUploadingMusic] = useState(false);
   const [musicSource, setMusicSource]   = useState<'file' | 'url'>('file');
   const [musicUrlInput, setMusicUrlInput] = useState('');
+  const [musicVolume, setMusicVolume]   = useState(1);       // ajuste del autor (1 = 100 %)
+  const [previewingMusic, setPreviewingMusic] = useState(false);
+  const previewSoundRef = useRef<Audio.Sound | null>(null);
   const [textSize, setTextSize]         = useState<TextSize | undefined>(undefined);
   const [tbLayout, setTbLayout]         = useState<TextBoxLayout>(DEFAULT_TB);
+  // Ancho real de la preview: escala del lector (pantalla de referencia) a la preview
+  const [pvWidth, setPvWidth]           = useState(390);
   const [links, setLinks]               = useState<PageLink[]>([]);
-  const [nextPageIndex, setNextPageIndex] = useState<number | null>(null);
+  // "Al pasar la página": saltar a otra página del capítulo (se guarda su id)
+  const [jumpEnabled, setJumpEnabled]   = useState(false);
   const [nextPageInput, setNextPageInput] = useState('');
+  // Ids de las páginas del capítulo en orden: traduce número de página ↔ id
+  const [chapterPageIds, setChapterPageIds] = useState<string[]>([]);
+  // Efecto de sonido (se reproduce una vez al llegar a la página; no se hereda)
+  const [sfxUrl, setSfxUrl]             = useState('');
+  const [sfxFileName, setSfxFileName]   = useState('');
+  const [uploadingSfx, setUploadingSfx] = useState(false);
+  const [sfxSource, setSfxSource]       = useState<'file' | 'url'>('file');
+  const [sfxUrlInput, setSfxUrlInput]   = useState('');
+  const [sfxVolume, setSfxVolume]       = useState(1);       // ajuste del autor (1 = 100 %)
+  const [previewingSfx, setPreviewingSfx] = useState(false);
+  const sfxPreviewRef = useRef<Audio.Sound | null>(null);
+  // Cambia al recuperar un borrador: fuerza a recrear los campos de nombre (no controlados)
+  const [draftNonce, setDraftNonce]     = useState(0);
   // Personajes
   const [leftCharMode, setLeftCharMode]   = useState<CharMode>('inherit');
   const [leftCharName, setLeftCharName]   = useState('');
@@ -175,16 +253,22 @@ export default function PageEditorScreen() {
   const lcY         = useSharedValue(16);
   const lcSX        = useSharedValue(11);
   const lcSY        = useSharedValue(16);
+  const lcBX        = useSharedValue(11); // posición al empezar a mover/redimensionar el bloque
+  const lcBY        = useSharedValue(16);
   const lcSide      = useSharedValue(1); // 0=libre,1=arriba,2=abajo,3=izq,4=der
   const lcStartSide = useSharedValue(0); // side al inicio del gesto actual
-  const lcLabelW    = useSharedValue(80); // ancho real del label (px), medido en onLayout
+  const lcLabelW    = useSharedValue(80); // tamaño real del label (px), medido en onLayout
+  const lcLabelH    = useSharedValue(13);
   const rcX         = useSharedValue(62);
   const rcY         = useSharedValue(16);
   const rcSX        = useSharedValue(62);
   const rcSY        = useSharedValue(16);
+  const rcBX        = useSharedValue(62);
+  const rcBY        = useSharedValue(16);
   const rcSide      = useSharedValue(1);
   const rcStartSide = useSharedValue(0);
-  const rcLabelW    = useSharedValue(80); // ancho real del label (px)
+  const rcLabelW    = useSharedValue(80);
+  const rcLabelH    = useSharedValue(13);
 
   const tbAnimStyle = useAnimatedStyle(() => ({
     position: 'absolute' as const,
@@ -194,107 +278,53 @@ export default function PageEditorScreen() {
     height: (tbH.value / 100) * pvH.value,
   }));
 
-  // ── Constantes del label en el preview ───────────────────────────────────
-  // Altura real del label = paddingV×2 + lineHeight(fontSize=7) ≈ 4 + 9 = 13 px
-  const LABEL_H = 13; // px en el preview
-
-  // ── Función de posición compartida (worklet helper) ───────────────────────
-  // Para sides 3/4 la rotación ocurre alrededor del CENTRO del layout.
-  // Visual:  width_visual = LABEL_H,  height_visual = labelWidth
-  // Para que el borde visual quede exactamente en el borde del bloque de texto:
-  //   side=3 (izq, −90°): visual_right = tbX_px  →  center_x = tbX_px − LABEL_H/2
-  //   side=4 (der, +90°): visual_left  = (tbX+tbW)_px → center_x = (tbX+tbW)_px + LABEL_H/2
-  //   center_x = layout_left + labelWidth/2  →  layout_left = center_x − labelWidth/2
-
-  const lcAnimStyle = useAnimatedStyle(() => {
+  // ── Geometría de etiquetas (worklets) ──────────────────────────────────────
+  // Posición en px de una etiqueta según su side, con el eje libre limitado al bloque.
+  const labelPx = (side: number, x: number, y: number, lW: number, lH: number) => {
     'worklet';
-    const s   = lcSide.value;
-    const lW  = lcLabelW.value;           // ancho real del label en px
-    const tbXp = (tbX.value / 100) * pvW.value;
-    const tbYp = (tbY.value / 100) * pvH.value;
-    const tbRp = ((tbX.value + tbW.value) / 100) * pvW.value;
-    const tbBp = ((tbY.value + tbH.value) / 100) * pvH.value;
+    return charLabelPos(
+      side,
+      (x / 100) * pvW.value, (y / 100) * pvH.value,
+      lW, lH,
+      (tbX.value / 100) * pvW.value,
+      (tbY.value / 100) * pvH.value,
+      ((tbX.value + tbW.value) / 100) * pvW.value,
+      ((tbY.value + tbH.value) / 100) * pvH.value,
+    );
+  };
 
-    let left: number, top: number;
-    if (s === 1) {         // arriba: X libre, parte de abajo toca borde superior
-      left = (lcX.value / 100) * pvW.value;
-      top  = tbYp - LABEL_H;
-    } else if (s === 2) { // abajo: X libre, parte de arriba toca borde inferior
-      left = (lcX.value / 100) * pvW.value;
-      top  = tbBp;
-    } else if (s === 3) { // izq, −90°: borde visual derecho = borde izq del bloque
-      const cx = tbXp - LABEL_H / 2;
-      left = cx - lW / 2;
-      top  = (lcY.value / 100) * pvH.value;
-    } else if (s === 4) { // der, +90°: borde visual izq = borde der del bloque
-      const cx = tbRp + LABEL_H / 2;
-      left = cx - lW / 2;
-      top  = (lcY.value / 100) * pvH.value;
-    } else {               // libre
-      left = (lcX.value / 100) * pvW.value;
-      top  = (lcY.value / 100) * pvH.value;
-    }
-    const rot = s === 3 ? '-90deg' : s === 4 ? '90deg' : '0deg';
+  // Limita el eje libre de una etiqueta pegada para que no sobresalga del bloque (en %).
+  const clampToBox = (side: number, x: number, y: number, lW: number, lH: number) => {
+    'worklet';
+    const p = labelPx(side, x, y, lW, lH);
+    return {
+      x: side === 1 || side === 2 ? (p.left / pvW.value) * 100 : x,
+      y: side === 3 || side === 4 ? (p.top  / pvH.value) * 100 : y,
+    };
+  };
+
+  // Desplaza una etiqueta pegada junto con el bloque (dx/dy en %) y la mantiene dentro.
+  const followBox = (side: number, x: number, y: number, lW: number, lH: number, dx: number, dy: number) => {
+    'worklet';
+    if (side === 1 || side === 2) return clampToBox(side, x + dx, y, lW, lH);
+    if (side === 3 || side === 4) return clampToBox(side, x, y + dy, lW, lH);
+    return { x, y };
+  };
+
+  const labelAnimStyle = (side: number, x: number, y: number, lW: number, lH: number) => {
+    'worklet';
+    const { left, top } = labelPx(side, x, y, lW, lH);
     return {
       position: 'absolute' as const,
       left, top,
-      transform: [{ rotate: rot }],
-      borderTopWidth:          s === 2 ? 0 : 1,
-      // Layout BOTTOM → visual RIGHT (s=3, −90°) y visual LEFT (s=4, +90°): es el lado pegado
-      borderBottomWidth:       (s === 1 || s === 3 || s === 4) ? 0 : 1,
-      borderLeftWidth:         1,
-      borderRightWidth:        1,
-      borderTopLeftRadius:     s === 2 ? 0 : 4,
-      borderTopRightRadius:    s === 2 ? 0 : 4,
-      borderBottomLeftRadius:  (s === 1 || s === 3 || s === 4) ? 0 : 4,
-      borderBottomRightRadius: (s === 1 || s === 3 || s === 4) ? 0 : 4,
+      ...charLabelSideStyle(side, CHAR_LABEL.radius * (pvW.value / REF_SCREEN.width)),
     };
-  });
+  };
 
-  const rcAnimStyle = useAnimatedStyle(() => {
-    'worklet';
-    const s   = rcSide.value;
-    const lW  = rcLabelW.value;
-    const tbXp = (tbX.value / 100) * pvW.value;
-    const tbYp = (tbY.value / 100) * pvH.value;
-    const tbRp = ((tbX.value + tbW.value) / 100) * pvW.value;
-    const tbBp = ((tbY.value + tbH.value) / 100) * pvH.value;
-
-    let left: number, top: number;
-    if (s === 1) {
-      left = (rcX.value / 100) * pvW.value;
-      top  = tbYp - LABEL_H;
-    } else if (s === 2) {
-      left = (rcX.value / 100) * pvW.value;
-      top  = tbBp;
-    } else if (s === 3) {
-      const cx = tbXp - LABEL_H / 2;
-      left = cx - lW / 2;
-      top  = (rcY.value / 100) * pvH.value;
-    } else if (s === 4) {
-      const cx = tbRp + LABEL_H / 2;
-      left = cx - lW / 2;
-      top  = (rcY.value / 100) * pvH.value;
-    } else {
-      left = (rcX.value / 100) * pvW.value;
-      top  = (rcY.value / 100) * pvH.value;
-    }
-    const rot = s === 3 ? '-90deg' : s === 4 ? '90deg' : '0deg';
-    return {
-      position: 'absolute' as const,
-      left, top,
-      transform: [{ rotate: rot }],
-      borderTopWidth:          s === 2 ? 0 : 1,
-      // Layout BOTTOM → visual RIGHT (s=3, −90°) y visual LEFT (s=4, +90°): es el lado pegado
-      borderBottomWidth:       (s === 1 || s === 3 || s === 4) ? 0 : 1,
-      borderLeftWidth:         1,
-      borderRightWidth:        1,
-      borderTopLeftRadius:     s === 2 ? 0 : 4,
-      borderTopRightRadius:    s === 2 ? 0 : 4,
-      borderBottomLeftRadius:  (s === 1 || s === 3 || s === 4) ? 0 : 4,
-      borderBottomRightRadius: (s === 1 || s === 3 || s === 4) ? 0 : 4,
-    };
-  });
+  const lcAnimStyle = useAnimatedStyle(() =>
+    labelAnimStyle(lcSide.value, lcX.value, lcY.value, lcLabelW.value, lcLabelH.value));
+  const rcAnimStyle = useAnimatedStyle(() =>
+    labelAnimStyle(rcSide.value, rcX.value, rcY.value, rcLabelW.value, rcLabelH.value));
 
   const syncTbToState = useCallback((x: number, y: number, w: number, h: number) => {
     setTbLayout({ x, y, w, h });
@@ -316,6 +346,8 @@ export default function PageEditorScreen() {
         'worklet';
         tbSX.value = tbX.value; tbSY.value = tbY.value;
         tbSW.value = tbW.value; tbSH.value = tbH.value;
+        lcBX.value = lcX.value; lcBY.value = lcY.value;
+        rcBX.value = rcX.value; rcBY.value = rcY.value;
       })
       .onUpdate((e) => {
         'worklet';
@@ -343,6 +375,13 @@ export default function PageEditorScreen() {
         if ((lcSide.value === 3 || lcSide.value === 4) && tbHpx < lcLabelW.value) lcSide.value = 0;
         if ((rcSide.value === 1 || rcSide.value === 2) && tbWpx < rcLabelW.value) rcSide.value = 0;
         if ((rcSide.value === 3 || rcSide.value === 4) && tbHpx < rcLabelW.value) rcSide.value = 0;
+
+        // Las etiquetas pegadas acompañan al bloque y se mantienen dentro de sus bordes
+        const bdx = x - tbSX.value, bdy = y - tbSY.value;
+        const lp = followBox(lcSide.value, lcBX.value, lcBY.value, lcLabelW.value, lcLabelH.value, bdx, bdy);
+        lcX.value = lp.x; lcY.value = lp.y;
+        const rp = followBox(rcSide.value, rcBX.value, rcBY.value, rcLabelW.value, rcLabelH.value, bdx, bdy);
+        rcX.value = rp.x; rcY.value = rp.y;
       })
       .onFinalize(() => {
         'worklet';
@@ -366,200 +405,192 @@ export default function PageEditorScreen() {
 
   const charGestures = useMemo(() => {
     // ── Detecta el side al soltar el label ────────────────────────────────────
-    // px,py = posición top-left del label en %.
-    // Usamos el CENTRO aproximado del label (el usuario arrastra intuitivamente
-    // hacia un lado del bloque, no hacia una esquina específica).
-    // El centro se aproxima como label_W_pct/2 en X y label_H_pct/2 en Y.
-    // Con pvW≈300 y pvH≈200 y label≈80×13px: HALF_W≈13%, HALF_H≈3%.
-    // Zona de snap: 20% alrededor de cada borde del bloque de texto.
-    // El lado se determina por cuál borde está más cerca del centro del label.
-    const computeSide = (px: number, py: number, lW: number): number => {
+    // px,py = posición top-left del label en %. Se usa su CENTRO: el usuario arrastra
+    // hacia un lado del bloque, no hacia una esquina concreta.
+    // Zona de snap: 20% alrededor de cada borde; gana el borde más cercano al centro.
+    // Si la etiqueta no cabe a lo largo de ese borde, se queda libre.
+    const computeSide = (px: number, py: number, lW: number, lH: number): number => {
       'worklet';
-      // Centro del label en % del preview
-      const HALF_W = (lW / pvW.value) * 50;       // label_W_px / pvW * 100 / 2
-      const HALF_H = (13 / pvH.value) * 50;        // label height ≈ 13px
-      const cx = px + HALF_W;
-      const cy = py + HALF_H;
+      const cx = px + (lW / pvW.value) * 50;
+      const cy = py + (lH / pvH.value) * 50;
 
       const x1 = tbX.value, x2 = tbX.value + tbW.value;
       const y1 = tbY.value, y2 = tbY.value + tbH.value;
 
-      // Zona de snap: 20% fuera de cada borde
       const MARGIN = 20;
       if (cx < x1 - MARGIN || cx > x2 + MARGIN) return 0;
       if (cy < y1 - MARGIN || cy > y2 + MARGIN) return 0;
 
-      // El borde más cercano determina el lado
       const dTop    = Math.abs(cy - y1);
       const dBottom = Math.abs(cy - y2);
       const dLeft   = Math.abs(cx - x1);
       const dRight  = Math.abs(cx - x2);
       const minD    = Math.min(dTop, dBottom, dLeft, dRight);
-      if (minD === dTop)    return 1;
-      if (minD === dBottom) return 2;
-      if (minD === dLeft)   return 3;
-      return 4;
+      const side = minD === dTop ? 1 : minD === dBottom ? 2 : minD === dLeft ? 3 : 4;
+
+      const tbWpx = (tbW.value / 100) * pvW.value;
+      const tbHpx = (tbH.value / 100) * pvH.value;
+      if ((side === 1 || side === 2) && lW > tbWpx) return 0;
+      if ((side === 3 || side === 4) && lW > tbHpx) return 0;
+      return side;
     };
 
-    // ── Gesto izquierdo ────────────────────────────────────────────────────────
-    const leftGesture = Gesture.Pan()
+    type LabelValues = {
+      x: SharedValue<number>; y: SharedValue<number>;
+      sx: SharedValue<number>; sy: SharedValue<number>;
+      side: SharedValue<number>; startSide: SharedValue<number>;
+      w: SharedValue<number>; h: SharedValue<number>;
+    };
+
+    const make = (v: LabelValues, sync: (x: number, y: number, side: number) => void) => Gesture.Pan()
       .minDistance(4)
       .onBegin(() => {
         'worklet';
-        const ss = lcSide.value;
-        lcStartSide.value = ss;
-        // Sincronizar lcX/lcY con la posición REAL que muestra el animated style,
-        // para que rawX/rawY sean coherentes con la posición visual al iniciar el drag.
-        if (ss === 1) lcY.value = tbY.value - (13 / pvH.value) * 100;
-        if (ss === 2) lcY.value = tbY.value + tbH.value;
-        // Sides 3/4: el layout_left depende del ancho real del label.
-        // Guardamos ese layout_left% para que rawX sea coherente al arrastrar.
-        if (ss === 3) {
-          const cx = (tbX.value / 100) * pvW.value - 6.5; // center_x en px
-          lcX.value = ((cx - lcLabelW.value / 2) / pvW.value) * 100;
+        const ss = v.side.value;
+        v.startSide.value = ss;
+        // Partir de la posición que se ve en pantalla (en las pegadas se deriva del bloque)
+        if (ss !== 0) {
+          const p = labelPx(ss, v.x.value, v.y.value, v.w.value, v.h.value);
+          v.x.value = (p.left / pvW.value) * 100;
+          v.y.value = (p.top  / pvH.value) * 100;
         }
-        if (ss === 4) {
-          const cx = ((tbX.value + tbW.value) / 100) * pvW.value + 6.5;
-          lcX.value = ((cx - lcLabelW.value / 2) / pvW.value) * 100;
-        }
-        lcSX.value = lcX.value;
-        lcSY.value = lcY.value;
+        v.sx.value = v.x.value;
+        v.sy.value = v.y.value;
         // Sin rotación mientras se arrastra: se verá siempre horizontal
-        lcSide.value = 0;
+        v.side.value = 0;
       })
       .onUpdate(e => {
         'worklet';
         const dx = (e.translationX / pvW.value) * 100;
         const dy = (e.translationY / pvH.value) * 100;
-        const rawX = lcSX.value + dx;
-        const rawY = lcSY.value + dy;
-        const ss   = lcStartSide.value;
+        const rawX = v.sx.value + dx;
+        const rawY = v.sy.value + dy;
+        const ss   = v.startSide.value;
 
         if (ss === 0) {
-          // Libre: movimiento completo
-          lcX.value = Math.max(0, Math.min(95, rawX));
-          lcY.value = Math.max(0, Math.min(95, rawY));
+          v.x.value = Math.max(0, Math.min(95, rawX));
+          v.y.value = Math.max(0, Math.min(95, rawY));
+          return;
+        }
+        // Pegada: se desliza a lo largo del borde sin salirse del bloque.
+        // Arrastrar > 14% en perpendicular la despega.
+        const perpDist = (ss === 1 || ss === 2) ? Math.abs(dy) : Math.abs(dx);
+        if (perpDist >= 14) {
+          v.x.value = Math.max(0, Math.min(95, rawX));
+          v.y.value = Math.max(0, Math.min(95, rawY));
+          v.startSide.value = 0; // ya libre: si vuelve a estar cerca se re-pegará al soltar
+        } else if (ss === 1 || ss === 2) {
+          v.x.value = clampToBox(ss, rawX, v.y.value, v.w.value, v.h.value).x;
         } else {
-          // Pegado: eje libre se mueve, eje restringido se deriva del bloque en el animated style.
-          // Permite despegarse arrastrando > 14% en el eje perpendicular.
-          const perpDist = (ss === 1 || ss === 2) ? Math.abs(dy) : Math.abs(dx);
-          if (perpDist >= 14) {
-            // Despegar
-            lcX.value         = Math.max(0, Math.min(95, rawX));
-            lcY.value         = Math.max(0, Math.min(95, rawY));
-            lcStartSide.value = 0; // ya libre: si vuelve a estar cerca se re-pegará al soltar
-          } else if (ss === 1 || ss === 2) {
-            lcX.value = Math.max(0, Math.min(95, rawX)); // solo X libre
-            // Y no se toca: el animated style lo pone en tbY directamente
-          } else {
-            lcY.value = Math.max(0, Math.min(95, rawY)); // solo Y libre
-            // X no se toca: el animated style lo pone en tbX directamente
-          }
+          v.y.value = clampToBox(ss, v.x.value, rawY, v.w.value, v.h.value).y;
         }
       })
       .onFinalize(() => {
         'worklet';
-        // Detectar el side final y restaurar la rotación correcta
-        const s = computeSide(lcX.value, lcY.value, lcLabelW.value);
-        lcSide.value = s;
-        runOnJS(syncLcPos)(lcX.value, lcY.value, s);
+        // Detectar el side final, restaurar la rotación y dejarla dentro del bloque
+        const s = computeSide(v.x.value, v.y.value, v.w.value, v.h.value);
+        const c = clampToBox(s, v.x.value, v.y.value, v.w.value, v.h.value);
+        v.x.value = c.x;
+        v.y.value = c.y;
+        v.side.value = s;
+        runOnJS(sync)(c.x, c.y, s);
       });
 
-    // ── Gesto derecho (mismo patrón con rc* vars) ─────────────────────────────
-    const rightGesture = Gesture.Pan()
-      .minDistance(4)
-      .onBegin(() => {
-        'worklet';
-        const ss = rcSide.value;
-        rcStartSide.value = ss;
-        if (ss === 1) rcY.value = tbY.value - (13 / pvH.value) * 100;
-        if (ss === 2) rcY.value = tbY.value + tbH.value;
-        if (ss === 3) {
-          const cx = (tbX.value / 100) * pvW.value - 6.5;
-          rcX.value = ((cx - rcLabelW.value / 2) / pvW.value) * 100;
-        }
-        if (ss === 4) {
-          const cx = ((tbX.value + tbW.value) / 100) * pvW.value + 6.5;
-          rcX.value = ((cx - rcLabelW.value / 2) / pvW.value) * 100;
-        }
-        rcSX.value   = rcX.value;
-        rcSY.value   = rcY.value;
-        rcSide.value = 0;
-      })
-      .onUpdate(e => {
-        'worklet';
-        const dx = (e.translationX / pvW.value) * 100;
-        const dy = (e.translationY / pvH.value) * 100;
-        const rawX = rcSX.value + dx;
-        const rawY = rcSY.value + dy;
-        const ss   = rcStartSide.value;
-
-        if (ss === 0) {
-          rcX.value = Math.max(0, Math.min(95, rawX));
-          rcY.value = Math.max(0, Math.min(95, rawY));
-        } else {
-          const perpDist = (ss === 1 || ss === 2) ? Math.abs(dy) : Math.abs(dx);
-          if (perpDist >= 14) {
-            rcX.value         = Math.max(0, Math.min(95, rawX));
-            rcY.value         = Math.max(0, Math.min(95, rawY));
-            rcStartSide.value = 0;
-          } else if (ss === 1 || ss === 2) {
-            rcX.value = Math.max(0, Math.min(95, rawX));
-          } else {
-            rcY.value = Math.max(0, Math.min(95, rawY));
-          }
-        }
-      })
-      .onFinalize(() => {
-        'worklet';
-        const s = computeSide(rcX.value, rcY.value, rcLabelW.value);
-        rcSide.value = s;
-        runOnJS(syncRcPos)(rcX.value, rcY.value, s);
-      });
-
-    return { left: leftGesture, right: rightGesture };
+    return {
+      left: make({
+        x: lcX, y: lcY, sx: lcSX, sy: lcSY, side: lcSide, startSide: lcStartSide, w: lcLabelW, h: lcLabelH,
+      }, syncLcPos),
+      right: make({
+        x: rcX, y: rcY, sx: rcSX, sy: rcSY, side: rcSide, startSide: rcStartSide, w: rcLabelW, h: rcLabelH,
+      }, syncRcPos),
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Focus en campos de nombre al activar modo "show" ──────────────────────
-  useEffect(() => {
-    if (leftCharMode === 'show') {
-      const t = setTimeout(() => lcInputRef.current?.focus(), 80);
-      return () => clearTimeout(t);
-    }
-  }, [leftCharMode]);
+  // ── Centrar el bloque de texto sin cambiar su tamaño ──────────────────────
+  // Las etiquetas pegadas se mueven con él (se calcula con el bloque nuevo de forma
+  // explícita: leer un shared value justo después de escribirlo en JS no es fiable).
+  const centerTextBox = () => {
+    const W = pvW.value, H = pvH.value;
+    const w = tbW.value, h = tbH.value;
+    const x = (100 - w) / 2, y = (100 - h) / 2;
+    const dx = x - tbX.value, dy = y - tbY.value;
 
-  useEffect(() => {
-    if (rightCharMode === 'show') {
-      const t = setTimeout(() => rcInputRef.current?.focus(), 80);
-      return () => clearTimeout(t);
-    }
-  }, [rightCharMode]);
+    const follow = (side: number, lx: number, ly: number, lW: number, lH: number) => {
+      if (side === 0) return { x: lx, y: ly };
+      const fx = side === 1 || side === 2 ? lx + dx : lx;
+      const fy = side === 3 || side === 4 ? ly + dy : ly;
+      const p = charLabelPos(
+        side, (fx / 100) * W, (fy / 100) * H, lW, lH,
+        (x / 100) * W, (y / 100) * H, ((x + w) / 100) * W, ((y + h) / 100) * H,
+      );
+      return {
+        x: side === 1 || side === 2 ? (p.left / W) * 100 : fx,
+        y: side === 3 || side === 4 ? (p.top  / H) * 100 : fy,
+      };
+    };
+    const lp = follow(lcSide.value, lcX.value, lcY.value, lcLabelW.value, lcLabelH.value);
+    const rp = follow(rcSide.value, rcX.value, rcY.value, rcLabelW.value, rcLabelH.value);
+
+    applyTbShared({ x, y, w, h });
+    setTbLayout({ x, y, w, h });
+    applyLcShared(lp); syncLcPos(lp.x, lp.y, lcSide.value);
+    applyRcShared(rp); syncRcPos(rp.x, rp.y, rcSide.value);
+  };
+
+  // ── Elegir modo de nombre: al pasar a "Nombre" se enfoca el campo ──────────
+  // Solo por acción del usuario: al abrir una página guardada no salta el teclado.
+  const chooseLeftCharMode = (mode: CharMode) => {
+    setLeftCharMode(mode);
+    if (mode === 'show') setTimeout(() => lcInputRef.current?.focus(), 80);
+  };
+  const chooseRightCharMode = (mode: CharMode) => {
+    setRightCharMode(mode);
+    if (mode === 'show') setTimeout(() => rcInputRef.current?.focus(), 80);
+  };
 
   // ── Cargar página si estamos editando ─────────────────────────────────────
   useEffect(() => {
-    if (!isEditing || !pageId) return;
     (async () => {
       try {
-        const snap = await getDoc(
-          doc(db, 'stories', storyId as string, 'chapters', chapterId as string, 'pages', pageId as string)
-        );
-        if (!snap.exists()) return;
+        const [snap, pagesSnap] = await Promise.all([
+          isEditing && pageId
+            ? getDoc(doc(db, 'stories', storyId as string, 'chapters', chapterId as string, 'pages', pageId as string))
+            : Promise.resolve(null),
+          getDocs(query(
+            collection(db, 'stories', storyId as string, 'chapters', chapterId as string, 'pages'),
+            orderBy('order', 'asc'),
+          )),
+        ]);
+        const ids = pagesSnap.docs.map(d => d.id);
+        setChapterPageIds(ids);
+        if (!snap || !snap.exists()) return;
         const p = snap.data();
         setPageText(p.text ?? '');
         setBgUri(p.backgroundUrl || null);
         setBgUrl(p.backgroundUrl || '');
         setImageAnchor(p.imageAnchor ?? 'center');
         setImageFit(p.imageFit ?? 'cover');
+        setBgBlur(p.bgBlur ?? BG_BLUR_DEFAULT);
         setTextSize(p.textSize ?? undefined);
         const tbl = p.textBoxLayout ?? DEFAULT_TB;
         setTbLayout(tbl); applyTbShared(tbl);
         if (p.musicUrl === undefined)    { setMusicMode('inherit'); }
         else if (p.musicUrl === null)    { setMusicMode('silence'); }
-        else { setMusicMode('play'); setEditMusicUrl(p.musicUrl); setMusicFileName(decodeURIComponent(p.musicUrl.split('/').pop()?.split('?')[0] ?? 'Pista')); }
-        setLinks(p.links ?? []);
-        const npi = p.nextPageIndex ?? null;
-        setNextPageIndex(npi);
-        setNextPageInput(npi !== null ? String(npi + 1) : '');
+        else { setMusicMode('play'); setMusicVolume(p.musicVolume ?? 1); setEditMusicUrl(p.musicUrl); setMusicFileName(decodeURIComponent(p.musicUrl.split('/').pop()?.split('?')[0] ?? 'Pista')); }
+        // Enlaces antiguos del mismo capítulo: se les asigna el id de su página destino
+        setLinks((p.links ?? []).map((l: PageLink) =>
+          l.targetPageId || l.targetChapterId || ids[l.targetPageIndex] === undefined
+            ? l
+            : { ...l, targetPageId: ids[l.targetPageIndex] }
+        ));
+        // "Al pasar la página": por id, o por número en páginas antiguas
+        const jumpIdx = p.nextPageId ? ids.indexOf(p.nextPageId)
+                      : typeof p.nextPageIndex === 'number' ? p.nextPageIndex
+                      : -1;
+        if (jumpIdx >= 0) { setJumpEnabled(true); setNextPageInput(String(jumpIdx + 1)); }
+        setSfxUrl(p.sfxUrl ?? '');
+        setSfxVolume(p.sfxVolume ?? 1);
+        if (p.sfxUrl) setSfxFileName(decodeURIComponent(p.sfxUrl.split('/').pop()?.split('?')[0] ?? 'Efecto'));
         // Personajes
         if (p.leftChar === undefined) { setLeftCharMode('inherit'); }
         else if (p.leftChar === '')   { setLeftCharMode('hide'); }
@@ -588,29 +619,31 @@ export default function PageEditorScreen() {
       const chaptersSnap = await getDocs(
         collection(db, 'stories', storyId as string, 'chapters')
       );
+      const chapterDocs = sortChapters(chaptersSnap.docs.map(d => ({
+        doc: d, order: d.data().order as number | undefined, createdAt: d.data().createdAt as string | undefined,
+      }))).map(c => c.doc);
       const perChapter = await Promise.all(
-        chaptersSnap.docs.map(async chDoc => {
+        chapterDocs.map(async chDoc => {
           const chTitle = (chDoc.data().title as string) ?? 'Capítulo';
           const pagesSnap = await getDocs(
             collection(db, 'stories', storyId as string, 'chapters', chDoc.id, 'pages')
           );
-          return pagesSnap.docs.map((pDoc, idx): ChapterPageOption => ({
-            chapterId: chDoc.id,
-            chapterTitle: chTitle,
-            pageId: pDoc.id,
-            pageOrder: (pDoc.data().order as number) ?? idx + 1,
-            pageIndex: idx,
-            pageText: (pDoc.data().text as string) ?? '',
-          }));
+          // pageIndex es la posición de la página ordenada por 'order', que es
+          // como el lector numera las páginas al seguir un enlace.
+          return pagesSnap.docs
+            .map((pDoc, idx) => ({ pDoc, order: (pDoc.data().order as number) ?? idx + 1 }))
+            .sort((a, b) => a.order - b.order)
+            .map(({ pDoc, order }, idx): ChapterPageOption => ({
+              chapterId: chDoc.id,
+              chapterTitle: chTitle,
+              pageId: pDoc.id,
+              pageOrder: order,
+              pageIndex: idx,
+              pageText: (pDoc.data().text as string) ?? '',
+            }));
         })
       );
-      // Ordenar en memoria: capítulos por createdAt si existe, páginas por order
-      const flat = perChapter.flat();
-      flat.sort((a, b) => {
-        if (a.chapterId !== b.chapterId) return 0; // mantener orden de capítulos
-        return a.pageOrder - b.pageOrder;
-      });
-      setPageOptions(flat);
+      setPageOptions(perChapter.flat());
     } catch (e) {
       console.error('Error cargando opciones de página:', e);
     } finally {
@@ -664,6 +697,7 @@ export default function PageEditorScreen() {
         pageText: '',
       };
       setPageOptions(prev => [...prev, newOption]);
+      setChapterPageIds(prev => [...prev, newRef.id]);
       setPendingLinkTarget(newOption);
       setPagePickerOpen(false);
     } catch (e) {
@@ -681,7 +715,7 @@ export default function PageEditorScreen() {
 
   const handlePickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permiso denegado', 'Necesitamos acceso a tu galería.'); return; }
+    if (status !== 'granted') { AppAlert.alert('Permiso denegado', 'Necesitamos acceso a tu galería.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'], allowsEditing: true, aspect: [16, 9], quality: 0.85,
     });
@@ -702,7 +736,7 @@ export default function PageEditorScreen() {
         const url = await getDownloadURL(storageRef);
         setBgUrl(url); setBgUri(url);
       } catch (e: any) {
-        Alert.alert('Error al subir', e?.message ?? 'Inténtalo de nuevo.');
+        AppAlert.alert('Error al subir', e?.message ?? 'Inténtalo de nuevo.');
         setBgUri(null); setBgUrl('');
       } finally { setUploadingBg(false); }
     }
@@ -724,26 +758,241 @@ export default function PageEditorScreen() {
         setUploadingMusic(true);
         try {
           const ext = asset.name.split('.').pop() ?? 'mp3';
-          const filename   = `music/${storyId}/${chapterId}/${Date.now()}.${ext}`;
-          const storageRef = ref(storage, filename);
-          const blob: Blob = await new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.onload  = () => resolve(xhr.response);
-            xhr.onerror = () => reject(new Error('No se pudo leer el archivo'));
-            xhr.responseType = 'blob'; xhr.open('GET', asset.uri, true); xhr.send(null);
-          });
-          await uploadBytes(storageRef, blob);
-          const url = await getDownloadURL(storageRef);
+          const url = await uploadLocalFile(asset.uri, `music/${storyId}/${chapterId}/${Date.now()}.${ext}`);
           setEditMusicUrl(url); setMusicFileName(asset.name); setMusicMode('play');
-        } catch (e: any) { Alert.alert('Error al subir música', e?.message ?? 'Inténtalo de nuevo.'); }
+        } catch (e: any) { AppAlert.alert('Error al subir música', e?.message ?? 'Inténtalo de nuevo.'); }
         finally { setUploadingMusic(false); }
       }
-    } catch (e: any) { Alert.alert('Error', e?.message ?? 'No se pudo abrir el selector.'); }
+    } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo abrir el selector.'); }
+  };
+
+  // ── Escuchar la pista en el editor (con el volumen elegido) ───────────────
+  const stopMusicPreview = useCallback(() => {
+    const s = previewSoundRef.current;
+    previewSoundRef.current = null;
+    setPreviewingMusic(false);
+    s?.stopAsync().catch(() => {});
+    s?.unloadAsync().catch(() => {});
+  }, []);
+
+  const toggleMusicPreview = async () => {
+    if (previewingMusic) { stopMusicPreview(); return; }
+    if (!editMusicUrl) return;
+    setPreviewingMusic(true);
+    try {
+      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: editMusicUrl },
+        { shouldPlay: true, isLooping: true, volume: musicPlaybackVolume(musicVolume) },
+      );
+      previewSoundRef.current = sound;
+    } catch (e: any) {
+      setPreviewingMusic(false);
+      AppAlert.alert('No se pudo reproducir', e?.message ?? 'Comprueba el archivo o el enlace.');
+    }
+  };
+
+  // El volumen se aplica en vivo mientras se escucha
+  useEffect(() => {
+    previewSoundRef.current?.setVolumeAsync(musicPlaybackVolume(musicVolume)).catch(() => {});
+  }, [musicVolume]);
+  // Parar al cambiar de pista o de modo, y al salir de la pantalla (también al ir a "Probar")
+  useEffect(() => { stopMusicPreview(); }, [editMusicUrl, musicMode, stopMusicPreview]);
+
+  const stepVolume = (v: number, delta: number, max: number) =>
+    Math.round(Math.min(max, Math.max(MUSIC_VOLUME_MIN, v + delta)) * 10) / 10;
+  const changeMusicVolume = (delta: number) => setMusicVolume(v => stepVolume(v, delta, MUSIC_VOLUME_MAX));
+  const changeSfxVolume   = (delta: number) => setSfxVolume(v => stepVolume(v, delta, SFX_VOLUME_MAX));
+
+  // ── Escuchar el efecto de sonido (una vez, con el volumen elegido) ─────────
+  const stopSfxPreview = useCallback(() => {
+    const s = sfxPreviewRef.current;
+    sfxPreviewRef.current = null;
+    setPreviewingSfx(false);
+    s?.stopAsync().catch(() => {});
+    s?.unloadAsync().catch(() => {});
+  }, []);
+
+  const toggleSfxPreview = async () => {
+    if (previewingSfx) { stopSfxPreview(); return; }
+    if (!sfxUrl) return;
+    setPreviewingSfx(true);
+    try {
+      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: sfxUrl },
+        { shouldPlay: true, volume: sfxPlaybackVolume(sfxVolume) },
+      );
+      sfxPreviewRef.current = sound;
+      sound.setOnPlaybackStatusUpdate(status => {
+        if (status.isLoaded && status.didJustFinish) stopSfxPreview();
+      });
+    } catch (e: any) {
+      setPreviewingSfx(false);
+      AppAlert.alert('No se pudo reproducir', e?.message ?? 'Comprueba el archivo o el enlace.');
+    }
+  };
+  useEffect(() => {
+    sfxPreviewRef.current?.setVolumeAsync(sfxPlaybackVolume(sfxVolume)).catch(() => {});
+  }, [sfxVolume]);
+  useEffect(() => { stopSfxPreview(); }, [sfxUrl, stopSfxPreview]);
+
+  // Al salir de la pantalla (también al ir a "Probar") se para lo que esté sonando
+  useFocusEffect(useCallback(() => () => { stopMusicPreview(); stopSfxPreview(); }, [stopMusicPreview, stopSfxPreview]));
+
+  // ── Handlers de efecto de sonido ──────────────────────────────────────────
+  const handleUseSfxUrl = () => {
+    if (!sfxUrlInput.trim()) return;
+    setSfxUrl(normalizeMediaUrl(sfxUrlInput));
+    setSfxFileName(sfxUrlInput.trim());
+    setSfxUrlInput('');
+  };
+
+  const handlePickSfx = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: 'audio/*', copyToCacheDirectory: true });
+      if (result.canceled || !result.assets[0]) return;
+      const asset = result.assets[0];
+      setUploadingSfx(true);
+      try {
+        const ext = asset.name.split('.').pop() ?? 'mp3';
+        const url = await uploadLocalFile(asset.uri, `sfx/${storyId}/${chapterId}/${Date.now()}.${ext}`);
+        setSfxUrl(url); setSfxFileName(asset.name);
+      } catch (e: any) { AppAlert.alert('Error al subir el sonido', e?.message ?? 'Inténtalo de nuevo.'); }
+      finally { setUploadingSfx(false); }
+    } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo abrir el selector.'); }
+  };
+
+  // ── Cambios sin guardar ───────────────────────────────────────────────────
+  // Instantánea de todo lo que se guarda; si difiere de la inicial hay cambios.
+  const snapshot = JSON.stringify({
+    pageText, bgUrl, imageAnchor, imageFit, bgBlur, musicMode, musicVolume, editMusicUrl, textSize, tbLayout, links,
+    jumpEnabled, nextPageInput, sfxUrl, sfxVolume,
+    leftCharMode, leftCharName, rightCharMode, rightCharName,
+    leftCharPos, rightCharPos, leftCharSide, rightCharSide,
+  });
+  const initialSnapshotRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!loading && initialSnapshotRef.current === null) initialSnapshotRef.current = snapshot;
+  }, [loading, snapshot]);
+  const isDirty = initialSnapshotRef.current !== null && snapshot !== initialSnapshotRef.current;
+  const isDirtyRef = useRef(false);
+  isDirtyRef.current = isDirty;
+
+  // ── Borrador automático ───────────────────────────────────────────────────
+  // Mientras hay cambios sin guardar, la instantánea se guarda en el móvil. Si la app
+  // se cierra, al volver a abrir la página se ofrece recuperarla.
+  const draftKey = `immersa_page_draft:${storyId}:${chapterId}:${pageId ?? 'new'}`;
+  const draftResolvedRef = useRef(false); // ya se comprobó (y respondió) si había borrador
+  const draftCheckStartedRef = useRef(false);
+  const clearDraft = () => { AsyncStorage.removeItem(draftKey).catch(() => {}); };
+
+  const applyDraft = (d: any) => {
+    setPageText(d.pageText ?? '');
+    setBgUrl(d.bgUrl ?? ''); setBgUri(d.bgUrl || null);
+    setImageAnchor(d.imageAnchor ?? 'center'); setImageFit(d.imageFit ?? 'cover');
+    setBgBlur(d.bgBlur ?? BG_BLUR_DEFAULT);
+    setMusicMode(d.musicMode ?? 'inherit'); setMusicVolume(d.musicVolume ?? 1);
+    setEditMusicUrl(d.editMusicUrl ?? '');
+    setMusicFileName(d.editMusicUrl ? fileNameFromUrl(d.editMusicUrl, 'Pista') : '');
+    setTextSize(d.textSize ?? undefined);
+    if (d.tbLayout) { setTbLayout(d.tbLayout); applyTbShared(d.tbLayout); }
+    setLinks(d.links ?? []);
+    setJumpEnabled(!!d.jumpEnabled); setNextPageInput(d.nextPageInput ?? '');
+    setSfxUrl(d.sfxUrl ?? ''); setSfxVolume(d.sfxVolume ?? 1);
+    setSfxFileName(d.sfxUrl ? fileNameFromUrl(d.sfxUrl, 'Efecto') : '');
+    setLeftCharMode(d.leftCharMode ?? 'inherit');   setLeftCharName(d.leftCharName ?? '');
+    setRightCharMode(d.rightCharMode ?? 'inherit'); setRightCharName(d.rightCharName ?? '');
+    if (d.leftCharPos)  { setLeftCharPos(d.leftCharPos);   applyLcShared(d.leftCharPos); }
+    if (d.rightCharPos) { setRightCharPos(d.rightCharPos); applyRcShared(d.rightCharPos); }
+    const ls = d.leftCharSide ?? 1, rs = d.rightCharSide ?? 1;
+    setLeftCharSide(ls);  lcSide.value = ls;
+    setRightCharSide(rs); rcSide.value = rs;
+    setDraftNonce(n => n + 1);
+  };
+
+  // Al terminar de cargar: ¿hay un borrador distinto de lo guardado?
+  useEffect(() => {
+    if (loading || initialSnapshotRef.current === null || draftCheckStartedRef.current) return;
+    draftCheckStartedRef.current = true;
+    const saved = initialSnapshotRef.current;
+    (async () => {
+      let raw: string | null = null;
+      try { raw = await AsyncStorage.getItem(draftKey); } catch { /* sin borrador */ }
+      if (!raw || raw === saved) { draftResolvedRef.current = true; if (raw) clearDraft(); return; }
+      const restore = () => {
+        try { applyDraft(JSON.parse(raw as string)); } catch { clearDraft(); }
+        draftResolvedRef.current = true;
+      };
+      const discard = () => { clearDraft(); draftResolvedRef.current = true; };
+      const message = 'Hay cambios de esta página que no llegaste a guardar. ¿Quieres recuperarlos?';
+      if (Platform.OS === 'web') {
+        if ((window as any).confirm(`Borrador sin guardar\n\n${message}`)) restore(); else discard();
+      } else {
+        AppAlert.alert('Borrador sin guardar', message, [
+          { text: 'Descartar', style: 'destructive', onPress: discard },
+          { text: 'Recuperar', onPress: restore },
+        ], { cancelable: false });
+      }
+    })();
+  }, [loading, snapshot]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Guardar el borrador (con un pequeño retardo) mientras haya cambios
+  useEffect(() => {
+    if (!draftResolvedRef.current) return; // no pisar un borrador pendiente de respuesta
+    if (!isDirty) { clearDraft(); return; }
+    const t = setTimeout(() => { AsyncStorage.setItem(draftKey, snapshot).catch(() => {}); }, 800);
+    return () => clearTimeout(t);
+  }, [snapshot, isDirty]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Salir (flecha, botón atrás del móvil o gesto) con cambios → pedir confirmación
+  const navigation = useNavigation();
+  const allowLeaveRef = useRef(false);
+  useEffect(() => {
+    return navigation.addListener('beforeRemove', (e: any) => {
+      if (allowLeaveRef.current || !isDirtyRef.current) return;
+      e.preventDefault();
+      confirmAction(
+        'Cambios sin guardar',
+        'Si sales ahora perderás los cambios de esta página.',
+        'Salir sin guardar',
+        () => { allowLeaveRef.current = true; clearDraft(); navigation.dispatch(e.data.action); },
+      );
+    });
+  }, [navigation]);
+
+  // Abrir el lector en esta página (sin guardar progreso de lectura)
+  const handlePreview = () => {
+    const open = () => router.push(
+      `/reader/page-moderno?storyId=${storyId}&chapterId=${chapterId}&pageId=${pageId}&preview=1`
+    );
+    if (isDirty) {
+      confirmAction(
+        'Cambios sin guardar',
+        'El lector mostrará la última versión guardada de esta página.',
+        'Probar igualmente',
+        open,
+      );
+    } else {
+      open();
+    }
   };
 
   // ── Guardar ───────────────────────────────────────────────────────────────
   const handleSave = async () => {
-    if (saving || uploadingBg || uploadingMusic) return;
+    if (saving || uploadingBg || uploadingMusic || uploadingSfx) return;
+
+    // "Saltar a": el número debe ser una página existente del capítulo
+    let nextPageId: string | null = null;
+    if (jumpEnabled) {
+      const n = parseInt(nextPageInput, 10);
+      nextPageId = chapterPageIds[n - 1] ?? null;
+      if (!nextPageId) {
+        AppAlert.alert('Página no válida', `El capítulo no tiene una página ${nextPageInput || '(vacía)'}.`);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const musicForStore: string | null | undefined =
@@ -753,17 +1002,20 @@ export default function PageEditorScreen() {
 
       if (isEditing) {
         const updateData: any = {
-          text: pageText, backgroundUrl: bgUrl, imageAnchor, imageFit,
+          text: pageText, backgroundUrl: bgUrl, imageAnchor, imageFit, bgBlur,
           textBoxLayout: tbLayout,
           links: cleanLinks,
         };
-        if (nextPageIndex !== null) updateData.nextPageIndex = nextPageIndex;
-        else updateData.nextPageIndex = deleteField();
+        updateData.nextPageId    = nextPageId ?? deleteField();
+        updateData.nextPageIndex = deleteField(); // formato antiguo (por número)
+        updateData.sfxUrl        = sfxUrl || deleteField();
+        updateData.sfxVolume     = sfxUrl && sfxVolume !== 1 ? sfxVolume : deleteField();
         if (textSize === undefined) updateData.textSize = deleteField();
         else updateData.textSize = textSize;
         if (musicMode === 'inherit')  updateData.musicUrl = deleteField();
         else if (musicMode === 'silence') updateData.musicUrl = null;
         else updateData.musicUrl = editMusicUrl;
+        updateData.musicVolume = musicMode === 'play' && musicVolume !== 1 ? musicVolume : deleteField();
         // Personajes
         if (leftCharMode === 'inherit')  updateData.leftChar = deleteField();
         else if (leftCharMode === 'hide') updateData.leftChar = '';
@@ -781,16 +1033,26 @@ export default function PageEditorScreen() {
           updateData
         );
       } else {
+        // El orden se calcula ahora: mientras se editaba pudo crearse otra página
+        // (p. ej. desde el selector de enlaces)
+        const lastSnap = await getDocs(query(
+          collection(db, 'stories', storyId as string, 'chapters', chapterId as string, 'pages'),
+          orderBy('order', 'asc'),
+        ));
+        const lastOrder = lastSnap.docs.reduce((m, d) => Math.max(m, (d.data().order as number) ?? 0), 0);
         const newData: any = {
-          text: pageText, backgroundUrl: bgUrl, imageAnchor, imageFit,
-          textBoxLayout: tbLayout, order: pageNum,
+          text: pageText, backgroundUrl: bgUrl, imageAnchor, imageFit, bgBlur,
+          textBoxLayout: tbLayout, order: lastOrder + 1,
           createdAt: new Date().toISOString(),
           links: cleanLinks,
         };
-        if (nextPageIndex !== null) newData.nextPageIndex = nextPageIndex;
+        if (nextPageId) newData.nextPageId = nextPageId;
+        if (sfxUrl) newData.sfxUrl = sfxUrl;
+        if (sfxUrl && sfxVolume !== 1) newData.sfxVolume = sfxVolume;
         if (textSize !== undefined) newData.textSize = textSize;
         if (musicMode === 'silence') newData.musicUrl = null;
         else if (musicMode === 'play' && editMusicUrl) newData.musicUrl = editMusicUrl;
+        if (musicMode === 'play' && editMusicUrl && musicVolume !== 1) newData.musicVolume = musicVolume;
         // Personajes
         if (leftCharMode === 'show' && leftCharName.trim()) newData.leftChar = leftCharName.trim();
         else if (leftCharMode === 'hide') newData.leftChar = '';
@@ -804,13 +1066,37 @@ export default function PageEditorScreen() {
           newData
         );
       }
+      allowLeaveRef.current = true;
+      clearDraft();
       router.back();
-    } catch (e) { console.error('Error guardando página:', e); }
+    } catch (e) {
+      console.error('Error guardando página:', e);
+      AppAlert.alert('Error', 'No se pudo guardar la página. Inténtalo de nuevo.');
+    }
     finally     { setSaving(false); }
   };
 
-  // ── Tamaño de texto — opciones ────────────────────────────────────────────
-  const previewFontSize = TEXT_SIZE_OPTIONS.find(o => o.value === (textSize ?? 'auto'))?.previewSize ?? 9;
+  // Etiqueta del destino de un enlace (el número se calcula desde el id: sigue
+  // siendo correcto aunque se reordenen las páginas)
+  const linkTargetLabel = (link: PageLink) => {
+    if (link.targetChapterId) return `→ ${link.targetChapterTitle ?? 'Cap.'} p.${link.targetPageIndex + 1}`;
+    const i = link.targetPageId ? chapterPageIds.indexOf(link.targetPageId) : link.targetPageIndex;
+    return i >= 0 ? `→ p.${i + 1}` : '→ página borrada';
+  };
+
+  // ── Escala de la preview respecto al lector ───────────────────────────────
+  // Todo lo que se pinta en la preview usa las medidas del lector × pvScale,
+  // así lo que cabe aquí es lo que cabe al leer. 'Auto' = 'md', igual que en el lector.
+  const pvScale         = pvWidth / REF_SCREEN.width;
+  const previewFontSize = FONT_SIZES[textSize ?? 'md'] * pvScale;
+  const previewLabelStyle = {
+    paddingHorizontal: CHAR_LABEL.paddingHorizontal * pvScale,
+    paddingVertical:   CHAR_LABEL.paddingVertical * pvScale,
+  };
+  const previewLabelTextStyle = {
+    fontSize:      CHAR_LABEL.fontSize * pvScale,
+    letterSpacing: CHAR_LABEL.letterSpacing * pvScale,
+  };
 
   if (loading) {
     return (
@@ -829,25 +1115,33 @@ export default function PageEditorScreen() {
           <MaterialIcons name="arrow-back" size={22} color="rgba(255,255,255,0.9)" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Página {pageNum}</Text>
-        <TouchableOpacity
-          style={[styles.saveBtn, (saving || uploadingBg || uploadingMusic) && { opacity: 0.5 }]}
-          onPress={handleSave}
-          disabled={saving || uploadingBg || uploadingMusic}
-          activeOpacity={0.8}
-        >
-          {saving
-            ? <ActivityIndicator size="small" color="#000" />
-            : <Text style={styles.saveBtnText}>Guardar</Text>
-          }
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          {isEditing && (
+            <TouchableOpacity style={styles.headerBack} onPress={handlePreview} activeOpacity={0.7}>
+              <MaterialIcons name="play-arrow" size={22} color="rgba(0,0,0,0.85)" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.saveBtn, (saving || uploadingBg || uploadingMusic || uploadingSfx) && { opacity: 0.5 }]}
+            onPress={handleSave}
+            disabled={saving || uploadingBg || uploadingMusic || uploadingSfx}
+            activeOpacity={0.8}
+          >
+            {saving
+              ? <ActivityIndicator size="small" color="#000" />
+              : <Text style={styles.saveBtnText}>Guardar</Text>
+            }
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* ── Preview — ancho completo, ratio 16:9 ── */}
+      {/* ── Preview — ancho completo, proporción de un móvil medio en horizontal ── */}
       <View
         style={styles.preview}
         onLayout={e => {
           pvW.value = e.nativeEvent.layout.width;
           pvH.value = e.nativeEvent.layout.height;
+          setPvWidth(e.nativeEvent.layout.width);
         }}
       >
         {/* Fondo */}
@@ -863,6 +1157,8 @@ export default function PageEditorScreen() {
                     : { position: 'absolute', bottom: 0, left: 0, right: 0, aspectRatio: 16 / 9 }
                 }
                 resizeMode={imageFit === 'contain' ? 'contain' : 'cover'}
+                // Escalado como el resto de la preview para que se vea igual que al leer
+                blurRadius={bgBlur * pvScale}
               />
             </View>
           : <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }]} />
@@ -870,13 +1166,19 @@ export default function PageEditorScreen() {
         <View style={styles.previewOverlay} />
 
         {/* Cuadro de texto redimensionable */}
-        <Animated.View style={[styles.tbBox, linkMode && styles.tbBoxLinkMode, tbAnimStyle]}>
+        <Animated.View style={[
+          styles.tbBox, { borderRadius: TEXT_BOX.radius * pvScale },
+          linkMode && styles.tbBoxLinkMode, tbAnimStyle,
+        ]}>
           <TextInput
             style={[styles.previewInput, {
               position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              paddingTop: 16, paddingHorizontal: 12, paddingBottom: 6,
-              fontSize: previewFontSize,
-              lineHeight: previewFontSize * 1.6,
+              paddingTop:        TEXT_BOX.paddingTop * pvScale,
+              paddingHorizontal: TEXT_BOX.paddingHorizontal * pvScale,
+              paddingBottom:     TEXT_BOX.paddingBottom * pvScale,
+              fontSize:          previewFontSize,
+              lineHeight:        previewFontSize * 1.6,
+              letterSpacing:     TEXT_BOX.letterSpacing * pvScale,
             }]}
             value={pageText}
             onChangeText={setPageText}
@@ -914,11 +1216,16 @@ export default function PageEditorScreen() {
         {leftCharMode === 'show' && (
           <GestureDetector gesture={charGestures.left}>
             <Animated.View
-              onLayout={e => { lcLabelW.value = e.nativeEvent.layout.width; }}
-              style={[styles.previewCharLabel, lcAnimStyle]}
+              onLayout={e => {
+                lcLabelW.value = e.nativeEvent.layout.width;
+                lcLabelH.value = e.nativeEvent.layout.height;
+              }}
+              style={[styles.previewCharLabel, previewLabelStyle, lcAnimStyle]}
             >
-              <MaterialIcons name="drag-indicator" size={8} color={Colors.emerald + 'AA'} />
-              <Text style={[styles.previewCharLabelText, !leftCharName.trim() && { opacity: 0.4 }]} numberOfLines={1}>
+              <Text
+                style={[styles.previewCharLabelText, previewLabelTextStyle, !leftCharName.trim() && { opacity: 0.4 }]}
+                numberOfLines={1}
+              >
                 {leftCharName.trim() || 'POV / Protagonista'}
               </Text>
             </Animated.View>
@@ -927,11 +1234,16 @@ export default function PageEditorScreen() {
         {rightCharMode === 'show' && (
           <GestureDetector gesture={charGestures.right}>
             <Animated.View
-              onLayout={e => { rcLabelW.value = e.nativeEvent.layout.width; }}
-              style={[styles.previewCharLabel, rcAnimStyle]}
+              onLayout={e => {
+                rcLabelW.value = e.nativeEvent.layout.width;
+                rcLabelH.value = e.nativeEvent.layout.height;
+              }}
+              style={[styles.previewCharLabel, previewLabelStyle, rcAnimStyle]}
             >
-              <MaterialIcons name="drag-indicator" size={8} color={Colors.emerald + 'AA'} />
-              <Text style={[styles.previewCharLabelText, !rightCharName.trim() && { opacity: 0.4 }]} numberOfLines={1}>
+              <Text
+                style={[styles.previewCharLabelText, previewLabelTextStyle, !rightCharName.trim() && { opacity: 0.4 }]}
+                numberOfLines={1}
+              >
                 {rightCharName.trim() || 'Otro personaje'}
               </Text>
             </Animated.View>
@@ -951,10 +1263,10 @@ export default function PageEditorScreen() {
           </View>
         )}
 
-        {/* Botón reset layout — esquina superior derecha del preview */}
+        {/* Botón centrar bloque — esquina superior derecha del preview */}
         <TouchableOpacity
           style={styles.resetTbBtn}
-          onPress={() => { setTbLayout(DEFAULT_TB); applyTbShared(DEFAULT_TB); }}
+          onPress={centerTextBox}
           activeOpacity={0.7}
         >
           <MaterialIcons name="center-focus-strong" size={14} color="rgba(255,255,255,0.6)" />
@@ -1046,6 +1358,41 @@ export default function PageEditorScreen() {
                   ))}
                 </View>
               )}
+              {/* Desenfoque */}
+              <View style={styles.blurBlock}>
+                <View style={styles.anchorRow}>
+                  <Text style={styles.anchorLabel}>Desenfoque:</Text>
+                  <TouchableOpacity
+                    style={[styles.blurStepBtn, bgBlur === 0 && { opacity: 0.35 }]}
+                    onPress={() => setBgBlur(b => Math.max(0, b - 1))}
+                    disabled={bgBlur === 0}
+                    hitSlop={6}
+                  >
+                    <MaterialIcons name="remove" size={14} color={Colors.textSecondary} />
+                  </TouchableOpacity>
+                  <Text style={styles.blurValue}>{bgBlur === 0 ? 'Sin' : bgBlur}</Text>
+                  <TouchableOpacity
+                    style={[styles.blurStepBtn, bgBlur >= BG_BLUR_MAX && { opacity: 0.35 }]}
+                    onPress={() => setBgBlur(b => Math.min(BG_BLUR_MAX, b + 1))}
+                    disabled={bgBlur >= BG_BLUR_MAX}
+                    hitSlop={6}
+                  >
+                    <MaterialIcons name="add" size={14} color={Colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.blurPresetRow}>
+                  {BG_BLUR_PRESETS.map(p => (
+                    <TouchableOpacity
+                      key={p.value}
+                      style={[styles.anchorBtn, bgBlur === p.value && styles.anchorBtnActive]}
+                      onPress={() => setBgBlur(p.value)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={[styles.anchorBtnText, bgBlur === p.value && styles.anchorBtnTextActive]}>{p.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
             </>
           ) : (
             <>
@@ -1123,6 +1470,7 @@ export default function PageEditorScreen() {
 
           {musicMode === 'play' && (
             editMusicUrl ? (
+              <>
               <View style={styles.musicTrackRow}>
                 <MaterialIcons name="audiotrack" size={14} color={Colors.aqua} />
                 <Text style={styles.musicTrackName} numberOfLines={1}>{musicFileName || 'Pista de audio'}</Text>
@@ -1137,6 +1485,12 @@ export default function PageEditorScreen() {
                     </TouchableOpacity>
                 }
               </View>
+              <VolumeRow
+                value={musicVolume} min={MUSIC_VOLUME_MIN} max={MUSIC_VOLUME_MAX}
+                onStep={changeMusicVolume}
+                playing={previewingMusic} onTogglePlay={toggleMusicPreview}
+              />
+              </>
             ) : (
               <>
                 <View style={styles.sourceToggleRow}>
@@ -1207,6 +1561,88 @@ export default function PageEditorScreen() {
           )}
         </View>
 
+        {/* Efecto de sonido */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Efecto de sonido</Text>
+          <Text style={styles.sectionHint}>
+            Suena una vez al llegar a esta página (una puerta, un trueno…). No se hereda.
+          </Text>
+          {sfxUrl ? (
+            <>
+              <View style={styles.musicTrackRow}>
+                <MaterialIcons name="graphic-eq" size={14} color={Colors.aqua} />
+                <Text style={styles.musicTrackName} numberOfLines={1}>{sfxFileName || 'Efecto de sonido'}</Text>
+                <TouchableOpacity
+                  onPress={() => { setSfxUrl(''); setSfxFileName(''); }}
+                  style={{ padding: 6 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <MaterialIcons name="close" size={15} color="#FF6B6B" />
+                </TouchableOpacity>
+              </View>
+              <VolumeRow
+                value={sfxVolume} min={MUSIC_VOLUME_MIN} max={SFX_VOLUME_MAX}
+                onStep={changeSfxVolume}
+                playing={previewingSfx} onTogglePlay={toggleSfxPreview}
+              />
+            </>
+          ) : (
+            <>
+              <View style={styles.sourceToggleRow}>
+                {(['file', 'url'] as const).map(src => (
+                  <TouchableOpacity
+                    key={src}
+                    style={[styles.sourceBtn, sfxSource === src && styles.sourceBtnActive]}
+                    onPress={() => setSfxSource(src)}
+                    activeOpacity={0.75}
+                  >
+                    <MaterialIcons name={src === 'file' ? 'upload-file' : 'link'} size={13} color={sfxSource === src ? '#000' : Colors.textSecondary} />
+                    <Text style={[styles.sourceBtnText, sfxSource === src && styles.sourceBtnTextActive]}>
+                      {src === 'file' ? 'Archivo' : 'URL / Drive'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {sfxSource === 'file' ? (
+                <TouchableOpacity
+                  style={[styles.pickBtn, uploadingSfx && { opacity: 0.5 }]}
+                  onPress={handlePickSfx}
+                  disabled={uploadingSfx}
+                  activeOpacity={0.7}
+                >
+                  {uploadingSfx
+                    ? <ActivityIndicator size="small" color={Colors.aqua} />
+                    : <MaterialIcons name="upload-file" size={16} color={Colors.textSecondary} />
+                  }
+                  <Text style={styles.pickBtnText}>
+                    {uploadingSfx ? 'Subiendo…' : 'Elegir archivo de sonido'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.urlRow}>
+                  <TextInput
+                    style={styles.urlInput}
+                    defaultValue={sfxUrlInput}
+                    onChangeText={setSfxUrlInput}
+                    placeholder="Link de Drive o URL directa a audio…"
+                    placeholderTextColor={Colors.textMuted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <TouchableOpacity
+                    style={[styles.urlConfirmBtn, !sfxUrlInput.trim() && { opacity: 0.4 }]}
+                    onPress={handleUseSfxUrl}
+                    disabled={!sfxUrlInput.trim()}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.urlConfirmText}>Usar</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
+          )}
+        </View>
+
         {/* ── Personajes ── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Personajes</Text>
@@ -1225,7 +1661,7 @@ export default function PageEditorScreen() {
                 <TouchableOpacity
                   key={opt.value}
                   style={[styles.charModeBtn, leftCharMode === opt.value && styles.charModeBtnActive]}
-                  onPress={() => setLeftCharMode(opt.value)}
+                  onPress={() => chooseLeftCharMode(opt.value)}
                   activeOpacity={0.75}
                 >
                   <MaterialIcons name={opt.icon as any} size={12} color={leftCharMode === opt.value ? '#000' : Colors.textSecondary} />
@@ -1237,7 +1673,7 @@ export default function PageEditorScreen() {
               <Pressable onPress={() => lcInputRef.current?.focus()}>
                 <TextInput
                   ref={lcInputRef}
-                  key={`lc-${storyId}-${pageId ?? pageOrder}`}
+                  key={`lc-${storyId}-${pageId ?? pageOrder}-${draftNonce}`}
                   style={styles.charNameInput}
                   defaultValue={leftCharName}
                   onChangeText={setLeftCharName}
@@ -1276,7 +1712,7 @@ export default function PageEditorScreen() {
                 <TouchableOpacity
                   key={opt.value}
                   style={[styles.charModeBtn, rightCharMode === opt.value && styles.charModeBtnActive]}
-                  onPress={() => setRightCharMode(opt.value)}
+                  onPress={() => chooseRightCharMode(opt.value)}
                   activeOpacity={0.75}
                 >
                   <MaterialIcons name={opt.icon as any} size={12} color={rightCharMode === opt.value ? '#000' : Colors.textSecondary} />
@@ -1288,7 +1724,7 @@ export default function PageEditorScreen() {
               <Pressable onPress={() => rcInputRef.current?.focus()}>
                 <TextInput
                   ref={rcInputRef}
-                  key={`rc-${storyId}-${pageId ?? pageOrder}`}
+                  key={`rc-${storyId}-${pageId ?? pageOrder}-${draftNonce}`}
                   style={styles.charNameInput}
                   defaultValue={rightCharName}
                   onChangeText={setRightCharName}
@@ -1329,11 +1765,7 @@ export default function PageEditorScreen() {
               {links.map((link, idx) => (
                 <View key={idx} style={[styles.linkChip, { borderColor: link.color + '70', backgroundColor: link.color + '18' }]}>
                   <Text style={[styles.linkChipWord, { color: link.color }]}>{link.word}</Text>
-                  <Text style={styles.linkChipPage}>
-                    {link.targetChapterId
-                      ? `→ ${link.targetChapterTitle ?? 'Cap.'} p.${link.targetPageIndex + 1}`
-                      : `→ p.${link.targetPageIndex + 1}`}
-                  </Text>
+                  <Text style={styles.linkChipPage}>{linkTargetLabel(link)}</Text>
                   <TouchableOpacity
                     onPress={() => setLinks(prev => prev.filter((_, i) => i !== idx))}
                     style={{ padding: 4 }}
@@ -1562,6 +1994,7 @@ export default function PageEditorScreen() {
                     setLinks(prev => [...prev, {
                       word: pendingWord.trim(),
                       color: pendingLinkColor,
+                      targetPageId: pendingLinkTarget.pageId,
                       targetPageIndex: pendingLinkTarget.pageIndex,
                       ...(isCurrentChapter ? {} : {
                         targetChapterId: pendingLinkTarget.chapterId,
@@ -1590,36 +2023,32 @@ export default function PageEditorScreen() {
           </Text>
           <View style={styles.nextPageRow}>
             <TouchableOpacity
-              style={[styles.nextPageBtn, nextPageIndex === null && styles.nextPageBtnActive]}
-              onPress={() => { setNextPageIndex(null); setNextPageInput(''); }}
+              style={[styles.nextPageBtn, !jumpEnabled && styles.nextPageBtnActive]}
+              onPress={() => { setJumpEnabled(false); setNextPageInput(''); }}
               activeOpacity={0.75}
             >
-              <MaterialIcons name="arrow-forward" size={14} color={nextPageIndex === null ? '#000' : Colors.textSecondary} />
-              <Text style={[styles.nextPageBtnText, nextPageIndex === null && styles.nextPageBtnTextActive]}>
+              <MaterialIcons name="arrow-forward" size={14} color={!jumpEnabled ? '#000' : Colors.textSecondary} />
+              <Text style={[styles.nextPageBtnText, !jumpEnabled && styles.nextPageBtnTextActive]}>
                 Siguiente
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.nextPageBtn, nextPageIndex !== null && styles.nextPageBtnActive]}
-              onPress={() => { if (nextPageIndex === null) { setNextPageIndex(0); setNextPageInput('1'); } }}
+              style={[styles.nextPageBtn, jumpEnabled && styles.nextPageBtnActive]}
+              onPress={() => { if (!jumpEnabled) { setJumpEnabled(true); setNextPageInput('1'); } }}
               activeOpacity={0.75}
             >
-              <MaterialIcons name="call-split" size={14} color={nextPageIndex !== null ? '#000' : Colors.textSecondary} />
-              <Text style={[styles.nextPageBtnText, nextPageIndex !== null && styles.nextPageBtnTextActive]}>
+              <MaterialIcons name="call-split" size={14} color={jumpEnabled ? '#000' : Colors.textSecondary} />
+              <Text style={[styles.nextPageBtnText, jumpEnabled && styles.nextPageBtnTextActive]}>
                 Saltar a
               </Text>
             </TouchableOpacity>
-            {nextPageIndex !== null && (
+            {jumpEnabled && (
               <View style={styles.nextPageInputWrap}>
                 <Text style={styles.nextPageInputLabel}>pág.</Text>
                 <TextInput
                   style={styles.nextPageInput}
                   value={nextPageInput}
-                  onChangeText={v => {
-                    setNextPageInput(v);
-                    const n = parseInt(v, 10);
-                    if (!isNaN(n) && n >= 1) setNextPageIndex(n - 1);
-                  }}
+                  onChangeText={v => setNextPageInput(v.replace(/[^0-9]/g, ''))}
                   placeholder="1"
                   placeholderTextColor={Colors.textMuted}
                   keyboardType="number-pad"
@@ -1629,9 +2058,11 @@ export default function PageEditorScreen() {
               </View>
             )}
           </View>
-          {nextPageIndex !== null && (
+          {jumpEnabled && (
             <Text style={styles.nextPageHint}>
-              Al pasar esta página el lector saltará a la página {nextPageIndex + 1}
+              {chapterPageIds[parseInt(nextPageInput, 10) - 1]
+                ? `Al pasar esta página el lector saltará a la página ${nextPageInput}`
+                : `El capítulo tiene ${chapterPageIds.length} página${chapterPageIds.length === 1 ? '' : 's'}: elige una de ellas`}
             </Text>
           )}
         </View>
@@ -1653,13 +2084,14 @@ const styles = StyleSheet.create({
   },
   headerBack:  { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.2)', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#000', letterSpacing: 0.3 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   saveBtn:     { paddingHorizontal: 18, paddingVertical: 9, borderRadius: 6, backgroundColor: '#000', minWidth: 80, alignItems: 'center' },
   saveBtnText: { fontSize: 14, fontWeight: '700', color: Colors.emerald, letterSpacing: 0.4 },
 
-  // Preview — 16:9
+  // Preview — misma proporción que la pantalla de referencia del lector
   preview: {
     width: '100%',
-    aspectRatio: 16 / 9,
+    aspectRatio: REF_SCREEN.width / REF_SCREEN.height,
     backgroundColor: '#000',
     overflow: 'hidden', // evita que los GestureDetector de labels intercepten taps fuera del preview
   },
@@ -1740,6 +2172,10 @@ const styles = StyleSheet.create({
   anchorBtnActive:   { backgroundColor: Colors.emerald, borderColor: Colors.emerald },
   anchorBtnText:     { fontSize: 12, color: Colors.textSecondary, fontWeight: '600' },
   anchorBtnTextActive: { color: '#000' },
+  blurBlock:     { gap: 8 },
+  blurStepBtn:   { width: 26, height: 26, borderRadius: 13, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card, alignItems: 'center', justifyContent: 'center' },
+  blurValue:     { minWidth: 28, textAlign: 'center', fontSize: 13, fontWeight: '700', color: Colors.textPrimary },
+  blurPresetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   sourceToggleRow:   { flexDirection: 'row', gap: 8 },
   sourceBtn:         { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card },
   sourceBtnActive:   { backgroundColor: Colors.emerald, borderColor: Colors.emerald },
@@ -1955,19 +2391,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
+  // Padding y tamaño de letra se escalan desde CHAR_LABEL (medidas del lector)
   previewCharLabel: {
     backgroundColor: 'rgba(22,24,30,0.88)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
     borderColor: Colors.emerald + '60',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    maxWidth: 140,
   },
   previewCharLabelText: {
     fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
-    fontSize: 7,
     fontWeight: '700',
     color: Colors.emerald,
     flexShrink: 1,

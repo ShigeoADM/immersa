@@ -1,10 +1,17 @@
 import React, { useCallback, useState } from 'react';
 import {
-  View, Text, Image, StyleSheet, TouchableOpacity,
-  ScrollView, StatusBar, ActivityIndicator, Alert,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  StatusBar,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, type Href } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import {
   collection, getDocs, doc, setDoc, updateDoc,
@@ -12,6 +19,7 @@ import {
 import { db } from '@/config/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
+import { cleanupDeletedStories } from '@/services/notifications';
 
 interface LibraryEntry {
   storyId: string;
@@ -24,6 +32,7 @@ interface LibraryEntry {
   isInterested: boolean;
   lastChapterId?: string | null;
   lastPageIndex?: number | null;
+  lastPageId?: string | null;
   lastChapterTitle?: string | null;
   lastReadAt?: string | null;
   addedAt: string;
@@ -56,7 +65,7 @@ function BookCard({
       {/* Portada */}
       <View style={styles.cardCover}>
         {entry.coverUrl
-          ? <Image source={{ uri: entry.coverUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          ? <Image source={{ uri: entry.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
           : <View style={[StyleSheet.absoluteFill, styles.coverPlaceholder]}>
               <MaterialIcons name="menu-book" size={26} color={fmtColor + '60'} />
             </View>
@@ -138,6 +147,9 @@ export default function BibliotecaScreen() {
 
       (async () => {
         try {
+          // Quita las historias que ya no existen (y crea el aviso al usuario)
+          await cleanupDeletedStories(user.uid)
+            .catch(e => console.error('Error limpiando biblioteca:', e));
           const snap = await getDocs(collection(db, 'users', user.uid, 'library'));
           if (cancelled) return;
           const data = snap.docs.map(d => d.data() as LibraryEntry);
@@ -161,6 +173,7 @@ export default function BibliotecaScreen() {
         isReading: false,
         lastChapterId: null,
         lastPageIndex: null,
+        lastPageId: null,
         lastChapterTitle: null,
         lastReadAt: null,
       });
@@ -263,9 +276,9 @@ export default function BibliotecaScreen() {
                     showProgress
                     onPress={() => router.push(`/story/${e.storyId}`)}
                     onContinue={e.lastChapterId
-                      ? () => router.push(
-                          `/reader/page-moderno?storyId=${e.storyId}&chapterId=${e.lastChapterId}&pageIndex=${e.lastPageIndex ?? 0}`
-                        )
+                      ? () => router.push((e.format === 'Webnovel'
+                          ? `/reader/webnovel?storyId=${e.storyId}&chapterId=${e.lastChapterId}`
+                          : `/reader/page-moderno?storyId=${e.storyId}&chapterId=${e.lastChapterId}&pageIndex=${e.lastPageIndex ?? 0}${e.lastPageId ? `&pageId=${e.lastPageId}` : ''}`) as Href)
                       : undefined
                     }
                     onRemove={() => removeFromReading(e.storyId)}

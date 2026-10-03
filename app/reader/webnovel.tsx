@@ -1,0 +1,288 @@
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, AppState,
+  type NativeScrollEvent, type NativeSyntheticEvent,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useKeepAwake } from 'expo-keep-awake';
+import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
+import { db, auth } from '@/config/firebase';
+import {
+  WEBNOVEL_FONT, WEBNOVEL_FONT_SIZES, WEBNOVEL_FONT_SIZE_DEFAULT, WEBNOVEL_THEMES, WEBNOVEL_THEME_DEFAULT,
+  type WebnovelTheme, getWebnovelFontSize, getWebnovelTheme, setWebnovelFontSize,
+} from '@/constants/webnovel';
+import { RichText } from '@/components/rich-text';
+import { sortChapters } from '@/services/stories';
+
+type ChapterRef = { id: string; title: string };
+
+// Lector Webnovel: un capítulo en vertical con scroll continuo.
+// El tema (oscuro / sepia / claro) lo elige el lector en sus ajustes; el tamaño de
+// letra se cambia aquí mismo. Se recuerda por dónde iba para "Continuar leyendo".
+export default function WebnovelReaderScreen() {
+  const router = useRouter();
+  const { storyId, chapterId, preview } = useLocalSearchParams<{
+    storyId: string;
+    chapterId: string;
+    preview?: string; // '1' = abierto por el autor para probar: no guarda progreso
+  }>();
+  const isPreview = preview === '1';
+
+  useKeepAwake(); // la pantalla no se apaga mientras se lee
+
+  const [loading, setLoading]   = useState(true);
+  const [title, setTitle]       = useState('');
+  const [content, setContent]   = useState('');
+  const [chapterNumber, setChapterNumber] = useState(1);
+  const [prevChapter, setPrevChapter] = useState<ChapterRef | null>(null);
+  const [nextChapter, setNextChapter] = useState<ChapterRef | null>(null);
+  const [themeName, setThemeName] = useState<WebnovelTheme>(WEBNOVEL_THEME_DEFAULT);
+  const [fontSize, setFontSize]   = useState(WEBNOVEL_FONT_SIZE_DEFAULT);
+  const theme = WEBNOVEL_THEMES[themeName];
+
+  // Datos de la historia para guardar el progreso sin lecturas extra
+  const storyRef = useRef<Record<string, any> | null>(null);
+  // Scroll: posición actual (0–1) y posición a restaurar al abrir
+  const scrollRef     = useRef<ScrollView>(null);
+  const progressRef   = useRef(0);
+  const restoreRef    = useRef<number | null>(null);
+  const viewportRef   = useRef(0);
+
+  // ── Preferencias del lector ───────────────────────────────────────────────
+  useEffect(() => {
+    getWebnovelTheme().then(setThemeName);
+    getWebnovelFontSize().then(setFontSize);
+  }, []);
+
+  const changeFontSize = (dir: -1 | 1) => {
+    const i = WEBNOVEL_FONT_SIZES.indexOf(fontSize);
+    const next = WEBNOVEL_FONT_SIZES[Math.max(0, Math.min(WEBNOVEL_FONT_SIZES.length - 1, i + dir))];
+    if (next === fontSize) return;
+    setFontSize(next);
+    setWebnovelFontSize(next);
+  };
+
+  // ── Cargar capítulo ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!storyId || !chapterId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const uid = auth.currentUser?.uid;
+        const [storySnap, chapterSnap, chaptersSnap, librarySnap] = await Promise.all([
+          getDoc(doc(db, 'stories', storyId)),
+          getDoc(doc(db, 'stories', storyId, 'chapters', chapterId)),
+          getDocs(collection(db, 'stories', storyId, 'chapters')),
+          uid && !isPreview ? getDoc(doc(db, 'users', uid, 'library', storyId)) : Promise.resolve(null),
+        ]);
+        if (cancelled) return;
+
+        storyRef.current = storySnap.exists() ? storySnap.data() : null;
+        if (chapterSnap.exists()) {
+          setTitle(chapterSnap.data().title ?? '');
+          setContent(chapterSnap.data().content ?? '');
+        }
+
+        // Capítulo anterior / siguiente (publicados; el autor ve también los borradores)
+        const isAuthor = !!uid && storyRef.current?.uid === uid;
+        const visible = sortChapters(chaptersSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) })))
+          .filter(c => isAuthor || c.published === true || c.id === chapterId);
+        const idx = visible.findIndex(c => c.id === chapterId);
+        if (idx !== -1) {
+          setChapterNumber(idx + 1);
+          const p = visible[idx - 1], n = visible[idx + 1];
+          setPrevChapter(p ? { id: p.id, title: p.title ?? 'Capítulo anterior' } : null);
+          setNextChapter(n ? { id: n.id, title: n.title ?? 'Siguiente capítulo' } : null);
+        }
+
+        // Si se vuelve al capítulo donde se dejó la lectura, restaurar la posición
+        const lib = librarySnap?.exists() ? librarySnap.data() : null;
+        if (lib?.lastChapterId === chapterId && typeof lib.lastScroll === 'number') {
+          restoreRef.current = lib.lastScroll;
+          progressRef.current = lib.lastScroll;
+        }
+      } catch (e) {
+        console.error('Error cargando capítulo:', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [storyId, chapterId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Progreso de lectura ───────────────────────────────────────────────────
+  const saveProgress = useCallback(async () => {
+    const uid = auth.currentUser?.uid;
+    const story = storyRef.current;
+    if (isPreview || !uid || !story || !storyId || !chapterId) return;
+    try {
+      const now = new Date().toISOString();
+      const libraryRef = doc(db, 'users', uid, 'library', storyId);
+      const existing = await getDoc(libraryRef);
+      await setDoc(libraryRef, {
+        storyId,
+        title: story.title ?? '',
+        coverUrl: story.coverUrl ?? null,
+        format: story.format ?? 'Webnovel',
+        coverOrientation: story.coverOrientation ?? 'vertical',
+        status: story.status ?? 'ongoing',
+        isReading: true,
+        isInterested: existing.exists() ? existing.data().isInterested ?? false : false,
+        lastChapterId: chapterId,
+        lastChapterTitle: title || null,
+        lastScroll: progressRef.current,
+        lastReadAt: now,
+        addedAt: existing.exists() ? existing.data().addedAt ?? now : now,
+      }, { merge: true });
+    } catch (e) {
+      console.error('Error guardando progreso de lectura:', e);
+    }
+  }, [storyId, chapterId, title, isPreview]);
+
+  // Guardar al abrir, al salir y al mandar la app a segundo plano
+  const saveProgressRef = useRef(saveProgress);
+  saveProgressRef.current = saveProgress;
+  useEffect(() => {
+    if (loading) return;
+    saveProgressRef.current();
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'background') saveProgressRef.current();
+    });
+    return () => { sub.remove(); saveProgressRef.current(); };
+  }, [loading]);
+
+  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const max = contentSize.height - layoutMeasurement.height;
+    progressRef.current = max > 0 ? Math.min(1, Math.max(0, contentOffset.y / max)) : 0;
+  };
+
+  // Restaurar la posición guardada cuando el contenido ya tiene altura
+  const handleContentSizeChange = (_w: number, h: number) => {
+    if (restoreRef.current === null || viewportRef.current === 0) return;
+    const max = h - viewportRef.current;
+    if (max <= 0) return;
+    scrollRef.current?.scrollTo({ y: restoreRef.current * max, animated: false });
+    restoreRef.current = null;
+  };
+
+  const goToChapter = (id: string) =>
+    router.replace(`/reader/webnovel?storyId=${storyId}&chapterId=${id}${isPreview ? '&preview=1' : ''}`);
+
+  const lineHeight = Math.round(fontSize * 1.65);
+  const fontIdx = WEBNOVEL_FONT_SIZES.indexOf(fontSize);
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.bar} />
+
+      {/* ── Cabecera ── */}
+      <SafeAreaView edges={['top']} style={[styles.header, { backgroundColor: theme.bar, borderBottomColor: theme.border }]}>
+        <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()} activeOpacity={0.7}>
+          <MaterialIcons name="arrow-back" size={22} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.muted }]} numberOfLines={1}>
+          {loading ? '' : `Capítulo ${chapterNumber}`}
+        </Text>
+        <View style={styles.fontControls}>
+          <TouchableOpacity
+            style={[styles.headerBtn, fontIdx <= 0 && { opacity: 0.3 }]}
+            onPress={() => changeFontSize(-1)}
+            disabled={fontIdx <= 0}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.fontBtnSmall, { color: theme.text }]}>A</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerBtn, fontIdx >= WEBNOVEL_FONT_SIZES.length - 1 && { opacity: 0.3 }]}
+            onPress={() => changeFontSize(1)}
+            disabled={fontIdx >= WEBNOVEL_FONT_SIZES.length - 1}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.fontBtnLarge, { color: theme.text }]}>A</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+
+      {loading ? (
+        <View style={styles.centered}><ActivityIndicator color={theme.muted} /></View>
+      ) : (
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.content}
+          onScroll={handleScroll}
+          scrollEventThrottle={64}
+          onLayout={e => { viewportRef.current = e.nativeEvent.layout.height; }}
+          onContentSizeChange={handleContentSizeChange}
+        >
+          <Text style={[styles.chapterTitle, { color: theme.text, fontFamily: WEBNOVEL_FONT }]}>{title}</Text>
+
+          {content.trim() ? (
+            <RichText
+              content={content}
+              paragraphSpacing={Math.round(fontSize * 0.9)}
+              style={{ fontFamily: WEBNOVEL_FONT, fontSize, lineHeight, color: theme.text }}
+            />
+          ) : (
+            <Text style={[styles.empty, { color: theme.muted }]}>Este capítulo todavía no tiene texto.</Text>
+          )}
+
+          {/* ── Navegación entre capítulos ── */}
+          <View style={[styles.chapterNav, { borderTopColor: theme.border }]}>
+            {nextChapter ? (
+              <TouchableOpacity
+                style={[styles.nextBtn, { backgroundColor: theme.bar, borderColor: theme.border }]}
+                onPress={() => goToChapter(nextChapter.id)}
+                activeOpacity={0.8}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.navLabel, { color: theme.muted }]}>Siguiente capítulo</Text>
+                  <Text style={[styles.navTitle, { color: theme.text }]} numberOfLines={1}>{nextChapter.title}</Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={22} color={theme.text} />
+              </TouchableOpacity>
+            ) : (
+              <Text style={[styles.endText, { color: theme.muted }]}>— Has llegado al último capítulo publicado —</Text>
+            )}
+            {prevChapter && (
+              <TouchableOpacity style={styles.prevBtn} onPress={() => goToChapter(prevChapter.id)} activeOpacity={0.7}>
+                <MaterialIcons name="chevron-left" size={18} color={theme.muted} />
+                <Text style={[styles.prevText, { color: theme.muted }]} numberOfLines={1}>{prevChapter.title}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  centered:  { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 8, paddingBottom: 6, borderBottomWidth: 1,
+  },
+  headerBtn:    { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerTitle:  { flex: 1, textAlign: 'center', fontSize: 13, fontWeight: '600' },
+  fontControls: { flexDirection: 'row', alignItems: 'center' },
+  fontBtnSmall: { fontSize: 14, fontWeight: '700' },
+  fontBtnLarge: { fontSize: 21, fontWeight: '700' },
+  // Columna de lectura cómoda también en pantallas anchas
+  content:      { paddingHorizontal: 22, paddingTop: 24, paddingBottom: 48, width: '100%', maxWidth: 720, alignSelf: 'center' },
+  chapterTitle: { fontSize: 24, fontWeight: '700', lineHeight: 32, marginBottom: 24, textAlign: 'center' },
+  empty:        { fontSize: 14, fontStyle: 'italic' },
+  chapterNav:   { marginTop: 28, paddingTop: 20, borderTopWidth: 1, gap: 14 },
+  nextBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 16, paddingVertical: 14, borderRadius: 8, borderWidth: 1,
+  },
+  navLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.4 },
+  navTitle: { fontSize: 15, fontWeight: '700', marginTop: 2 },
+  endText:  { fontSize: 13, textAlign: 'center', fontStyle: 'italic' },
+  prevBtn:  { flexDirection: 'row', alignItems: 'center', gap: 2, alignSelf: 'flex-start', paddingVertical: 6 },
+  prevText: { fontSize: 13 },
+});

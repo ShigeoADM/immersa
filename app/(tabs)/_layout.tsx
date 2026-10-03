@@ -15,6 +15,7 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors.emerald,
         tabBarInactiveTintColor: Colors.textMuted,
         headerShown: false,
+        sceneStyle: { backgroundColor: Colors.bg },
         tabBarButton: HapticTab,
         tabBarStyle: {
           backgroundColor: Colors.surface,

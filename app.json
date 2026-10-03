@@ -6,10 +6,15 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "immersa",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "fetch"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -49,6 +54,12 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#00C878"
+        }
       ]
     ],
     "experiments": {
@@ -74,6 +85,7 @@
     },
     "updates": {
       "url": "https://u.expo.dev/8d82aca5-4cad-40cc-8669-642c60db9ff8"
-    }
+    },
+    "backgroundColor": "#0A0A0A"
   }
 }

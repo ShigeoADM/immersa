@@ -1,17 +1,16 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   TouchableOpacity,
   TextInput,
   StatusBar,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -22,12 +21,16 @@ import {
 import { ref, deleteObject } from 'firebase/storage';
 import { db, storage } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
+import { AppAlert } from '@/components/app-dialog';
+import {
+  countWords, duplicatePage, formatReadingStats, migrateChapterRefsToIds, saveOrder,
+} from '@/services/stories';
 
 function confirmAction(title: string, message: string, confirmText: string, onConfirm: () => void) {
   if (Platform.OS === 'web') {
     if ((window as any).confirm(`${title}\n\n${message}`)) onConfirm();
   } else {
-    Alert.alert(title, message, [
+    AppAlert.alert(title, message, [
       { text: 'Cancelar', style: 'cancel' },
       { text: confirmText, style: 'destructive', onPress: onConfirm },
     ]);
@@ -48,6 +51,7 @@ interface Page {
   musicUrl?: string | null;
   textSize?: TextSize;
   textBoxLayout?: TextBoxLayout;
+  sfxUrl?: string;
   order: number;
 }
 
@@ -65,8 +69,17 @@ export default function ChapterEditorModernoScreen() {
   const [savingChapter, setSavingChapter]       = useState(false);
   const [editingTitle, setEditingTitle]         = useState(false);
   const [titleInput, setTitleInput]             = useState('');
+  const [reorderMode, setReorderMode]           = useState(false);
+  const [busy, setBusy]                         = useState(false); // ordenando / duplicando
+  // Las referencias antiguas por número se pasan a ids antes de cambiar el orden
+  const refsByIdRef = useRef(false);
+  const ensureRefsById = async () => {
+    if (refsByIdRef.current) return;
+    await migrateChapterRefsToIds(storyId as string, chapterId as string);
+    refsByIdRef.current = true;
+  };
 
-  const title = chapterTitle ? decodeURIComponent(chapterTitle) : 'Capítulo';
+  const [title, setTitle] = useState(chapterTitle ? decodeURIComponent(chapterTitle) : 'Capítulo');
 
   const startEditingTitle = () => {
     setTitleInput(title);
@@ -77,6 +90,8 @@ export default function ChapterEditorModernoScreen() {
     setEditingTitle(false);
     const newTitle = titleInput.trim();
     if (!newTitle || newTitle === title) return;
+    const previous = title;
+    setTitle(newTitle);
     try {
       await updateDoc(
         doc(db, 'stories', storyId as string, 'chapters', chapterId as string),
@@ -84,6 +99,8 @@ export default function ChapterEditorModernoScreen() {
       );
     } catch (e) {
       console.error('Error actualizando título:', e);
+      setTitle(previous);
+      AppAlert.alert('Error', 'No se pudo cambiar el título. Inténtalo de nuevo.');
     }
   };
 
@@ -99,7 +116,14 @@ export default function ChapterEditorModernoScreen() {
           orderBy('order', 'asc')
         )),
       ]);
-      if (chSnap.exists()) setChapterPublished(chSnap.data().published === true);
+      if (chSnap.exists()) {
+        setChapterPublished(chSnap.data().published === true);
+        if (chSnap.data().title) setTitle(chSnap.data().title);
+        savedStatsRef.current = {
+          words: chSnap.data().wordCount,
+          pageIds: Array.isArray(chSnap.data().pageIds) ? chSnap.data().pageIds.join(',') : undefined,
+        };
+      }
       setPages(pagesSnap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<Page, 'id'>) })));
     } catch (e) {
       console.error('Error cargando páginas:', e);
@@ -113,6 +137,24 @@ export default function ChapterEditorModernoScreen() {
       loadPages();
     }, [loadPages])
   );
+
+  // ── Palabras y orden de páginas del capítulo ──────────────────────────────
+  // Se guardan en el capítulo para usarlos sin leer todas las páginas:
+  //   · wordCount / pageCount → recuento en la lista de capítulos y en la ficha
+  //   · pageIds (ids en orden) → número de página de cada comentario, siempre al día
+  //     aunque se reordenen, dupliquen o borren páginas
+  const wordCount = pages.reduce((n, p) => n + countWords(p.text ?? ''), 0);
+  const pageIdsKey = pages.map(p => p.id).join(',');
+  const savedStatsRef = useRef<{ words?: number; pageIds?: string } | null>(null);
+  useEffect(() => {
+    if (loadingPages || !savedStatsRef.current) return;
+    if (savedStatsRef.current.words === wordCount && savedStatsRef.current.pageIds === pageIdsKey) return;
+    savedStatsRef.current = { words: wordCount, pageIds: pageIdsKey };
+    updateDoc(
+      doc(db, 'stories', storyId as string, 'chapters', chapterId as string),
+      { wordCount, pageCount: pages.length, pageIds: pages.map(p => p.id) },
+    ).catch(e => console.error('Error guardando datos del capítulo:', e));
+  }, [wordCount, pageIdsKey, loadingPages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Guardar capítulo y volver ─────────────────────────────────────────────
   const handleSaveChapter = async () => {
@@ -140,6 +182,7 @@ export default function ChapterEditorModernoScreen() {
       'Borrar',
       async () => {
         try {
+          await ensureRefsById();
           if (page.backgroundUrl) {
             try { await deleteObject(ref(storage, page.backgroundUrl)); } catch (_) {}
           }
@@ -152,6 +195,43 @@ export default function ChapterEditorModernoScreen() {
         }
       },
     );
+  };
+
+  // ── Ordenar páginas ───────────────────────────────────────────────────────
+  const movePage = async (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (busy || j < 0 || j >= pages.length) return;
+    const next = [...pages];
+    [next[i], next[j]] = [next[j], next[i]];
+    setPages(next);
+    setBusy(true);
+    try {
+      await ensureRefsById();
+      await saveOrder(`stories/${storyId}/chapters/${chapterId}/pages`, next);
+      setPages(next.map((p, k) => ({ ...p, order: k + 1 })));
+    } catch (e) {
+      console.error('Error ordenando páginas:', e);
+      AppAlert.alert('Error', 'No se pudo cambiar el orden. Inténtalo de nuevo.');
+      loadPages();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── Duplicar página (se inserta justo detrás) ─────────────────────────────
+  const handleDuplicatePage = async (page: Page) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await duplicatePage(storyId as string, chapterId as string, page.id);
+      refsByIdRef.current = true; // duplicatePage ya convierte las referencias
+      await loadPages();
+    } catch (e) {
+      console.error('Error duplicando página:', e);
+      AppAlert.alert('Error', 'No se pudo duplicar la página. Inténtalo de nuevo.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   // ── Navegar al editor de página ───────────────────────────────────────────
@@ -185,7 +265,7 @@ export default function ChapterEditorModernoScreen() {
       <SafeAreaView edges={['top']} style={styles.headerWrap}>
         <View style={styles.headerBar}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Image source={require('@/assets/images/logo.png')} style={styles.logo} resizeMode="contain" />
+            <Image source={require('@/assets/images/logo.png')} style={styles.logo} contentFit="contain" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.saveBtn} activeOpacity={0.8} onPress={handleSaveChapter} disabled={savingChapter}>
             {savingChapter
@@ -205,7 +285,6 @@ export default function ChapterEditorModernoScreen() {
             onBlur={commitTitleEdit}
             onSubmitEditing={commitTitleEdit}
             autoFocus
-            selectTextOnFocus
             returnKeyType="done"
             maxLength={80}
           />
@@ -225,6 +304,27 @@ export default function ChapterEditorModernoScreen() {
       </View>
       <View style={styles.divider} />
 
+      {/* Contador + modo ordenar */}
+      {pages.length > 0 && (
+        <View style={styles.listToolbar}>
+          <Text style={styles.listCount} numberOfLines={1}>
+            {pages.length} {pages.length === 1 ? 'página' : 'páginas'} · {formatReadingStats(wordCount)}
+          </Text>
+          {pages.length > 1 && (
+            <TouchableOpacity
+              style={[styles.reorderToggle, reorderMode && styles.reorderToggleActive]}
+              onPress={() => setReorderMode(v => !v)}
+              activeOpacity={0.75}
+            >
+              <MaterialIcons name={reorderMode ? 'check' : 'swap-vert'} size={14} color={reorderMode ? '#000' : Colors.textSecondary} />
+              <Text style={[styles.reorderToggleText, reorderMode && { color: '#000' }]}>
+                {reorderMode ? 'Listo' : 'Ordenar'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         {loadingPages ? (
           <View style={styles.emptyState}>
@@ -242,11 +342,11 @@ export default function ChapterEditorModernoScreen() {
               <TouchableOpacity
                 style={styles.pageThumbnailBtn}
                 activeOpacity={0.75}
-                onPress={() => router.push(`/reader/page-moderno?storyId=${storyId}&chapterId=${chapterId}&pageIndex=${i}`)}
+                onPress={() => router.push(`/reader/page-moderno?storyId=${storyId}&chapterId=${chapterId}&pageId=${page.id}&preview=1`)}
               >
                 <View style={styles.pageThumbnail}>
                   {page.backgroundUrl
-                    ? <Image source={{ uri: page.backgroundUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    ? <Image source={{ uri: page.backgroundUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
                     : null
                   }
                   <Text style={styles.pageThumbnailText} numberOfLines={3}>{page.text || ''}</Text>
@@ -279,6 +379,12 @@ export default function ChapterEditorModernoScreen() {
                         </Text>
                       </View>
                     )}
+                    {page.sfxUrl ? (
+                      <View style={[styles.hasBgBadge, { backgroundColor: Colors.aqua + '18', borderColor: Colors.aqua + '50' }]}>
+                        <MaterialIcons name="graphic-eq" size={11} color={Colors.aqua} />
+                        <Text style={[styles.hasBgText, { color: Colors.aqua }]}>Sonido</Text>
+                      </View>
+                    ) : null}
                   </View>
                   <Text style={styles.pagePreview} numberOfLines={2}>
                     {page.text || 'Página sin texto'}
@@ -287,9 +393,40 @@ export default function ChapterEditorModernoScreen() {
                 <MaterialIcons name="edit" size={16} color={Colors.textMuted} />
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.pageDeleteBtn} activeOpacity={0.7} onPress={() => handleDeletePage(page)}>
-                <MaterialIcons name="delete-outline" size={17} color="#FF6B6B" />
-              </TouchableOpacity>
+              {reorderMode ? (
+                <View style={styles.reorderBtns}>
+                  <TouchableOpacity
+                    style={[styles.reorderBtn, (i === 0 || busy) && { opacity: 0.3 }]}
+                    disabled={i === 0 || busy}
+                    onPress={() => movePage(i, -1)}
+                  >
+                    <MaterialIcons name="arrow-upward" size={18} color={Colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.reorderBtn, (i === pages.length - 1 || busy) && { opacity: 0.3 }]}
+                    disabled={i === pages.length - 1 || busy}
+                    onPress={() => movePage(i, 1)}
+                  >
+                    <MaterialIcons name="arrow-downward" size={18} color={Colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  {!chapterPublished && (
+                    <TouchableOpacity
+                      style={[styles.pageDeleteBtn, { paddingHorizontal: 8 }, busy && { opacity: 0.4 }]}
+                      activeOpacity={0.7}
+                      disabled={busy}
+                      onPress={() => handleDuplicatePage(page)}
+                    >
+                      <MaterialIcons name="content-copy" size={16} color={Colors.textSecondary} />
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity style={styles.pageDeleteBtn} activeOpacity={0.7} onPress={() => handleDeletePage(page)}>
+                    <MaterialIcons name="delete-outline" size={17} color="#FF6B6B" />
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           ))
         )}
@@ -323,7 +460,8 @@ const styles = StyleSheet.create({
   titleArea:   { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 12, alignItems: 'center', gap: 6 },
   titleRow:         { width: '100%', alignItems: 'center', justifyContent: 'center' },
   chapterTitle:     { fontSize: 20, fontWeight: '600', color: Colors.textPrimary, letterSpacing: 0.3, textAlign: 'center' },
-  chapterTitleInput:{ fontSize: 20, fontWeight: '600', color: Colors.textPrimary, letterSpacing: 0.3, textAlign: 'center', borderBottomWidth: 2, borderBottomColor: Colors.emerald, paddingVertical: 2, minWidth: 120 },
+  // Ancho fijo: si crece con el texto, Android reselecciona todo al cambiar de tamaño
+  chapterTitleInput:{ fontSize: 20, fontWeight: '600', color: Colors.textPrimary, letterSpacing: 0.3, textAlign: 'center', borderBottomWidth: 2, borderBottomColor: Colors.emerald, paddingVertical: 2, alignSelf: 'stretch' },
   editTitleBtn:     { position: 'absolute', right: 0, padding: 4 },
   orientationBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: Colors.emerald + '18', borderWidth: 1, borderColor: Colors.emerald + '40' },
   orientationText:  { fontSize: 11, color: Colors.emerald, fontWeight: '600', letterSpacing: 0.3 },
@@ -340,6 +478,14 @@ const styles = StyleSheet.create({
   pageThumbnailNum: { position: 'absolute', top: 3, right: 4, fontSize: 8, color: Colors.textMuted, fontWeight: '700' },
   pageRowInner:     { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
   pageDeleteBtn:    { paddingHorizontal: 14, paddingVertical: 14 },
+  // Barra sobre la lista: contador + modo ordenar
+  listToolbar:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 4 },
+  listCount:           { flex: 1, fontSize: 12, color: Colors.textMuted, paddingVertical: 6 },
+  reorderToggle:       { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: Colors.border },
+  reorderToggleActive: { backgroundColor: Colors.emerald, borderColor: Colors.emerald },
+  reorderToggleText:   { fontSize: 12, fontWeight: '600', color: Colors.textSecondary },
+  reorderBtns:         { flexDirection: 'row', paddingRight: 4 },
+  reorderBtn:          { paddingHorizontal: 8, paddingVertical: 14 },
   hasBgBadge:       { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 3 },
   hasBgText:        { fontSize: 10, color: Colors.emerald, fontWeight: '600' },
   pagePreview:      { flex: 1, fontSize: 13, color: Colors.textSecondary, lineHeight: 18 },
