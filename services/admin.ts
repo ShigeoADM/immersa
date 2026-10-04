@@ -92,6 +92,22 @@ export const setAdminPermission = (uid: string, permission: Permission, granted:
 // ── Moderación ───────────────────────────────────────────────────────────────
 // Elimina una historia como administrador. Los lectores reciben el aviso de
 // "eliminada por un administrador" (lápida) y el autor una notificación con el motivo.
+// ── Lápidas de historias borradas ────────────────────────────────────────────
+// Sirven para avisar a los lectores que tenían la historia guardada (ver
+// services/notifications.ts). Pasado un tiempo ya han abierto la app y recibido el
+// aviso, así que las antiguas se borran. Lo hace quien modera, al abrir el panel.
+export const TOMBSTONE_MAX_DAYS = 60;
+
+export async function purgeOldTombstones(): Promise<number> {
+  // Un día de margen sobre la regla de Firestore, que compara solo por fecha
+  const cutoff = new Date(Date.now() - (TOMBSTONE_MAX_DAYS + 1) * 24 * 60 * 60 * 1000).toISOString();
+  const snap = await getDocs(query(
+    collection(db, 'deletedStories'), where('deletedAt', '<', cutoff), limit(200),
+  ));
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+  return snap.size;
+}
+
 export async function adminDeleteStory(storyId: string, reason: string) {
   const snap = await getDoc(doc(db, 'stories', storyId));
   if (!snap.exists()) return;

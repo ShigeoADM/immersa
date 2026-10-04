@@ -259,7 +259,15 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if (ownsStory(storyId) && request.resource.data.deletedBy == 'author')
                     || (can('deleteStories') && request.resource.data.deletedBy == 'admin');
-      allow update, delete: if false;
+      allow update: if false;
+      // Moderación borra las que tienen más de 60 días: para entonces los lectores ya
+      // han recibido el aviso. deletedAt es una fecha ISO ("2026-10-04T…").
+      allow delete: if can('deleteStories')
+                    && timestamp.date(
+                         int(resource.data.deletedAt[0:4]),
+                         int(resource.data.deletedAt[5:7]),
+                         int(resource.data.deletedAt[8:10]))
+                       < request.time - duration.value(60, 'd');
     }
 
     // ── Denuncias ─────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ import {
 import {
   type AdminUser, type Announcement, type AnnouncementType,
   addAdmin, deleteAnnouncement, findUserByEmail, listAnnouncements, listStaff,
-  publishAnnouncement, removeAdmin, setAdminPermission,
+  publishAnnouncement, purgeOldTombstones, removeAdmin, setAdminPermission,
 } from '@/services/admin';
 import { type Report, dismissReport, listReports, reportReasonLabel } from '@/services/reports';
 import { deleteComment } from '@/services/comments';
@@ -81,6 +81,11 @@ export default function AdminScreen() {
   }, [canAnnounce, canManageAdmins, canModerate]);
 
   useFocusEffect(useCallback(() => { if (isStaff) load(); }, [isStaff, load]));
+
+  // Limpieza de las fichas de historias borradas que ya no hacen falta
+  useEffect(() => {
+    if (canModerate) purgeOldTombstones().catch(e => console.error('Error limpiando historias borradas:', e));
+  }, [canModerate]);
 
   // ── Denuncias ─────────────────────────────────────────────────────────────
   const closeReport = async (r: Report) => {
