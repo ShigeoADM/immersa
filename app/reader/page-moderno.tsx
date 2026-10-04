@@ -473,7 +473,6 @@ export default function PageModernoReaderScreen() {
   const soundRef        = useRef<Audio.Sound | null>(null);
   const currentTrackRef = useRef<string | null>(null);
   const playGenRef      = useRef(0);   // se incrementa cada vez que inicia una carga nueva
-  const [isPlayingMusic, setIsPlayingMusic] = useState(false);
   const [isMuted, setIsMuted]               = useState(false);
   const isMutedRef = useRef(false);
   const trackVolumeRef = useRef(musicPlaybackVolume()); // volumen de la pista actual
@@ -542,12 +541,15 @@ export default function PageModernoReaderScreen() {
           collection(db, 'stories', storyId as string, 'chapters', chapterId as string, 'pages'),
           orderBy('order', 'asc')
         ));
-        // La música de la página inicial se empieza a cargar en cuanto llegan las páginas,
-        // sin esperar al resto de consultas
+        // La música y el efecto de sonido de la página inicial se empiezan a cargar en
+        // cuanto llegan las páginas, sin esperar al resto de consultas
         pagesQuery.then(snap => {
           const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<Page, 'id'>) }));
           const byId = pageIdParam ? list.findIndex(p => p.id === pageIdParam) : -1;
-          for (let i = Math.min(byId >= 0 ? byId : currentRef.current, list.length - 1); i >= 0; i--) {
+          const startIdx = Math.min(byId >= 0 ? byId : currentRef.current, list.length - 1);
+          const startSfx = list[startIdx]?.sfxUrl;
+          if (startSfx) loadAudio(startSfx, false, true).catch(() => {});
+          for (let i = startIdx; i >= 0; i--) {
             if (list[i].musicUrl === undefined) continue;
             if (list[i].musicUrl) loadAudio(list[i].musicUrl as string, true, true).catch(() => {});
             break;
@@ -829,8 +831,6 @@ export default function PageModernoReaderScreen() {
       soundRef.current = sound;
       playingUrlRef.current = url;
       if (!isMutedRef.current) fadeVolume(sound, 0, volume, MUSIC_FADE_MS);
-      setIsPlayingMusic(true);
-      startBars();
     } catch (e) {
       if (gen === playGenRef.current) currentTrackRef.current = null;
       console.error('Error reproduciendo música:', e);
@@ -844,8 +844,6 @@ export default function PageModernoReaderScreen() {
     soundRef.current = null;
     playingUrlRef.current = null;
     currentTrackRef.current = null;
-    setIsPlayingMusic(false);
-    stopBars();
   };
 
   // ── Cadena de herencia ────────────────────────────────────────────────────
@@ -876,6 +874,18 @@ export default function PageModernoReaderScreen() {
     for (let i = oldestIdx - 1; i >= 0; i--) add(pages[i]);
     return chain;
   }, [pages, current, chapterId, historyRestoreTick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Indicador de música (barras) ──────────────────────────────────────────
+  // Se muestra siempre que la página tenga música, propia o heredada: no depende de
+  // que la pista haya terminado de cargar. La animación arranca cuando las barras ya
+  // están en pantalla, y se para al silenciar (las sustituye el icono) o al quedarse
+  // sin música.
+  const pageHasMusic = !!inheritChain.find(p => p.musicUrl !== undefined)?.musicUrl;
+  useEffect(() => {
+    if (!pageHasMusic || isMuted) return;
+    startBars();
+    return stopBars;
+  }, [pageHasMusic, isMuted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Efecto de música al cambiar de página ─────────────────────────────────
   useEffect(() => {
@@ -970,6 +980,7 @@ export default function PageModernoReaderScreen() {
         chapterStartHint = { chapterId: nextId, musicUrl: first.musicUrl, musicVolume: first.musicVolume };
         downloadAudio(first.musicUrl).catch(() => {});
       }
+      if (first.sfxUrl) downloadAudio(first.sfxUrl).catch(() => {});
     }).catch(() => {});
   }, [nextChapter, current, pages]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1561,7 +1572,7 @@ export default function PageModernoReaderScreen() {
         </TouchableOpacity>
 
         {/* Indicador ecualizador / mute */}
-        {isPlayingMusic && (
+        {pageHasMusic && (
           <TouchableOpacity
             style={[styles.equalizerWrap, isMuted && styles.equalizerWrapMuted]}
             onPress={toggleMute}
