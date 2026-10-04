@@ -20,12 +20,12 @@ Datos técnicos: los servicios de Google que usa la app pueden registrar automá
 Únicamente para que la app funcione: identificarte, guardar tu progreso de lectura, mostrar tu contenido a otros lectores, avisarte de novedades (capítulos nuevos, comentarios, avisos del equipo), comprobar la edad para el contenido +18, mostrar a cada autor estadísticas agregadas de sus historias y moderar el contenido. No vendemos tus datos, no los usamos para publicidad y la app no incluye herramientas de analítica ni de seguimiento publicitario.
 
 4. Qué ven los demás
-Es público dentro de la app: tu nombre de usuario, foto, biografía, las historias que publicas, tus comentarios y, si tienes un cargo, tu insignia. Tu correo solo es visible si lo activas en Ajustes.
+Es público: tu nombre de usuario, foto, biografía, las historias que publicas, tus comentarios y, si tienes un cargo, tu insignia. Lo ven los demás usuarios y también quien visita la versión web sin cuenta, y puede aparecer en buscadores. Tu correo solo es visible si lo activas en Ajustes; en ese caso también es público.
 
 Es privado: tu fecha de nacimiento, tu biblioteca, tu progreso de lectura, tus marcadores y tus notificaciones. Los autores ven cuántas personas leen o guardan sus historias, pero no quiénes son.
 
 5. Dónde se guardan y servicios de terceros
-Los datos se almacenan en Firebase, un servicio de Google (autenticación, base de datos y almacenamiento de archivos), que actúa como proveedor técnico y puede tratar datos en servidores fuera de tu país con las garantías que exige la normativa. En Android la app usa además los Servicios de Google Play, necesarios para su funcionamiento.
+Los datos se almacenan en Firebase, un servicio de Google (autenticación, base de datos, almacenamiento de archivos y alojamiento de la versión web), que actúa como proveedor técnico y puede tratar datos en servidores fuera de tu país con las garantías que exige la normativa. En Android la app usa además los Servicios de Google Play, necesarios para su funcionamiento. La versión web carga una tipografía desde Google Fonts y guarda en tu navegador los datos necesarios para mantener la sesión y tus preferencias de lectura; no usa cookies publicitarias ni de seguimiento.
 
 Puedes consultar cómo tratan los datos en la Política de Privacidad de Google (https://policies.google.com/privacy) y en la página de privacidad y seguridad de Firebase (https://firebase.google.com/support/privacy).
 

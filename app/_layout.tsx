@@ -14,6 +14,7 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { NotificationsProvider } from '@/context/NotificationsContext';
 import { AppDialogHost } from '@/components/app-dialog';
 import { WebTopBar } from '@/components/web-top-bar';
+import { WelcomeSplash } from '@/components/welcome-splash';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 
 const ImmersaTheme = {
@@ -156,6 +157,8 @@ function RootNavigator() {
     </View>
     {/* Pantalla de carga encima del Stack mientras Firebase resuelve la sesión */}
     {loading && <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0A0A0A' }]} />}
+    {/* Web: bienvenida animada al abrir la página (en la app no pinta nada) */}
+    <WelcomeSplash />
     </NotificationsProvider>
   );
 }

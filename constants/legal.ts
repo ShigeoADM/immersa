@@ -30,7 +30,7 @@ export const LEGAL_DOCS: Record<LegalDoc, { title: string; sections: LegalSectio
     sections: [
       {
         title: '1. Qué es Immersa',
-        body: `Immersa es una aplicación para leer y publicar novelas escritas por sus usuarios, desarrollada y operada por ${LEGAL_OWNER_NAME}. Al crear una cuenta o usar la app aceptas estos términos. Si no estás de acuerdo, no la uses.`,
+        body: `Immersa es un servicio para leer y publicar novelas escritas por sus usuarios, disponible como aplicación móvil y como página web (https://immersa.web.app), desarrollado y operado por ${LEGAL_OWNER_NAME}. Al crear una cuenta o usar la app o la web aceptas estos términos. En la web se puede explorar y leer sin cuenta; para publicar, comentar o guardar historias hace falta registrarse. Si no estás de acuerdo, no la uses.`,
       },
       {
         title: '2. Tu cuenta',
@@ -81,11 +81,11 @@ Esto se refiere al texto de la historia. Las imágenes (portadas, fondos y fotos
       },
       {
         title: '4. Qué ven los demás',
-        body: 'Es público dentro de la app: tu nombre de usuario, foto, biografía, las historias que publicas, tus comentarios y, si tienes un cargo, tu insignia. Tu correo solo es visible si lo activas en Ajustes.\n\nEs privado: tu fecha de nacimiento, tu biblioteca, tu progreso de lectura, tus marcadores y tus notificaciones. Los autores ven cuántas personas leen o guardan sus historias, pero no quiénes son.',
+        body: 'Es público: tu nombre de usuario, foto, biografía, las historias que publicas, tus comentarios y, si tienes un cargo, tu insignia. Lo ven los demás usuarios y también quien visita la versión web sin cuenta, y puede aparecer en buscadores. Tu correo solo es visible si lo activas en Ajustes; en ese caso también es público.\n\nEs privado: tu fecha de nacimiento, tu biblioteca, tu progreso de lectura, tus marcadores y tus notificaciones. Los autores ven cuántas personas leen o guardan sus historias, pero no quiénes son.',
       },
       {
         title: '5. Dónde se guardan y servicios de terceros',
-        body: 'Los datos se almacenan en Firebase, un servicio de Google (autenticación, base de datos y almacenamiento de archivos), que actúa como proveedor técnico y puede tratar datos en servidores fuera de tu país con las garantías que exige la normativa. En Android la app usa además los Servicios de Google Play, necesarios para su funcionamiento.\n\nPuedes consultar cómo tratan los datos en la Política de Privacidad de Google (https://policies.google.com/privacy) y en la página de privacidad y seguridad de Firebase (https://firebase.google.com/support/privacy).\n\nAlgunas preferencias (tema de lectura, tamaño de letra, borradores) se guardan solo en tu dispositivo.',
+        body: 'Los datos se almacenan en Firebase, un servicio de Google (autenticación, base de datos, almacenamiento de archivos y alojamiento de la versión web), que actúa como proveedor técnico y puede tratar datos en servidores fuera de tu país con las garantías que exige la normativa. En Android la app usa además los Servicios de Google Play, necesarios para su funcionamiento. La versión web carga una tipografía desde Google Fonts y guarda en tu navegador los datos necesarios para mantener la sesión y tus preferencias de lectura; no usa cookies publicitarias ni de seguimiento.\n\nPuedes consultar cómo tratan los datos en la Política de Privacidad de Google (https://policies.google.com/privacy) y en la página de privacidad y seguridad de Firebase (https://firebase.google.com/support/privacy).\n\nAlgunas preferencias (tema de lectura, tamaño de letra, borradores) se guardan solo en tu dispositivo.',
       },
       {
         title: '6. Permisos que pide la app',

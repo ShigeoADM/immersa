@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /create/
+Disallow: /admin
+Disallow: /profile/
+Disallow: /notifications
+
+Sitemap: https://immersa.web.app/sitemap.xml
