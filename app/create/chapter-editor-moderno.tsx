@@ -25,6 +25,7 @@ import { AppAlert } from '@/components/app-dialog';
 import {
   countWords, duplicatePage, formatReadingStats, isBackgroundUsedElsewhere, migrateChapterRefsToIds, saveOrder,
 } from '@/services/stories';
+import { useIsDesktop } from '@/hooks/use-is-desktop';
 
 function confirmAction(title: string, message: string, confirmText: string, onConfirm: () => void) {
   if (Platform.OS === 'web') {
@@ -56,6 +57,7 @@ interface Page {
 }
 
 export default function ChapterEditorModernoScreen() {
+  const isDesktop = useIsDesktop();
   const router = useRouter();
   const { storyId, chapterId, chapterTitle } = useLocalSearchParams<{
     storyId: string;
@@ -269,7 +271,8 @@ export default function ChapterEditorModernoScreen() {
 
       <SafeAreaView edges={['top']} style={styles.headerWrap}>
         <View style={styles.headerBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          {/* El logo lleva siempre al inicio */}
+          <TouchableOpacity onPress={() => router.navigate('/(tabs)')} style={styles.backBtn}>
             <Image source={require('@/assets/images/logo.png')} style={styles.logo} contentFit="contain" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.saveBtn} activeOpacity={0.8} onPress={handleSaveChapter} disabled={savingChapter}>
@@ -281,7 +284,18 @@ export default function ChapterEditorModernoScreen() {
         </View>
       </SafeAreaView>
 
-      <View style={styles.titleArea}>
+      {/* Volver a la pantalla anterior (el logo lleva al inicio) */}
+      <TouchableOpacity
+        style={{ alignSelf: 'flex-start', marginLeft: 12, marginTop: 8, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}
+        onPress={() => router.back()}
+        activeOpacity={0.7}
+        hitSlop={6}
+      >
+        <MaterialIcons name="arrow-back" size={22} color={Colors.textPrimary} />
+      </TouchableOpacity>
+
+      {/* En escritorio el título y los datos van a la izquierda, no centrados */}
+      <View style={[styles.titleArea, isDesktop && { alignItems: 'flex-start' }]}>
         {editingTitle ? (
           <TextInput
             style={styles.chapterTitleInput}

@@ -7,7 +7,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useKeepAwake } from 'expo-keep-awake';
+import { useSafeKeepAwake } from '@/hooks/use-safe-keep-awake';
 import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import { db, auth } from '@/config/firebase';
 import {
@@ -28,6 +28,7 @@ import { CommentItem } from '@/components/comment-item';
 import { AppAlert } from '@/components/app-dialog';
 import { ReportModal } from '@/components/report-modal';
 import type { ReportTarget } from '@/services/reports';
+import { useIsDesktop } from '@/hooks/use-is-desktop';
 
 type ChapterRef = { id: string; title: string };
 
@@ -35,6 +36,7 @@ type ChapterRef = { id: string; title: string };
 // El tema (oscuro / sepia / claro) lo elige el lector en sus ajustes; el tamaño de
 // letra se cambia aquí mismo. Se recuerda por dónde iba para "Continuar leyendo".
 export default function WebnovelReaderScreen() {
+  const isDesktop = useIsDesktop();
   const router = useRouter();
   const { storyId, chapterId, preview } = useLocalSearchParams<{
     storyId: string;
@@ -43,7 +45,7 @@ export default function WebnovelReaderScreen() {
   }>();
   const isPreview = preview === '1';
 
-  useKeepAwake(); // la pantalla no se apaga mientras se lee
+  useSafeKeepAwake(); // la pantalla no se apaga mientras se lee
 
   const [loading, setLoading]   = useState(true);
   const [title, setTitle]       = useState('');
@@ -303,7 +305,7 @@ export default function WebnovelReaderScreen() {
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           ref={scrollRef}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
           keyboardShouldPersistTaps="handled"
           onScroll={handleScroll}
           scrollEventThrottle={64}
@@ -408,6 +410,9 @@ export default function WebnovelReaderScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered:  { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  // Escritorio: el fondo del tema ocupa toda la ventana y el texto va en una columna
+  // centrada, ancha pero con margen a los lados para que las líneas no sean eternas
+  contentDesktop: { width: '100%', maxWidth: 980, alignSelf: 'center', paddingHorizontal: 48 },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 8, paddingBottom: 6, borderBottomWidth: 1,

@@ -50,8 +50,12 @@ const lastNewsKey  = (uid: string) => `notifications:lastNewsAt:${uid}`;
 
 const notificationsCol = (uid: string) => collection(db, 'users', uid, 'notifications');
 
+// En web no hay notificaciones del sistema ni tareas en segundo plano: la lista de
+// notificaciones dentro de la app funciona igual, pero no se avisa fuera de ella.
+const IS_WEB = Platform.OS === 'web';
+
 // Cómo se muestran las notificaciones con la app abierta
-Notifications.setNotificationHandler({
+if (!IS_WEB) Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: false,
@@ -61,6 +65,7 @@ Notifications.setNotificationHandler({
 
 // ── Permisos y canal ─────────────────────────────────────────────────────────
 export async function setupNotificationPermissions(): Promise<boolean> {
+  if (IS_WEB) return false;
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'General',
@@ -259,7 +264,7 @@ async function showNewNativeNotifications(uid: string): Promise<void> {
   ));
   if (snap.empty) return;
 
-  const { granted } = await Notifications.getPermissionsAsync();
+  const granted = !IS_WEB && (await Notifications.getPermissionsAsync()).granted;
   if (granted) {
     for (const n of snap.docs) {
       const d = n.data();
@@ -292,7 +297,7 @@ export async function syncNotifications(uid: string): Promise<number> {
 
 // ── Segundo plano ────────────────────────────────────────────────────────────
 // defineTask debe ejecutarse al cargar el módulo (lo importa app/_layout.tsx).
-TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
+if (!IS_WEB) TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
   try {
     await auth.authStateReady();
     const user = auth.currentUser;
@@ -307,6 +312,7 @@ TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
 });
 
 export async function registerBackgroundSync(): Promise<void> {
+  if (IS_WEB) return;
   const status = await BackgroundFetch.getStatusAsync();
   if (status !== BackgroundFetch.BackgroundFetchStatus.Available) return;
   if (await TaskManager.isTaskRegisteredAsync(BACKGROUND_SYNC_TASK)) return;

@@ -22,6 +22,7 @@ import { AppAlert, useDialogAccent } from '@/components/app-dialog';
 import { WEBNOVEL_FONT, findRichMarks, stripRichText } from '@/constants/webnovel';
 import { RichText } from '@/components/rich-text';
 import { countWords, formatReadingStats } from '@/services/stories';
+import { DesktopColumn } from '@/components/desktop-column';
 
 const TITLE_MAX = 80;
 
@@ -257,6 +258,7 @@ export default function ChapterEditorWebnovelScreen() {
         </TouchableOpacity>
       </View>
 
+      <DesktopColumn>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {/* Título */}
         <TextInput
@@ -318,11 +320,16 @@ export default function ChapterEditorWebnovelScreen() {
             multiline
             textAlignVertical="top"
             scrollEnabled
+            // En el navegador un campo de texto no admite texto con estilos dentro:
+            // se escribe con las marcas (**negrita**, *cursiva*) a la vista, y el
+            // resultado se comprueba con la vista previa.
+            value={Platform.OS === 'web' ? content : undefined}
           >
-            {styledContent}
+            {Platform.OS === 'web' ? undefined : styledContent}
           </TextInput>
         )}
       </KeyboardAvoidingView>
+      </DesktopColumn>
     </SafeAreaView>
   );
 }

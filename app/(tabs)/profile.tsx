@@ -7,6 +7,7 @@ import {
   ScrollView,
   StatusBar,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +20,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { RoleBadge } from '@/components/role-badge';
 import { getFollowerCount, getFollowingCount, getLikedCount } from '@/services/social';
+import { useIsDesktop } from '@/hooks/use-is-desktop';
 
 interface UserProfile {
   displayName?: string;
@@ -79,6 +81,7 @@ function StoryCard({ story, onPress }: { story: StoryCard; onPress: () => void }
 
 // ── Pantalla principal ────────────────────────────────────────────────────────
 export default function ProfileScreen() {
+  const isDesktop = useIsDesktop();
   const { user, loading: authLoading, isStaff, staff } = useAuth();
   const router = useRouter();
 
@@ -174,8 +177,8 @@ export default function ProfileScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
 
         {/* ── Hero ── */}
-        <View style={styles.hero}>
-          <SafeAreaView edges={['top']}>
+        <View style={[styles.hero, isDesktop && styles.heroWeb]}>
+          <SafeAreaView edges={['top']} style={isDesktop ? { alignSelf: 'stretch' } : undefined}>
             {/* Engranaje de ajustes */}
             <View style={styles.heroTopBar}>
               {isStaff && (
@@ -327,6 +330,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
     alignItems: 'center',
+  },
+  // Web: la ficha se ve como una tarjeta dentro de la página
+  heroWeb: {
+    marginTop: 24,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 14,
   },
   heroTopBar: {
     flexDirection: 'row',

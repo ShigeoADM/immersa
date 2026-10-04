@@ -8,6 +8,7 @@ import {
   StatusBar,
   ScrollView,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +19,7 @@ import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { useNotifications } from '@/context/NotificationsContext';
 import { useAuth } from '@/context/AuthContext';
+import { useIsDesktop } from '@/hooks/use-is-desktop';
 
 interface StoryCard {
   id: string;
@@ -80,7 +82,8 @@ function VerticalCard({ story, onPress }: { story: StoryCard; onPress: () => voi
         </View>
       </View>
       <View style={styles.vCardInfo}>
-        <Text style={styles.vCardTitle} numberOfLines={2}>{story.title}</Text>
+        {/* Una línea: con dos no cabía y se cortaba sin puntos suspensivos */}
+        <Text style={styles.vCardTitle} numberOfLines={1}>{story.title}</Text>
         <Text style={styles.vCardStatus} numberOfLines={1}>
           {STATUS_LABELS[story.status] ?? story.status ?? 'En curso'}
         </Text>
@@ -133,12 +136,14 @@ function StoryRow({ stories, loading, onPress }: {
   loading: boolean;
   onPress: (s: StoryCard) => void;
 }) {
+  const isDesktop = useIsDesktop();
   if (loading) {
     return <View style={styles.rowLoader}><ActivityIndicator color={Colors.emerald} /></View>;
   }
   if (stories.length === 0) {
     return (
-      <View style={styles.rowEmpty}>
+      // En escritorio va a la izquierda, bajo el título de su sección
+      <View style={[styles.rowEmpty, isDesktop && { alignItems: 'flex-start' }]}>
         <Text style={styles.rowEmptyText}>Nada por aquí todavía…</Text>
       </View>
     );
@@ -187,6 +192,7 @@ function StoryRow({ stories, loading, onPress }: {
 
 // ── Pantalla principal ────────────────────────────────────────────────────────
 export default function DiscoverScreen() {
+  const isDesktop = useIsDesktop();
   const router = useRouter();
 
   const [modernoAll,  setModernoAll]  = useState<StoryCard[]>([]);
@@ -248,7 +254,8 @@ export default function DiscoverScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.emerald} />
 
-      <SafeAreaView edges={['top']} style={styles.headerWrap}>
+      {/* En escritorio la cabecera es la barra superior común (WebTopBar) */}
+      {!isDesktop && <SafeAreaView edges={['top']} style={styles.headerWrap}>
         <View style={styles.headerBar}>
           <Image source={require('@/assets/images/logo.png')} style={styles.logo} contentFit="contain" />
           <View style={styles.headerActions}>
@@ -269,7 +276,7 @@ export default function DiscoverScreen() {
             </TouchableOpacity>
           </View>
         </View>
-      </SafeAreaView>
+      </SafeAreaView>}
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
 

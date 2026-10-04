@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   StyleSheet,
@@ -16,8 +17,10 @@ import { sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/aut
 import { auth } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { AppAlert } from '@/components/app-dialog';
+import { useIsDesktop } from '@/hooks/use-is-desktop';
 
 export default function LoginScreen() {
+  const isDesktop = useIsDesktop();
   const router = useRouter();
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -66,6 +69,9 @@ export default function LoginScreen() {
         >
           {/* Logo / título */}
           <View style={styles.logoArea}>
+            {isDesktop && (
+              <Image source={require('@/assets/images/logo-mark.png')} style={styles.logoMark} resizeMode="contain" />
+            )}
             <Text style={styles.logoText}>immersa</Text>
             <Text style={styles.tagline}>Bienvenido de nuevo</Text>
           </View>
@@ -139,6 +145,12 @@ const styles = StyleSheet.create({
   logoArea: {
     alignItems: 'center',
     gap: 8,
+  },
+  // Solo en escritorio: el logo encima del nombre
+  logoMark: {
+    width: 96,
+    height: 118,
+    marginBottom: 8,
   },
   logoText: {
     fontSize: 36,

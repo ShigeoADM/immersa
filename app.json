@@ -28,8 +28,15 @@
       "package": "com.ketzac.immersa"
     },
     "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "output": "single",
+      "bundler": "metro",
+      "favicon": "./assets/images/favicon.png",
+      "name": "Immersa",
+      "shortName": "Immersa",
+      "lang": "es",
+      "description": "Lee y escribe novelas interactivas con música, fondos y caminos distintos.",
+      "themeColor": "#0A0A0A",
+      "backgroundColor": "#0A0A0A"
     },
     "plugins": [
       "expo-router",
@@ -97,6 +104,7 @@
     "updates": {
       "url": "https://u.expo.dev/8d82aca5-4cad-40cc-8669-642c60db9ff8"
     },
-    "backgroundColor": "#0A0A0A"
+    "backgroundColor": "#0A0A0A",
+    "description": "Lee y escribe novelas interactivas con música, fondos y caminos distintos."
   }
 }

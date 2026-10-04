@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   StyleSheet,
@@ -20,8 +21,10 @@ import { auth, db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { MIN_AGE, ageOf, buildBirthDate } from '@/constants/age';
 import { BirthDateInput, EMPTY_BIRTH_DATE } from '@/components/birth-date-input';
+import { useIsDesktop } from '@/hooks/use-is-desktop';
 
 export default function RegisterScreen() {
+  const isDesktop = useIsDesktop();
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [email, setEmail]       = useState('');
@@ -101,6 +104,9 @@ export default function RegisterScreen() {
           >
             {/* Logo / título */}
             <View style={styles.logoArea}>
+              {isDesktop && (
+                <Image source={require('@/assets/images/logo-mark.png')} style={styles.logoMark} resizeMode="contain" />
+              )}
               <Text style={styles.logoText}>immersa</Text>
               <Text style={styles.tagline}>Crea tu cuenta</Text>
             </View>
@@ -222,6 +228,12 @@ const styles = StyleSheet.create({
   logoArea: {
     alignItems: 'center',
     gap: 8,
+  },
+  // Solo en escritorio: el logo encima del nombre
+  logoMark: {
+    width: 96,
+    height: 118,
+    marginBottom: 8,
   },
   logoText: {
     fontSize: 36,

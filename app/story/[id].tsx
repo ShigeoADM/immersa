@@ -32,6 +32,7 @@ import { RoleBadge } from '@/components/role-badge';
 import { WEBNOVEL_THEMES, WEBNOVEL_THEME_DEFAULT, type WebnovelTheme, getWebnovelTheme } from '@/constants/webnovel';
 import { type StoryComment, deleteComment, listStoryComments } from '@/services/comments';
 import { CommentItem } from '@/components/comment-item';
+import { useIsDesktop } from '@/hooks/use-is-desktop';
 
 interface Story {
   id: string;
@@ -69,6 +70,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function StoryDetailScreen() {
+  const isDesktop = useIsDesktop();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user, can, publicName, isAdult, blocked } = useAuth();
@@ -349,9 +351,15 @@ export default function StoryDetailScreen() {
       </Modal>
 
       {/* ── Portada / hero ── */}
-      <View style={styles.hero}>
+      <View style={[styles.hero, isDesktop && (story.coverUrl ? styles.heroDesktop : styles.heroDesktopNoCover)]}>
         {story.coverUrl
-          ? <Image source={{ uri: story.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+          ? <Image
+              source={{ uri: story.coverUrl }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              transition={150}
+              blurRadius={isDesktop ? 40 : 0}
+            />
           : <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0A0A0A' }]} />
         }
         <View style={styles.heroOverlay} />
@@ -400,7 +408,17 @@ export default function StoryDetailScreen() {
           </View>
         </SafeAreaView>
 
-        <View style={styles.heroInfo}>
+        <View style={isDesktop ? styles.heroDesktopRow : undefined}>
+        {/* Escritorio: la portada con su proporción, a la izquierda del título */}
+        {isDesktop && story.coverUrl ? (
+          <Image
+            source={{ uri: story.coverUrl }}
+            style={(story as any).coverOrientation === 'horizontal' ? styles.coverCardWide : styles.coverCardTall}
+            contentFit="cover"
+            transition={150}
+          />
+        ) : null}
+        <View style={[styles.heroInfo, isDesktop && { flex: 1 }]}>
           <View style={[styles.formatBadge, { backgroundColor: fmtColor + 'CC' }]}>
             <Text style={styles.formatBadgeText}>{story.format}</Text>
           </View>
@@ -434,6 +452,7 @@ export default function StoryDetailScreen() {
               </TouchableOpacity>
             )}
           </View>
+        </View>
         </View>
       </View>
 
@@ -611,6 +630,13 @@ const styles = StyleSheet.create({
 
   // Hero
   hero:        { height: 280, justifyContent: 'flex-end' },
+  // Escritorio: más alto, con la portada a la izquierda y el título al lado
+  heroDesktop:    { height: 370 },
+  // Sin portada no hace falta tanta altura: quedaría un bloque vacío
+  heroDesktopNoCover: { height: 220 },
+  heroDesktopRow: { flexDirection: 'row', alignItems: 'flex-end', paddingLeft: 28, paddingBottom: 8 },
+  coverCardTall:  { width: 170, height: 255, borderRadius: 8, marginBottom: 12, backgroundColor: '#000' },
+  coverCardWide:  { width: 340, height: 191, borderRadius: 8, marginBottom: 12, backgroundColor: '#000' },
   heroOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
   heroHeader:  { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   backBtn:     { margin: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },

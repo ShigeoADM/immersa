@@ -12,6 +12,7 @@ import { RoleBadge } from '@/components/role-badge';
 import type { PublicProfile } from '@/services/profiles';
 import { type LikedStory, listFollowing, listLikedStories } from '@/services/social';
 import { type BlockedUser, listBlocked, unblockUser } from '@/services/moderation';
+import { DesktopColumn } from '@/components/desktop-column';
 
 type Tab = 'following' | 'liked' | 'blocked';
 
@@ -89,6 +90,7 @@ export default function ProfileListsScreen() {
         </View>
         <View style={styles.backBtn} />
       </SafeAreaView>
+      <DesktopColumn>
 
       {loading ? (
         <View style={styles.centered}><ActivityIndicator color={Colors.emerald} /></View>
@@ -179,6 +181,7 @@ export default function ProfileListsScreen() {
           }}
         />
       )}
+      </DesktopColumn>
     </View>
   );
 }

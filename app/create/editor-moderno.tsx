@@ -41,6 +41,7 @@ import {
   deleteChapterWithCascade, deleteStoryWithCascade, formatReadingStats, saveOrder, sortChapters,
 } from '@/services/stories';
 import { type StoryStats, getStoryStats } from '@/services/social';
+import { useIsDesktop } from '@/hooks/use-is-desktop';
 
 interface Chapter {
   id: string;
@@ -53,6 +54,7 @@ interface Chapter {
 }
 
 export default function EditorModernoScreen() {
+  const isDesktop = useIsDesktop();
   const router = useRouter();
   const { storyId, title, format: formatParam } = useLocalSearchParams<{ storyId: string; title: string; format?: string }>();
 
@@ -306,7 +308,8 @@ export default function EditorModernoScreen() {
 
       <SafeAreaView edges={['top']} style={styles.headerWrap}>
         <View style={styles.headerBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          {/* El logo lleva siempre al inicio */}
+          <TouchableOpacity onPress={() => router.navigate('/(tabs)')} style={styles.backBtn}>
             <Image source={require('@/assets/images/logo.png')} style={styles.logo} contentFit="contain" />
           </TouchableOpacity>
           <View style={styles.headerActions}>
@@ -337,10 +340,21 @@ export default function EditorModernoScreen() {
         </View>
       </SafeAreaView>
 
-      <View style={styles.titleArea}>
+      {/* Volver a la pantalla anterior (el logo lleva al inicio) */}
+      <TouchableOpacity
+        style={{ alignSelf: 'flex-start', marginLeft: 12, marginTop: 8, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}
+        onPress={() => router.back()}
+        activeOpacity={0.7}
+        hitSlop={6}
+      >
+        <MaterialIcons name="arrow-back" size={22} color={Colors.textPrimary} />
+      </TouchableOpacity>
+
+      {/* En escritorio el título y los datos van a la izquierda, no centrados */}
+      <View style={[styles.titleArea, isDesktop && { alignItems: 'flex-start' }]}>
         <Text style={styles.storyTitle} numberOfLines={1}>{storyTitle}</Text>
         {stats && (
-          <View style={styles.statsRow}>
+          <View style={[styles.statsRow, isDesktop && { justifyContent: 'flex-start' }]}>
             {([
               { icon: 'visibility',     value: stats.views,    label: stats.views === 1 ? 'lectura' : 'lecturas' },
               { icon: 'person',         value: stats.readers,  label: stats.readers === 1 ? 'lector' : 'lectores' },
@@ -562,7 +576,7 @@ const makeStyles = (accent: string) => StyleSheet.create({
   addChapterBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: accent, borderRadius: 6, paddingVertical: 14 },
   addChapterText:    { fontSize: 15, fontWeight: '700', color: '#000' },
   modalOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  modalBox:          { width: '100%', backgroundColor: Colors.surface, borderRadius: 8, padding: 24, borderWidth: 1, borderColor: Colors.border, gap: 16 },
+  modalBox:          { width: '100%', maxWidth: 460, alignSelf: 'center', backgroundColor: Colors.surface, borderRadius: 8, padding: 24, borderWidth: 1, borderColor: Colors.border, gap: 16 },
   modalTitle:        { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
   modalInput:        { backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, borderRadius: 4, paddingHorizontal: 14, paddingVertical: 12, color: Colors.textPrimary, fontSize: 14 },
   modalActions:      { flexDirection: 'row', gap: 10 },

@@ -8,10 +8,11 @@ import {
   StatusBar,
   ScrollView,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/config/firebase';
@@ -19,6 +20,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { AppAlert } from '@/components/app-dialog';
 import { deleteStoryWithCascade } from '@/services/stories';
+import { useIsDesktop } from '@/hooks/use-is-desktop';
 
 const FORMATS = [
   {
@@ -51,6 +53,7 @@ interface Story {
 }
 
 export default function WriteScreen() {
+  const isDesktop = useIsDesktop();
   const router = useRouter();
   const { user, suspended } = useAuth();
 
@@ -66,6 +69,11 @@ export default function WriteScreen() {
   const [stories, setStories]               = useState<Story[]>([]);
   const [loadingStories, setLoadingStories] = useState(true);
   const [activeTab, setActiveTab]           = useState<'books' | 'new'>('books');
+  // Web: el menú de la barra superior abre directamente "Mis libros" o "Nuevo libro"
+  const { tab: tabParam, t: tabNonce } = useLocalSearchParams<{ tab?: string; t?: string }>();
+  useEffect(() => {
+    if (tabParam === 'books' || tabParam === 'new') setActiveTab(tabParam);
+  }, [tabParam, tabNonce]);
 
   const anims = useRef(
     FORMATS.map(() => ({
@@ -131,14 +139,17 @@ export default function WriteScreen() {
     );
   };
 
-  const Header = () => (
+  // En escritorio la cabecera es la barra superior común (WebTopBar)
+  const Header = () => isDesktop ? null : (
     <SafeAreaView edges={['top']} style={styles.headerWrap}>
       <View style={styles.headerBar}>
-        <Image
-          source={require('@/assets/images/logo.png')}
-          style={styles.logo}
-          contentFit="contain"
-        />
+        <TouchableOpacity onPress={() => router.navigate('/(tabs)')} activeOpacity={0.7}>
+          <Image
+            source={require('@/assets/images/logo.png')}
+            style={styles.logo}
+            contentFit="contain"
+          />
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );

@@ -39,6 +39,7 @@ import {
   charLabelPos, charLabelSideStyle,
   type TextSize,
 } from '@/constants/reader-layout';
+import { useIsDesktop } from '@/hooks/use-is-desktop';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 type ImageAnchor   = 'top' | 'center' | 'bottom';
@@ -209,6 +210,7 @@ function VolumeRow({ value, min, max, onStep, playing, onTogglePlay }: {
 
 // ─── Pantalla ─────────────────────────────────────────────────────────────────
 export default function PageEditorScreen() {
+  const isDesktop = useIsDesktop();
   const router = useRouter();
   const { storyId, chapterId, pageId, pageOrder } = useLocalSearchParams<{
     storyId: string; chapterId: string; pageId?: string; pageOrder?: string;
@@ -1218,9 +1220,13 @@ export default function PageEditorScreen() {
         </View>
       </View>
 
-      {/* ── Preview — ancho completo, proporción de un móvil medio en horizontal ── */}
+      {/* En móvil, la vista previa arriba y las opciones debajo. En escritorio, las
+          opciones a la izquierda y la vista previa a la derecha, sin ocupar toda la ventana. */}
+      <View style={isDesktop ? styles.bodyDesktop : styles.body}>
+      <View style={isDesktop ? styles.previewPaneDesktop : undefined}>
+      {/* ── Preview — proporción de un móvil medio en horizontal ── */}
       <View
-        style={styles.preview}
+        style={[styles.preview, isDesktop && { maxWidth: 900 }]}
         onLayout={e => {
           pvW.value = e.nativeEvent.layout.width;
           pvH.value = e.nativeEvent.layout.height;
@@ -1346,19 +1352,29 @@ export default function PageEditorScreen() {
           </View>
         )}
 
-        {/* Botón centrar bloque — esquina superior derecha del preview */}
-        <TouchableOpacity
-          style={styles.resetTbBtn}
-          onPress={centerTextBox}
-          activeOpacity={0.7}
-        >
-          <MaterialIcons name="center-focus-strong" size={14} color="rgba(255,255,255,0.6)" />
-        </TouchableOpacity>
+        {/* Botón centrar bloque — esquina superior derecha del preview.
+            En web se usa el Pressable normal: el botón de gestos no recibía el clic
+            dentro de la vista previa. */}
+        {Platform.OS === 'web' ? (
+          <Pressable style={[styles.resetTbBtn, styles.resetTbBtnWeb]} onPress={centerTextBox}>
+            <MaterialIcons name="center-focus-strong" size={18} color="rgba(255,255,255,0.75)" />
+          </Pressable>
+        ) : (
+          <TouchableOpacity
+            style={styles.resetTbBtn}
+            onPress={centerTextBox}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons name="center-focus-strong" size={14} color="rgba(255,255,255,0.6)" />
+          </TouchableOpacity>
+        )}
+      </View>
+
       </View>
 
       {/* ── Configuración desplazable ── */}
       <ScrollView
-        style={styles.config}
+        style={[styles.config, isDesktop && styles.configDesktop]}
         contentContainerStyle={styles.configContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -2172,6 +2188,7 @@ export default function PageEditorScreen() {
         </View>
 
       </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -2240,6 +2257,8 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 6, right: 8,
     backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 4, padding: 4,
   },
+  // Web: por encima del cuadro de texto y sus tiradores, y con cursor de botón
+  resetTbBtnWeb: { zIndex: 20, padding: 6, cursor: 'pointer' } as any,
   uploadingOverlay: {
     ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.65)',
     alignItems: 'center', justifyContent: 'center', gap: 8, zIndex: 10,
@@ -2248,6 +2267,12 @@ const styles = StyleSheet.create({
 
   // Config scrollable
   config:        { flex: 1 },
+  // Escritorio: dos columnas. La vista previa va primero en el código, así que la fila
+  // se invierte para que quede a la derecha.
+  body:               { flex: 1 },
+  bodyDesktop:        { flex: 1, flexDirection: 'row-reverse' },
+  previewPaneDesktop: { flex: 1, padding: 28, alignItems: 'center' },
+  configDesktop:      { flexGrow: 0, flexShrink: 0, flexBasis: 480, borderRightWidth: 1, borderRightColor: Colors.border },
   configContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40, gap: 24 },
 
   section:      { gap: 10 },

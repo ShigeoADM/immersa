@@ -28,8 +28,11 @@ import {
   WEBNOVEL_THEMES, WEBNOVEL_THEME_DEFAULT, WEBNOVEL_THEME_ORDER,
   type WebnovelTheme, getWebnovelTheme, setWebnovelTheme,
 } from '@/constants/webnovel';
+import { useIsDesktop } from '@/hooks/use-is-desktop';
+import { DesktopColumn } from '@/components/desktop-column';
 
 export default function SettingsScreen() {
+  const isDesktop = useIsDesktop();
   const router  = useRouter();
   const { user } = useAuth();
 
@@ -220,6 +223,7 @@ export default function SettingsScreen() {
         </View>
       </SafeAreaView>
 
+      <DesktopColumn>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -337,11 +341,11 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* ── Cerrar sesión ── */}
-        <TouchableOpacity style={styles.signOutBtn} activeOpacity={0.8} onPress={handleSignOut}>
+        {/* ── Cerrar sesión (en escritorio está en el menú del perfil) ── */}
+        {!isDesktop && <TouchableOpacity style={styles.signOutBtn} activeOpacity={0.8} onPress={handleSignOut}>
           <MaterialIcons name="logout" size={18} color="#FF6B6B" />
           <Text style={styles.signOutText}>Cerrar sesión</Text>
-        </TouchableOpacity>
+        </TouchableOpacity>}
 
         {/* ── Usuarios bloqueados ── */}
         <TouchableOpacity
@@ -421,6 +425,7 @@ export default function SettingsScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+      </DesktopColumn>
     </View>
   );
 }

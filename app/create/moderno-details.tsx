@@ -22,6 +22,7 @@ import { Colors } from '@/constants/theme';
 import { AppAlert, useDialogAccent } from '@/components/app-dialog';
 import { ADULT_AUDIENCES, ADULT_CONTENT, AUDIENCES, GENRES } from '@/constants/story-meta';
 import { useAuth } from '@/context/AuthContext';
+import { DesktopColumn } from '@/components/desktop-column';
 
 const LANGUAGES = ['Español', 'English', 'Português', 'Français', 'Deutsch', 'Otro'];
 
@@ -257,6 +258,7 @@ export default function ModernoDetailsScreen() {
         </View>
       </SafeAreaView>
 
+      <DesktopColumn>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -557,6 +559,7 @@ export default function ModernoDetailsScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+      </DesktopColumn>
     </View>
   );
 }

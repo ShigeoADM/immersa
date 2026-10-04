@@ -26,6 +26,7 @@ import {
 import { type Report, dismissReport, listReports, reportReasonLabel } from '@/services/reports';
 import { deleteComment } from '@/services/comments';
 import { adminDeleteUserData } from '@/services/moderation';
+import { DesktopColumn } from '@/components/desktop-column';
 
 const TYPES: { value: AnnouncementType; label: string; icon: string }[] = [
   { value: 'news',  label: 'Noticia',                 icon: 'campaign' },
@@ -284,6 +285,7 @@ export default function AdminScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       {header}
+      <DesktopColumn>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
         {/* ── Tu rol ── */}
@@ -542,6 +544,7 @@ export default function AdminScreen() {
           </>
         )}
       </ScrollView>
+      </DesktopColumn>
     </View>
   );
 }

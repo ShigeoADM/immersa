@@ -25,7 +25,7 @@ import * as NavigationBar from 'expo-navigation-bar';
 import { collection, getDocs, query, orderBy, limit, doc, getDoc, setDoc, updateDoc, deleteField } from 'firebase/firestore';
 import { db, auth } from '@/config/firebase';
 import { Audio } from 'expo-av';
-import { useKeepAwake } from 'expo-keep-awake';
+import { useSafeKeepAwake } from '@/hooks/use-safe-keep-awake';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '@/constants/theme';
 import { AppAlert, AppDialogHost } from '@/components/app-dialog';
@@ -43,7 +43,7 @@ import { getStaffRoles } from '@/services/profiles';
 import { enterReading, leaveReading } from '@/services/social';
 import type { Role } from '@/constants/permissions';
 import {
-  FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, MUSIC_FADE_MS, musicPlaybackVolume, sfxPlaybackVolume,
+  REF_SCREEN, FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, MUSIC_FADE_MS, musicPlaybackVolume, sfxPlaybackVolume,
   charLabelPos, charLabelSideStyle,
   type TextSize,
 } from '@/constants/reader-layout';
@@ -414,7 +414,7 @@ export default function PageModernoReaderScreen() {
   const isPreview = preview === '1';
 
   // La pantalla no se apaga mientras el lector está abierto (párrafos largos, autoplay)
-  useKeepAwake();
+  useSafeKeepAwake();
 
   // Historial: se vacía al abrir el lector desde fuera; se conserva entre capítulos
   const [historyLen, setHistoryLen] = useState(() => {
@@ -494,7 +494,8 @@ export default function PageModernoReaderScreen() {
 
   useEffect(() => {
     mountedReaders++;
-    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+    // En web no se fuerza la orientación: el lector ocupa la ventana tal como esté
+    if (Platform.OS !== 'web') ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
     // Configurar audio una sola vez al entrar (evita delay en cada pista)
     Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
     pruneAudioCache();
@@ -522,7 +523,7 @@ export default function PageModernoReaderScreen() {
     return () => {
       mountedReaders--;
       if (mountedReaders === 0) {
-        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        if (Platform.OS !== 'web') ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
         if (Platform.OS === 'android') {
           NavigationBar.setVisibilityAsync('visible');
           NavigationBar.setBehaviorAsync('overlay-swipe');
@@ -1355,6 +1356,27 @@ export default function PageModernoReaderScreen() {
   };
   const goNextPage = () => { const next = getNextPageIndex(); if (next !== null) fadeToPage(next); };
 
+  // ── Web: leer con el teclado ──────────────────────────────────────────────
+  // Espacio, Intro o flecha derecha avanzan; flecha izquierda vuelve atrás.
+  const keyActionsRef = useRef({ next: goNext, prev: goPrev, blocked: false });
+  keyActionsRef.current = { next: goNext, prev: goPrev, blocked: showComments || showSettings || !!reportTarget };
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const win = globalThis as any;
+    const onKey = (e: any) => {
+      const tag = e.target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || keyActionsRef.current.blocked) return;
+      if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        keyActionsRef.current.next();
+      } else if (e.key === 'ArrowLeft') {
+        keyActionsRef.current.prev();
+      }
+    };
+    win.addEventListener('keydown', onKey);
+    return () => win.removeEventListener('keydown', onKey);
+  }, []);
+
   const page       = pages[current];
   // Comentarios de esta página, sin los de usuarios bloqueados
   const pageComments = page ? chapterComments.filter(c => c.pageId === page.id && !blocked.has(c.uid)) : [];
@@ -1386,13 +1408,32 @@ export default function PageModernoReaderScreen() {
   const effectiveTextSize: TextSize = inherit(p => p.textSize) ?? 'md';
 
   // Estable entre renders para que el Typewriter (memo) no se repinte sin motivo
-  const textFontSize = FONT_SIZES[effectiveTextSize] * TEXT_SCALE[textScale];
+  // ── Escenario ─────────────────────────────────────────────────────────────
+  // La página se compone sobre un escenario con la proporción de la pantalla de
+  // referencia (la misma que usa la vista previa del editor), escalado hasta caber en
+  // la ventana y centrado. El cuadro de texto, las etiquetas y el tamaño de la letra se
+  // miden respecto a ese escenario, así la página se ve igual de compuesta en un móvil,
+  // una tablet o un monitor: lo que cambia es el tamaño, no las proporciones.
+  // El fondo sí ocupa toda la ventana.
+  const stageScale = Math.max(0.01, Math.min(
+    containerSize.width / REF_SCREEN.width,
+    containerSize.height / REF_SCREEN.height,
+  ));
+  const stage = {
+    width:  REF_SCREEN.width * stageScale,
+    height: REF_SCREEN.height * stageScale,
+    left:   (containerSize.width - REF_SCREEN.width * stageScale) / 2,
+    top:    (containerSize.height - REF_SCREEN.height * stageScale) / 2,
+  };
+
+  const textFontSize = FONT_SIZES[effectiveTextSize] * TEXT_SCALE[textScale] * stageScale;
   const typewriterTextStyle = useMemo<OutlineStyle>(
     () => ({
-      fontFamily: RETRO_FONT, fontWeight: 700, color: '#FFFFFF', outlineColor: '#000', outlineWidth: 2,
-      fontSize: textFontSize, lineHeight: textFontSize * 1.6, letterSpacing: TEXT_BOX.letterSpacing,
+      fontFamily: RETRO_FONT, fontWeight: 700, color: '#FFFFFF', outlineColor: '#000',
+      outlineWidth: Math.max(1.5, 2 * stageScale),
+      fontSize: textFontSize, lineHeight: textFontSize * 1.6, letterSpacing: TEXT_BOX.letterSpacing * stageScale,
     }),
-    [textFontSize],
+    [textFontSize, stageScale],
   );
   const endChapterStyle = useMemo<OutlineStyle>(
     () => ({
@@ -1419,10 +1460,10 @@ export default function PageModernoReaderScreen() {
   const effectiveLeftCharSide  = inherit(p => p.leftCharSide)  ?? 1;
   const effectiveRightCharSide = inherit(p => p.rightCharSide) ?? 1;
   const tbPixels = {
-    left:   (tbl.x / 100) * containerSize.width,
-    top:    (tbl.y / 100) * containerSize.height,
-    width:  (tbl.w / 100) * containerSize.width,
-    height: (tbl.h / 100) * containerSize.height,
+    left:   stage.left + (tbl.x / 100) * stage.width,
+    top:    stage.top  + (tbl.y / 100) * stage.height,
+    width:  (tbl.w / 100) * stage.width,
+    height: (tbl.h / 100) * stage.height,
   };
 
   // ── Etiquetas de personaje ────────────────────────────────────────────────
@@ -1436,10 +1477,10 @@ export default function PageModernoReaderScreen() {
   ) => {
     const { w, h } = labelSizes[key];
     const freeX = pos
-      ? (pos.x / 100) * containerSize.width
+      ? stage.left + (pos.x / 100) * stage.width
       : key === 'left' ? tbPixels.left : tbPixels.left + tbPixels.width - w;
     const freeY = pos
-      ? (pos.y / 100) * containerSize.height
+      ? stage.top + (pos.y / 100) * stage.height
       : side === 3 || side === 4 ? tbPixels.top : tbPixels.top - h;
     const { left, top } = charLabelPos(
       side, freeX, freeY, w, h,
@@ -1457,8 +1498,25 @@ export default function PageModernoReaderScreen() {
           }
         }}
       >
-        <View style={[styles.charLabel, { borderColor: accentColor + '70' }, charLabelSideStyle(side, CHAR_LABEL.radius)]}>
-          <Text style={[styles.charLabelText, { color: accentColor }]} numberOfLines={1}>
+        <View
+          style={[
+            styles.charLabel,
+            {
+              borderColor: accentColor + '70',
+              paddingHorizontal: CHAR_LABEL.paddingHorizontal * stageScale,
+              paddingVertical: CHAR_LABEL.paddingVertical * stageScale,
+            },
+            charLabelSideStyle(side, CHAR_LABEL.radius * stageScale),
+          ]}
+        >
+          <Text
+            style={[styles.charLabelText, {
+              color: accentColor,
+              fontSize: CHAR_LABEL.fontSize * stageScale,
+              letterSpacing: CHAR_LABEL.letterSpacing * stageScale,
+            }]}
+            numberOfLines={1}
+          >
             {name}
           </Text>
         </View>
@@ -1525,7 +1583,15 @@ export default function PageModernoReaderScreen() {
           renderCharLabel('right', effectiveRightChar, effectiveRightCharSide, effectiveRightCharPos)}
 
         {/* ── Bloque de texto — posición y tamaño definidos por el autor ── */}
-        <View style={[styles.textBox, { position: 'absolute', ...tbPixels }]}>
+        <View
+          style={[styles.textBox, {
+            position: 'absolute', ...tbPixels,
+            borderRadius: TEXT_BOX.radius * stageScale,
+            paddingHorizontal: TEXT_BOX.paddingHorizontal * stageScale,
+            paddingTop: TEXT_BOX.paddingTop * stageScale,
+            paddingBottom: TEXT_BOX.paddingBottom * stageScale,
+          }]}
+        >
             {page ? (
               <Typewriter
                 ref={typewriterRef}
