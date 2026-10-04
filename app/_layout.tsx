@@ -56,7 +56,8 @@ function RootNavigator() {
   const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-  const navReady = !!useRootNavigationState()?.key;
+  const rootNavState = useRootNavigationState();
+  const navReady = !!rootNavState?.key;
   const isDesktop = useIsDesktop();
 
   // Pintar la barra de navegación Android del mismo color oscuro que la app.
@@ -89,7 +90,16 @@ function RootNavigator() {
     if (!user && !inAuth && !GUESTS_ALLOWED) {
       router.replace('/auth/login');
     } else if (user && inAuth) {
-      router.replace('/(tabs)');
+      // Web: si el invitado venía de otra pantalla (una ficha, un lector), se vuelve a
+      // ella cerrando las pantallas de acceso que tenga encima. Si no, al inicio.
+      const routes = (rootNavState as any)?.routes ?? [];
+      let authOnTop = 0;
+      for (let i = routes.length - 1; i >= 0 && String(routes[i].name).startsWith('auth/'); i--) authOnTop++;
+      if (GUESTS_ALLOWED && authOnTop > 0 && authOnTop < routes.length) {
+        router.dismiss(authOnTop);
+      } else {
+        router.replace('/(tabs)');
+      }
     }
   }, [user, loading, navReady]);   // ← sin 'segments': evita bucles de navegación
 

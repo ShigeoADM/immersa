@@ -29,6 +29,7 @@ import { AppAlert } from '@/components/app-dialog';
 import { ReportModal } from '@/components/report-modal';
 import type { ReportTarget } from '@/services/reports';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
+import { promptLogin } from '@/components/login-prompt';
 
 type ChapterRef = { id: string; title: string };
 
@@ -215,10 +216,14 @@ export default function WebnovelReaderScreen() {
   };
 
   // ── Comentarios ───────────────────────────────────────────────────────────
+  // Invitado: al intentar comentar se le pregunta si quiere iniciar sesión
+  const askLoginToComment = () =>
+    promptLogin(() => router.push('/auth/login'), 'Necesitas una cuenta para comentar.');
+
   const handleSendComment = async () => {
     const text = commentText.trim();
     const me = auth.currentUser;
-    if (!me) { router.push('/auth/login'); return; } // invitado
+    if (!me) { askLoginToComment(); return; } // invitado
     if (!text || !storyId || !chapterId || sending) return;
     if (suspended) {
       AppAlert.alert('Cuenta suspendida', 'Tu cuenta está suspendida: no puedes comentar.');
@@ -365,6 +370,12 @@ export default function WebnovelReaderScreen() {
                   placeholderTextColor={theme.muted}
                   maxLength={COMMENT_MAX_LENGTH}
                   multiline
+                  // Invitado: no se le deja escribir; se le pregunta si quiere entrar
+                  onFocus={e => {
+                    if (auth.currentUser) return;
+                    (e.target as any)?.blur?.();
+                    askLoginToComment();
+                  }}
                 />
                 <TouchableOpacity
                   style={[styles.commentSendBtn, (!commentText.trim() || sending) && { opacity: 0.4 }]}

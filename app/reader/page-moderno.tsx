@@ -18,7 +18,7 @@ import {
   KeyboardAvoidingView,
   AppState,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as NavigationBar from 'expo-navigation-bar';
@@ -47,6 +47,7 @@ import {
   charLabelPos, charLabelSideStyle,
   type TextSize,
 } from '@/constants/reader-layout';
+import { promptLogin } from '@/components/login-prompt';
 
 // ─── Colores de acento del lector ────────────────────────────────────────────
 const UI_ACCENT_KEY = 'immersa_ui_color';
@@ -985,6 +986,23 @@ export default function PageModernoReaderScreen() {
     }).catch(() => {});
   }, [nextChapter, current, pages]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Pausar la música al salir del lector a otra pantalla y reanudarla al volver ──
+  // (por ejemplo, al ir a iniciar sesión desde el lector). El lector sigue montado
+  // debajo, así que sin esto la música seguiría sonando en la otra pantalla.
+  const pausedByBlurRef = useRef(false);
+  useFocusEffect(useCallback(() => {
+    if (pausedByBlurRef.current) {
+      pausedByBlurRef.current = false;
+      soundRef.current?.playAsync().catch(() => {});
+    }
+    return () => {
+      const sound = soundRef.current;
+      if (!sound) return;
+      pausedByBlurRef.current = true;
+      sound.pauseAsync().catch(() => {});
+    };
+  }, []));
+
   // ── Cleanup al salir del reader ───────────────────────────────────────────
   useEffect(() => {
     return () => {
@@ -1208,11 +1226,20 @@ export default function PageModernoReaderScreen() {
   };
 
   // ── Comentarios de la página ──────────────────────────────────────────────
+  // Invitado: al intentar comentar se le pregunta si quiere iniciar sesión. Solo si
+  // acepta se cierra el panel y se va a la pantalla de acceso (la música se pausa al
+  // salir del lector y se reanuda al volver, ver más abajo).
+  const askLoginToComment = () =>
+    promptLogin(
+      () => { setShowComments(false); router.push('/auth/login'); },
+      'Necesitas una cuenta para comentar.',
+    );
+
   const handleSendComment = async () => {
     const text = commentText.trim();
     const me = auth.currentUser;
     const pg = pages[current];
-    if (!me) { setShowComments(false); router.push('/auth/login'); return; } // invitado
+    if (!me) { askLoginToComment(); return; } // invitado
     if (!text || !pg || sendingComment) return;
     if (suspended) {
       AppAlert.alert('Cuenta suspendida', 'Tu cuenta está suspendida: no puedes comentar.');
@@ -1862,6 +1889,12 @@ export default function PageModernoReaderScreen() {
                 maxLength={COMMENT_MAX_LENGTH}
                 multiline
                 disableFullscreenUI
+                // Invitado: no se le deja escribir; se le pregunta si quiere entrar
+                onFocus={e => {
+                  if (auth.currentUser) return;
+                  (e.target as any)?.blur?.();
+                  askLoginToComment();
+                }}
               />
               <TouchableOpacity
                 style={[styles.commentSendBtn, { backgroundColor: accentColor }, (!commentText.trim() || sendingComment) && { opacity: 0.4 }]}

@@ -33,6 +33,7 @@ import { WEBNOVEL_THEMES, WEBNOVEL_THEME_DEFAULT, type WebnovelTheme, getWebnove
 import { type StoryComment, deleteComment, listStoryComments } from '@/services/comments';
 import { CommentItem } from '@/components/comment-item';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
+import { promptLogin } from '@/components/login-prompt';
 
 interface Story {
   id: string;
@@ -230,7 +231,10 @@ export default function StoryDetailScreen() {
 
   // Me gusta: se pinta al instante y se deshace si falla
   const toggleLike = async () => {
-    if (!user) { router.push('/auth/login'); return; } // invitado
+    if (!user) { // invitado
+      promptLogin(() => router.push('/auth/login'), 'Necesitas una cuenta para dar me gusta.');
+      return;
+    }
     if (!story || liking) return;
     const next = !liked;
     setLiking(true);
