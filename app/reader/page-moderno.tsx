@@ -43,7 +43,7 @@ import { getStaffRoles } from '@/services/profiles';
 import { enterReading, leaveReading } from '@/services/social';
 import type { Role } from '@/constants/permissions';
 import {
-  REF_SCREEN, FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, MUSIC_FADE_MS, musicPlaybackVolume, sfxPlaybackVolume,
+  REF_SCREEN, FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, pageSfxCues, splitParagraphs, type SfxCue, MUSIC_FADE_MS, musicPlaybackVolume, sfxPlaybackVolume,
   charLabelPos, charLabelSideStyle,
   type TextSize,
 } from '@/constants/reader-layout';
@@ -108,6 +108,7 @@ interface Page {
   nextPageIndex?: number | null;    // formato antiguo (por número)
   sfxUrl?: string;                  // efecto de sonido al llegar a la página
   sfxVolume?: number;               // ajuste del autor para el efecto (1 = 100 %)
+  sfxCues?: SfxCue[];               // efectos por párrafo (si existe, sustituye a sfxUrl)
   order: number;
   // Nombres de personaje — undefined = heredar, '' = ocultar, string = mostrar
   leftChar?: string;
@@ -618,8 +619,7 @@ export default function PageModernoReaderScreen() {
           const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<Page, 'id'>) }));
           const byId = pageIdParam ? list.findIndex(p => p.id === pageIdParam) : -1;
           const startIdx = Math.min(byId >= 0 ? byId : currentRef.current, list.length - 1);
-          const startSfx = list[startIdx]?.sfxUrl;
-          if (startSfx) loadAudio(startSfx, false, true).catch(() => {});
+          pageSfxCues(list[startIdx]).forEach(c => loadAudio(c.url, false, true).catch(() => {}));
           for (let i = startIdx; i >= 0; i--) {
             if (list[i].musicUrl === undefined) continue;
             if (list[i].musicUrl) loadAudio(list[i].musicUrl as string, true, true).catch(() => {});
@@ -714,7 +714,7 @@ export default function PageModernoReaderScreen() {
     if (pages.length === 0) return;
     const text = pages[current]?.text ?? '';
     // Dividir solo en doble salto de línea — los \n simples se preservan dentro del párrafo
-    const paras = text.split(/\n\n+/).map(p => p.replace(/^\n+|\n+$/g, '')).filter(p => p.length > 0);
+    const paras = splitParagraphs(text);
     setParagraphs(paras.length > 0 ? paras : ['']);
     setParaIndex(0);
     setParaComplete(false);
@@ -982,26 +982,34 @@ export default function PageModernoReaderScreen() {
     // Si misma pista y mismo volumen: no hacer nada (sigue sonando)
   }, [current, pages, inheritChain]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Efecto de sonido de la página: una vez al llegar; se corta al cambiar ──
+  // ── Efectos de sonido de la página ────────────────────────────────────────
+  // Cada efecto suena al aparecer su párrafo (el del párrafo 1, al llegar a la página).
+  // Pueden coincidir varios. Al cambiar de página se cortan los que sigan sonando.
+  const sfxPlayingRef = useRef(new Set<Audio.Sound>());
   useEffect(() => {
-    const url = pages[current]?.sfxUrl;
-    if (!url) return;
-    let cancelled = false;
-    let playing: Audio.Sound | null = null;
-    loadAudio(url, false, true)
-      .then(sound => {
-        if (cancelled || isMutedRef.current) return;
-        playing = sound;
-        return sound.setStatusAsync({
-          shouldPlay: true, positionMillis: 0, volume: sfxPlaybackVolume(pages[current]?.sfxVolume),
-        });
-      })
-      .catch(e => console.error('Error reproduciendo efecto de sonido:', e));
+    const playing = sfxPlayingRef.current;
     return () => {
-      cancelled = true;
-      (playing as Audio.Sound | null)?.stopAsync().catch(() => {});
+      playing.forEach(s => s.stopAsync().catch(() => {}));
+      playing.clear();
     };
-  }, [current, pages]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [current, pages]);
+  useEffect(() => {
+    const cues = pageSfxCues(pages[current]).filter(c => c.paragraph - 1 === paraIndex);
+    if (cues.length === 0) return;
+    let cancelled = false;
+    cues.forEach(cue => {
+      loadAudio(cue.url, false, true)
+        .then(sound => {
+          if (cancelled || isMutedRef.current) return;
+          sfxPlayingRef.current.add(sound);
+          return sound.setStatusAsync({
+            shouldPlay: true, positionMillis: 0, volume: sfxPlaybackVolume(cue.volume),
+          });
+        })
+        .catch(e => console.error('Error reproduciendo efecto de sonido:', e));
+    });
+    return () => { cancelled = true; };
+  }, [current, pages, paraIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Precarga de audio: página actual y siguiente; se libera el resto ─────
   useEffect(() => {
@@ -1018,8 +1026,10 @@ export default function PageModernoReaderScreen() {
     for (const t of targets) {
       const m = musicOf(t.chain);
       if (m) { wanted.add('music:' + m); if (t.now) urgent.add('music:' + m); }
-      const s = t.page?.sfxUrl;
-      if (s) { wanted.add('sfx:' + s); if (t.now) urgent.add('sfx:' + s); }
+      pageSfxCues(t.page).forEach(c => {
+        wanted.add('sfx:' + c.url);
+        if (t.now) urgent.add('sfx:' + c.url);
+      });
     }
     if (currentTrackRef.current) wanted.add('music:' + currentTrackRef.current);
     if (playingUrlRef.current) wanted.add('music:' + playingUrlRef.current);
@@ -1051,7 +1061,7 @@ export default function PageModernoReaderScreen() {
         chapterStartHint = { chapterId: nextId, musicUrl: first.musicUrl, musicVolume: first.musicVolume };
         downloadAudio(first.musicUrl).catch(() => {});
       }
-      if (first.sfxUrl) downloadAudio(first.sfxUrl).catch(() => {});
+      pageSfxCues(first).forEach(c => downloadAudio(c.url).catch(() => {}));
     }).catch(() => {});
   }, [nextChapter, current, pages]); // eslint-disable-line react-hooks/exhaustive-deps
 

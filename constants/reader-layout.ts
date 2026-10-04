@@ -39,6 +39,21 @@ export const SFX_VOLUME_MAX  = 1.2;     // 0,8 × 1,2 ≈ 1
 export const sfxPlaybackVolume = (sfxVolume = 1) =>
   Math.min(1, SFX_BASE_VOLUME * sfxVolume);
 
+// Efectos de sonido de una página. Cada uno suena al aparecer un párrafo concreto
+// (1 = el primero, es decir, al llegar a la página). Puede haber varios.
+// Las páginas antiguas tienen un único efecto (sfxUrl / sfxVolume), que equivale a un
+// efecto en el párrafo 1; se sigue guardando para los lectores que no conocen la lista.
+export type SfxCue = { paragraph: number; url: string; volume?: number };
+export function pageSfxCues(page?: { sfxCues?: SfxCue[]; sfxUrl?: string; sfxVolume?: number } | null): SfxCue[] {
+  if (!page) return [];
+  if (Array.isArray(page.sfxCues)) return page.sfxCues.filter(c => c && !!c.url);
+  return page.sfxUrl ? [{ paragraph: 1, url: page.sfxUrl, volume: page.sfxVolume }] : [];
+}
+// Los párrafos se separan con una línea en blanco (igual en el editor y en el lector)
+export function splitParagraphs(text: string): string[] {
+  return text.split(/\n\n+/).map(p => p.replace(/^\n+|\n+$/g, '')).filter(p => p.length > 0);
+}
+
 // Duración del fundido de la música al entrar, salir o cambiar de pista
 export const MUSIC_FADE_MS = 450;
 

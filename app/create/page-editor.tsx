@@ -35,7 +35,7 @@ import { GestureDetector, Gesture, TouchableOpacity } from 'react-native-gesture
 import {
   REF_SCREEN, FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, BG_BLUR_MAX, BG_BLUR_PRESETS,
   MUSIC_VOLUME_MIN, MUSIC_VOLUME_MAX, MUSIC_VOLUME_STEP, SFX_VOLUME_MAX,
-  musicPlaybackVolume, sfxPlaybackVolume,
+  musicPlaybackVolume, sfxPlaybackVolume, pageSfxCues, splitParagraphs,
   charLabelPos, charLabelSideStyle,
   type TextSize,
 } from '@/constants/reader-layout';
@@ -117,6 +117,11 @@ const MEDIA_SOURCE_LABEL = { file: 'Archivo', url: 'URL / Drive', library: 'Ya s
 
 // Archivos ya usados en la historia (para reutilizarlos sin volver a subirlos)
 type MediaLibrary = { images: string[]; music: string[]; sfx: string[] };
+// Efecto de sonido en edición (id solo para la lista de la pantalla)
+type EditorSfxCue = { id: string; paragraph: number; url: string; name: string; volume: number };
+let sfxCueSeq = 0;
+const newSfxCue = (url: string, name: string, paragraph = 1, volume = 1): EditorSfxCue =>
+  ({ id: `cue${++sfxCueSeq}`, paragraph, url, name, volume });
 
 // Lista de archivos ya usados en la historia, para elegir uno
 function MediaLibraryPicker({ kind, loading, urls, onPick }: {
@@ -251,13 +256,12 @@ export default function PageEditorScreen() {
   // Ids de las páginas del capítulo en orden: traduce número de página ↔ id
   const [chapterPageIds, setChapterPageIds] = useState<string[]>([]);
   // Efecto de sonido (se reproduce una vez al llegar a la página; no se hereda)
-  const [sfxUrl, setSfxUrl]             = useState('');
-  const [sfxFileName, setSfxFileName]   = useState('');
+  // Efectos de sonido: varios por página, cada uno ligado al párrafo en el que suena
+  const [sfxCues, setSfxCues]           = useState<EditorSfxCue[]>([]);
   const [uploadingSfx, setUploadingSfx] = useState(false);
   const [sfxSource, setSfxSource]       = useState<MediaSource>('file');
   const [sfxUrlInput, setSfxUrlInput]   = useState('');
-  const [sfxVolume, setSfxVolume]       = useState(1);       // ajuste del autor (1 = 100 %)
-  const [previewingSfx, setPreviewingSfx] = useState(false);
+  const [previewingSfxId, setPreviewingSfxId] = useState<string | null>(null);
   const sfxPreviewRef = useRef<Audio.Sound | null>(null);
   // Archivos ya usados en la historia: se cargan la primera vez que se elige "Ya subidos"
   const [mediaLibrary, setMediaLibrary]     = useState<MediaLibrary | null>(null);
@@ -645,9 +649,8 @@ export default function PageEditorScreen() {
                       : typeof p.nextPageIndex === 'number' ? p.nextPageIndex
                       : -1;
         if (jumpIdx >= 0) { setJumpEnabled(true); setNextPageInput(String(jumpIdx + 1)); }
-        setSfxUrl(p.sfxUrl ?? '');
-        setSfxVolume(p.sfxVolume ?? 1);
-        if (p.sfxUrl) setSfxFileName(decodeURIComponent(p.sfxUrl.split('/').pop()?.split('?')[0] ?? 'Efecto'));
+        setSfxCues(pageSfxCues(p).map(c =>
+          newSfxCue(c.url, fileNameFromUrl(c.url, 'Efecto'), c.paragraph, c.volume ?? 1)));
         // Personajes
         if (p.leftChar === undefined) { setLeftCharMode('inherit'); }
         else if (p.leftChar === '')   { setLeftCharMode('hide'); }
@@ -859,40 +862,53 @@ export default function PageEditorScreen() {
   const stepVolume = (v: number, delta: number, max: number) =>
     Math.round(Math.min(max, Math.max(MUSIC_VOLUME_MIN, v + delta)) * 10) / 10;
   const changeMusicVolume = (delta: number) => setMusicVolume(v => stepVolume(v, delta, MUSIC_VOLUME_MAX));
-  const changeSfxVolume   = (delta: number) => setSfxVolume(v => stepVolume(v, delta, SFX_VOLUME_MAX));
+  // ── Efectos de sonido: añadir, mover de párrafo, volumen, quitar ───────────
+  const paragraphCount = Math.max(1, splitParagraphs(pageText).length);
+  const addSfxCue = (url: string, name: string) =>
+    setSfxCues(list => [...list, newSfxCue(url, name)]);
+  const updateSfxCue = (id: string, patch: Partial<EditorSfxCue>) =>
+    setSfxCues(list => list.map(c => (c.id === id ? { ...c, ...patch } : c)));
+  const removeSfxCue = (id: string) => {
+    if (previewingSfxId === id) stopSfxPreview();
+    setSfxCues(list => list.filter(c => c.id !== id));
+  };
+  const changeSfxCueVolume = (cue: EditorSfxCue, delta: number) => {
+    const volume = stepVolume(cue.volume, delta, SFX_VOLUME_MAX);
+    updateSfxCue(cue.id, { volume });
+    if (previewingSfxId === cue.id) {
+      sfxPreviewRef.current?.setVolumeAsync(sfxPlaybackVolume(volume)).catch(() => {});
+    }
+  };
 
   // ── Escuchar el efecto de sonido (una vez, con el volumen elegido) ─────────
   const stopSfxPreview = useCallback(() => {
     const s = sfxPreviewRef.current;
     sfxPreviewRef.current = null;
-    setPreviewingSfx(false);
+    setPreviewingSfxId(null);
     s?.stopAsync().catch(() => {});
     s?.unloadAsync().catch(() => {});
   }, []);
 
-  const toggleSfxPreview = async () => {
-    if (previewingSfx) { stopSfxPreview(); return; }
-    if (!sfxUrl) return;
-    setPreviewingSfx(true);
+  const toggleSfxPreview = async (cue: EditorSfxCue) => {
+    const wasPlaying = previewingSfxId === cue.id;
+    stopSfxPreview();
+    if (wasPlaying) return;
+    setPreviewingSfxId(cue.id);
     try {
       await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
       const { sound } = await Audio.Sound.createAsync(
-        { uri: sfxUrl },
-        { shouldPlay: true, volume: sfxPlaybackVolume(sfxVolume) },
+        { uri: cue.url },
+        { shouldPlay: true, volume: sfxPlaybackVolume(cue.volume) },
       );
       sfxPreviewRef.current = sound;
       sound.setOnPlaybackStatusUpdate(status => {
         if (status.isLoaded && status.didJustFinish) stopSfxPreview();
       });
     } catch (e: any) {
-      setPreviewingSfx(false);
+      setPreviewingSfxId(null);
       AppAlert.alert('No se pudo reproducir', e?.message ?? 'Comprueba el archivo o el enlace.');
     }
   };
-  useEffect(() => {
-    sfxPreviewRef.current?.setVolumeAsync(sfxPlaybackVolume(sfxVolume)).catch(() => {});
-  }, [sfxVolume]);
-  useEffect(() => { stopSfxPreview(); }, [sfxUrl, stopSfxPreview]);
 
   // Al salir de la pantalla (también al ir a "Probar") se para lo que esté sonando
   useFocusEffect(useCallback(() => () => { stopMusicPreview(); stopSfxPreview(); }, [stopMusicPreview, stopSfxPreview]));
@@ -914,7 +930,7 @@ export default function PageEditorScreen() {
             const d = p.data();
             if (d.backgroundUrl) images.add(d.backgroundUrl);
             if (typeof d.musicUrl === 'string' && d.musicUrl) music.add(d.musicUrl);
-            if (d.sfxUrl) sfx.add(d.sfxUrl);
+            pageSfxCues(d).forEach(c => sfx.add(c.url));
           });
         }));
       } catch (e) {
@@ -928,8 +944,7 @@ export default function PageEditorScreen() {
   // ── Handlers de efecto de sonido ──────────────────────────────────────────
   const handleUseSfxUrl = () => {
     if (!sfxUrlInput.trim()) return;
-    setSfxUrl(normalizeMediaUrl(sfxUrlInput));
-    setSfxFileName(sfxUrlInput.trim());
+    addSfxCue(normalizeMediaUrl(sfxUrlInput), sfxUrlInput.trim());
     setSfxUrlInput('');
   };
 
@@ -942,7 +957,7 @@ export default function PageEditorScreen() {
       try {
         const ext = asset.name.split('.').pop() ?? 'mp3';
         const url = await uploadLocalFile(asset.uri, `sfx/${storyId}/${chapterId}/${Date.now()}.${ext}`);
-        setSfxUrl(url); setSfxFileName(asset.name);
+        addSfxCue(url, asset.name);
       } catch (e: any) { AppAlert.alert('Error al subir el sonido', e?.message ?? 'Inténtalo de nuevo.'); }
       finally { setUploadingSfx(false); }
     } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo abrir el selector.'); }
@@ -952,7 +967,8 @@ export default function PageEditorScreen() {
   // Instantánea de todo lo que se guarda; si difiere de la inicial hay cambios.
   const snapshot = JSON.stringify({
     pageText, bgUrl, imageAnchor, imageFit, bgBlur, musicMode, musicVolume, editMusicUrl, textSize, tbLayout, links,
-    jumpEnabled, nextPageInput, sfxUrl, sfxVolume,
+    jumpEnabled, nextPageInput,
+    sfxCues: sfxCues.map(c => ({ paragraph: c.paragraph, url: c.url, volume: c.volume })),
     leftCharMode, leftCharName, rightCharMode, rightCharName,
     leftCharPos, rightCharPos, leftCharSide, rightCharSide,
   });
@@ -984,8 +1000,8 @@ export default function PageEditorScreen() {
     if (d.tbLayout) { setTbLayout(d.tbLayout); applyTbShared(d.tbLayout); }
     setLinks(d.links ?? []);
     setJumpEnabled(!!d.jumpEnabled); setNextPageInput(d.nextPageInput ?? '');
-    setSfxUrl(d.sfxUrl ?? ''); setSfxVolume(d.sfxVolume ?? 1);
-    setSfxFileName(d.sfxUrl ? fileNameFromUrl(d.sfxUrl, 'Efecto') : '');
+    setSfxCues(pageSfxCues(d).map(c =>
+      newSfxCue(c.url, fileNameFromUrl(c.url, 'Efecto'), c.paragraph, c.volume ?? 1)));
     setLeftCharMode(d.leftCharMode ?? 'inherit');   setLeftCharName(d.leftCharName ?? '');
     setRightCharMode(d.rightCharMode ?? 'inherit'); setRightCharName(d.rightCharName ?? '');
     if (d.leftCharPos)  { setLeftCharPos(d.leftCharPos);   applyLcShared(d.leftCharPos); }
@@ -1084,6 +1100,14 @@ export default function PageEditorScreen() {
         musicMode === 'inherit' ? undefined : musicMode === 'silence' ? null : editMusicUrl;
 
       const cleanLinks = links.filter(l => l.word.trim());
+      // Efectos de sonido: en orden de párrafo; el volumen solo se guarda si no es el normal
+      const savedSfxCues = [...sfxCues]
+        .map(c => ({ ...c, paragraph: Math.min(c.paragraph, paragraphCount) }))
+        .sort((a, b) => a.paragraph - b.paragraph)
+        .map(c => (c.volume !== 1
+          ? { paragraph: c.paragraph, url: c.url, volume: c.volume }
+          : { paragraph: c.paragraph, url: c.url }));
+      const legacySfx: { url: string; volume?: number } | undefined = savedSfxCues.find(c => c.paragraph === 1);
 
       if (isEditing) {
         const updateData: any = {
@@ -1093,8 +1117,10 @@ export default function PageEditorScreen() {
         };
         updateData.nextPageId    = nextPageId ?? deleteField();
         updateData.nextPageIndex = deleteField(); // formato antiguo (por número)
-        updateData.sfxUrl        = sfxUrl || deleteField();
-        updateData.sfxVolume     = sfxUrl && sfxVolume !== 1 ? sfxVolume : deleteField();
+        updateData.sfxCues       = savedSfxCues.length ? savedSfxCues : deleteField();
+        // Formato antiguo (un solo efecto, al llegar): se mantiene para lectores sin actualizar
+        updateData.sfxUrl        = legacySfx?.url ?? deleteField();
+        updateData.sfxVolume     = legacySfx?.volume ?? deleteField();
         if (textSize === undefined) updateData.textSize = deleteField();
         else updateData.textSize = textSize;
         if (musicMode === 'inherit')  updateData.musicUrl = deleteField();
@@ -1132,8 +1158,9 @@ export default function PageEditorScreen() {
           links: cleanLinks,
         };
         if (nextPageId) newData.nextPageId = nextPageId;
-        if (sfxUrl) newData.sfxUrl = sfxUrl;
-        if (sfxUrl && sfxVolume !== 1) newData.sfxVolume = sfxVolume;
+        if (savedSfxCues.length) newData.sfxCues = savedSfxCues;
+        if (legacySfx) newData.sfxUrl = legacySfx.url;
+        if (legacySfx?.volume !== undefined) newData.sfxVolume = legacySfx.volume;
         if (textSize !== undefined) newData.textSize = textSize;
         if (musicMode === 'silence') newData.musicUrl = null;
         else if (musicMode === 'play' && editMusicUrl) newData.musicUrl = editMusicUrl;
@@ -1676,30 +1703,60 @@ export default function PageEditorScreen() {
 
         {/* Efecto de sonido */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Efecto de sonido</Text>
+          <Text style={styles.sectionLabel}>Efectos de sonido</Text>
           <Text style={styles.sectionHint}>
-            Suena una vez al llegar a esta página (una puerta, un trueno…). No se hereda.
+            Suenan una vez cuando aparece el párrafo que elijas (una puerta, un trueno…). Puedes
+            poner varios. El párrafo 1 es al llegar a la página. No se heredan.
           </Text>
-          {sfxUrl ? (
-            <>
-              <View style={styles.musicTrackRow}>
-                <MaterialIcons name="graphic-eq" size={14} color={Colors.aqua} />
-                <Text style={styles.musicTrackName} numberOfLines={1}>{sfxFileName || 'Efecto de sonido'}</Text>
-                <TouchableOpacity
-                  onPress={() => { setSfxUrl(''); setSfxFileName(''); }}
-                  style={{ padding: 6 }}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <MaterialIcons name="close" size={15} color="#FF6B6B" />
-                </TouchableOpacity>
+          {sfxCues.map(cue => {
+            const paragraph = Math.min(cue.paragraph, paragraphCount);
+            const snippet = splitParagraphs(pageText)[paragraph - 1] ?? '';
+            return (
+              <View key={cue.id} style={styles.sfxCueCard}>
+                <View style={styles.musicTrackRow}>
+                  <MaterialIcons name="graphic-eq" size={14} color={Colors.aqua} />
+                  <Text style={styles.musicTrackName} numberOfLines={1}>{cue.name || 'Efecto de sonido'}</Text>
+                  <TouchableOpacity
+                    onPress={() => removeSfxCue(cue.id)}
+                    style={{ padding: 6 }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <MaterialIcons name="close" size={15} color="#FF6B6B" />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.anchorRow}>
+                  <Text style={styles.anchorLabel}>Suena en el párrafo:</Text>
+                  <TouchableOpacity
+                    style={[styles.blurStepBtn, paragraph <= 1 && { opacity: 0.35 }]}
+                    onPress={() => updateSfxCue(cue.id, { paragraph: Math.max(1, paragraph - 1) })}
+                    disabled={paragraph <= 1}
+                    hitSlop={6}
+                  >
+                    <MaterialIcons name="remove" size={14} color={Colors.textSecondary} />
+                  </TouchableOpacity>
+                  <Text style={styles.blurValue}>{paragraph}</Text>
+                  <TouchableOpacity
+                    style={[styles.blurStepBtn, paragraph >= paragraphCount && { opacity: 0.35 }]}
+                    onPress={() => updateSfxCue(cue.id, { paragraph: Math.min(paragraphCount, paragraph + 1) })}
+                    disabled={paragraph >= paragraphCount}
+                    hitSlop={6}
+                  >
+                    <MaterialIcons name="add" size={14} color={Colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+                {snippet ? (
+                  <Text style={styles.sfxCueSnippet} numberOfLines={1}>«{snippet.replace(/\n/g, ' ')}»</Text>
+                ) : null}
+                <VolumeRow
+                  value={cue.volume} min={MUSIC_VOLUME_MIN} max={SFX_VOLUME_MAX}
+                  onStep={delta => changeSfxCueVolume(cue, delta)}
+                  playing={previewingSfxId === cue.id} onTogglePlay={() => toggleSfxPreview(cue)}
+                />
               </View>
-              <VolumeRow
-                value={sfxVolume} min={MUSIC_VOLUME_MIN} max={SFX_VOLUME_MAX}
-                onStep={changeSfxVolume}
-                playing={previewingSfx} onTogglePlay={toggleSfxPreview}
-              />
-            </>
-          ) : (
+            );
+          })}
+          <Text style={styles.anchorLabel}>{sfxCues.length ? 'Añadir otro efecto:' : 'Añadir un efecto:'}</Text>
+          {(
             <>
               <View style={styles.sourceToggleRow}>
                 {MEDIA_SOURCES.map(src => (
@@ -1721,7 +1778,7 @@ export default function PageEditorScreen() {
                   kind="audio"
                   loading={loadingLibrary}
                   urls={mediaLibrary?.sfx ?? []}
-                  onPick={url => { setSfxUrl(url); setSfxFileName(fileNameFromUrl(url, 'Efecto')); }}
+                  onPick={url => addSfxCue(url, fileNameFromUrl(url, 'Efecto'))}
                 />
               ) : sfxSource === 'file' ? (
                 <TouchableOpacity
@@ -2267,6 +2324,9 @@ const styles = StyleSheet.create({
 
   // Config scrollable
   config:        { flex: 1 },
+  // Tarjeta de un efecto de sonido
+  sfxCueCard:    { gap: 8, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
+  sfxCueSnippet: { fontSize: 11, color: Colors.textMuted, fontStyle: 'italic' },
   // Escritorio: dos columnas. La vista previa va primero en el código, así que la fila
   // se invierte para que quede a la derecha.
   body:               { flex: 1 },

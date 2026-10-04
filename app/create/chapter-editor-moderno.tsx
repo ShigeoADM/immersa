@@ -53,6 +53,7 @@ interface Page {
   textSize?: TextSize;
   textBoxLayout?: TextBoxLayout;
   sfxUrl?: string;
+  sfxCues?: { paragraph: number; url: string; volume?: number }[];
   order: number;
 }
 
@@ -398,7 +399,7 @@ export default function ChapterEditorModernoScreen() {
                         </Text>
                       </View>
                     )}
-                    {page.sfxUrl ? (
+                    {page.sfxUrl || page.sfxCues?.length ? (
                       <View style={[styles.hasBgBadge, { backgroundColor: Colors.aqua + '18', borderColor: Colors.aqua + '50' }]}>
                         <MaterialIcons name="graphic-eq" size={11} color={Colors.aqua} />
                         <Text style={[styles.hasBgText, { color: Colors.aqua }]}>Sonido</Text>
