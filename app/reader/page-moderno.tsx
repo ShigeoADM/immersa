@@ -22,7 +22,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as NavigationBar from 'expo-navigation-bar';
-import { collection, getDocs, query, orderBy, doc, getDoc, setDoc, updateDoc, deleteField } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, doc, getDoc, setDoc, updateDoc, deleteField } from 'firebase/firestore';
 import { db, auth } from '@/config/firebase';
 import { Audio } from 'expo-av';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -30,6 +30,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '@/constants/theme';
 import { AppAlert, AppDialogHost } from '@/components/app-dialog';
 import { ReportModal } from '@/components/report-modal';
+import { OutlineText, type OutlineSegment, type OutlineStyle } from '@/components/outline-text';
+import { cachedAudioUri, discardCachedAudio, downloadAudio, pruneAudioCache } from '@/services/audio-cache';
 import type { ReportTarget } from '@/services/reports';
 import { sortChapters } from '@/services/stories';
 import { useAuth } from '@/context/AuthContext';
@@ -155,20 +157,6 @@ function parseParagraphSegments(text: string, links: PageLink[]): Segment[] {
   return segs;
 }
 
-// ─── Texto con outline negro estilo retro gaming ──────────────────────────────
-function OutlineText({ children, style }: { children: string; style?: any }) {
-  const black = [style, { color: '#000', position: 'absolute' as const, width: '100%' }];
-  return (
-    <View style={{ width: '100%' }}>
-      <Text style={[...black, { top: -2 }]}>{children}</Text>
-      <Text style={[...black, { top:  2 }]}>{children}</Text>
-      <Text style={[...black, { left: -2 }]}>{children}</Text>
-      <Text style={[...black, { left:  2 }]}>{children}</Text>
-      <Text style={[style, { width: '100%' }]}>{children}</Text>
-    </View>
-  );
-}
-
 // ─── Sparkle al tocar enlace ──────────────────────────────────────────────────
 const SPARK_N = 12;
 
@@ -270,9 +258,15 @@ function SparkleOverlay({ x, y, color, onDone }: {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RETRO_FONT = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
+const END_CHAPTER_SEGMENTS: OutlineSegment[] = [{ text: '— FIN DEL CAPÍTULO —' }];
 
 // Lectores montados: al cambiar de capítulo se monta uno nuevo antes de desmontar el anterior
 let mountedReaders = 0;
+
+// Música con la que empieza el capítulo siguiente. Se averigua al acercarse al final
+// de un capítulo; así el lector del capítulo nuevo la pone a sonar nada más abrirse,
+// sin esperar a cargar sus páginas.
+let chapterStartHint: { chapterId: string; musicUrl: string; musicVolume?: number } | null = null;
 
 // Historial de navegación: de qué página se vino en cada salto (capítulo + página).
 // "Atrás" deshace ese camino en vez de ir a la página anterior del capítulo: a una página
@@ -319,15 +313,11 @@ type TypewriterProps = {
   paragraphs: string[];
   paraIndex: number;
   cps: number | null;   // caracteres por segundo; null = al instante
-  textStyle: any;
+  textStyle: OutlineStyle;
   links: PageLink[];
   onLinkPress: (link: PageLink, x: number, y: number) => void;
   onComplete: () => void;
 };
-
-const OUTLINE_OFFSETS: [number, number][] = [
-  [-2, 0], [2, 0], [0, -2], [0, 2], [-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5],
-];
 
 const Typewriter = React.memo(forwardRef<TypewriterHandle, TypewriterProps>(function Typewriter(
   { paragraphs, paraIndex, cps, textStyle, links, onLinkPress, onComplete }, ref,
@@ -381,53 +371,21 @@ const Typewriter = React.memo(forwardRef<TypewriterHandle, TypewriterProps>(func
 
   const revealedText = [...paragraphs.slice(0, paraIndex), current.slice(0, shown)].filter(Boolean).join('\n\n');
 
-  let content: React.ReactNode;
-  if (links.length === 0) {
-    // Sin enlaces: outline clásico (mejor calidad visual)
-    content = <OutlineText style={textStyle}>{revealedText}</OutlineText>;
-  } else {
-    // Con enlaces: capas de outline absolutas + capa principal en flujo
-    const segs = parseParagraphSegments(revealedText, links);
-    const renderSegs = (forOutline: boolean) =>
-      segs.map((seg, i) =>
+  // Texto con borde (Skia). Los enlaces van en su color, subrayados y pulsables.
+  const segments: OutlineSegment[] = links.length === 0
+    ? [{ text: revealedText }]
+    : parseParagraphSegments(revealedText, links).map(seg =>
         seg.type === 'link'
-          ? <Text
-              key={i}
-              style={{
-                fontWeight: '900' as const,
-                color: forOutline ? darkenHex(seg.link.color, 0.55) : seg.link.color,
-                ...(forOutline ? {} : { textDecorationLine: 'underline' as const }),
-              }}
-              {...(forOutline ? {} : {
-                onPress: (e: any) => onLinkPress(
-                  seg.link,
-                  e.nativeEvent.pageX ?? e.nativeEvent.clientX ?? 0,
-                  e.nativeEvent.pageY ?? e.nativeEvent.clientY ?? 0,
-                ),
-              })}
-            >{seg.content}</Text>
-          : <Text key={i} style={{ color: forOutline ? '#000' : '#fff' as const }}>{seg.content}</Text>
-      );
-    content = (
-      <View>
-        {/* Capas de outline — absolutas, detrás del texto principal */}
-        {OUTLINE_OFFSETS.map(([dx, dy], idx) => (
-          <Text
-            key={`ol-${idx}`}
-            style={[textStyle, {
-              position: 'absolute' as const,
-              left: 0, top: 0, right: 0,
-              transform: [{ translateX: dx }, { translateY: dy }],
-            }]}
-          >
-            {renderSegs(true)}
-          </Text>
-        ))}
-        {/* Capa principal — en flujo, define la altura del bloque */}
-        <Text style={textStyle}>{renderSegs(false)}</Text>
-      </View>
-    );
-  }
+          ? {
+              text: seg.content,
+              color: seg.link.color,
+              outlineColor: darkenHex(seg.link.color, 0.55),
+              bold: true,
+              underline: true,
+              onPress: (x: number, y: number) => onLinkPress(seg.link, x, y),
+            }
+          : { text: seg.content });
+  const content = <OutlineText segments={segments} style={textStyle} />;
 
   return (
     <ScrollView
@@ -540,6 +498,13 @@ export default function PageModernoReaderScreen() {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
     // Configurar audio una sola vez al entrar (evita delay en cada pista)
     Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+    pruneAudioCache();
+    // Se llega desde el capítulo anterior y ya se sabe con qué música empieza este
+    const hint = chapterStartHint;
+    chapterStartHint = null;
+    if (hint && hint.chapterId === chapterId && !pageIdParam && Number(pageIndexParam ?? 0) === 0) {
+      playTrack(hint.musicUrl, musicPlaybackVolume(hint.musicVolume));
+    }
     // Precargar SFX de UI
     (async () => {
       try {
@@ -573,11 +538,23 @@ export default function PageModernoReaderScreen() {
     if (!storyId || !chapterId) return;
     (async () => {
       try {
+        const pagesQuery = getDocs(query(
+          collection(db, 'stories', storyId as string, 'chapters', chapterId as string, 'pages'),
+          orderBy('order', 'asc')
+        ));
+        // La música de la página inicial se empieza a cargar en cuanto llegan las páginas,
+        // sin esperar al resto de consultas
+        pagesQuery.then(snap => {
+          const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<Page, 'id'>) }));
+          const byId = pageIdParam ? list.findIndex(p => p.id === pageIdParam) : -1;
+          for (let i = Math.min(byId >= 0 ? byId : currentRef.current, list.length - 1); i >= 0; i--) {
+            if (list[i].musicUrl === undefined) continue;
+            if (list[i].musicUrl) loadAudio(list[i].musicUrl as string, true, true).catch(() => {});
+            break;
+          }
+        }).catch(() => {});
         const [pagesSnap, storySnap, chaptersSnap, savedPref] = await Promise.all([
-          getDocs(query(
-            collection(db, 'stories', storyId as string, 'chapters', chapterId as string, 'pages'),
-            orderBy('order', 'asc')
-          )),
+          pagesQuery,
           getDoc(doc(db, 'stories', storyId as string)),
           getDocs(collection(db, 'stories', storyId as string, 'chapters')),
           AsyncStorage.getItem(UI_ACCENT_KEY).catch(() => null),
@@ -778,23 +755,56 @@ export default function PageModernoReaderScreen() {
   // La música y los efectos se descargan por adelantado (página actual y la
   // siguiente), así suenan al instante al llegar. Antes cada pista se descargaba
   // al llegar a la página, después de parar y descargar la anterior.
-  const audioCacheRef = useRef(new Map<string, Promise<Audio.Sound>>());
-  const loadAudio = (url: string, looping: boolean): Promise<Audio.Sound> => {
-    const key = (looping ? 'music:' : 'sfx:') + url;
-    let p = audioCacheRef.current.get(key);
-    if (!p) {
-      p = Audio.Sound.createAsync({ uri: url }, { shouldPlay: false, isLooping: looping, volume: 0 })
-        .then(r => r.sound);
-      p.catch(() => audioCacheRef.current.delete(key)); // si falla, se reintenta la próxima vez
-      audioCacheRef.current.set(key, p);
+  //
+  // Además cada pista se guarda en el móvil (services/audio-cache): la segunda vez
+  // que hace falta se abre desde el archivo, sin esperar a la red.
+  type AudioEntry = { promise: Promise<Audio.Sound>; ready: boolean; urgent: boolean };
+  const audioCacheRef = useRef(new Map<string, AudioEntry>());
+  const createSound = (uri: string, looping: boolean) =>
+    Audio.Sound.createAsync({ uri }, { shouldPlay: false, isLooping: looping, volume: 0 }).then(r => r.sound);
+  // urgent: la pista hace falta ya. Si no está en el móvil se reproduce en directo
+  // (empieza antes que esperando a descargarla entera) y se guarda para la próxima vez.
+  // Si no es urgente (precarga), se descarga primero y se abre desde el archivo.
+  const openAudio = async (url: string, looping: boolean, urgent: boolean): Promise<Audio.Sound> => {
+    const local = await cachedAudioUri(url);
+    if (local) {
+      try { return await createSound(local, looping); }
+      catch { discardCachedAudio(url); } // archivo dañado: se usa la red
+    } else if (!urgent) {
+      try { return await createSound(await downloadAudio(url), looping); }
+      catch { /* sin descarga: se usa la red */ }
     }
-    return p;
+    const sound = await createSound(url, looping);
+    if (!local) downloadAudio(url).catch(() => {});
+    return sound;
+  };
+  const loadAudio = (url: string, looping: boolean, urgent = false): Promise<Audio.Sound> => {
+    const key = (looping ? 'music:' : 'sfx:') + url;
+    let entry = audioCacheRef.current.get(key);
+    if (entry && urgent && !entry.ready && !entry.urgent) {
+      // Se estaba precargando (descarga completa) y ya hace falta: no se espera
+      const stale = entry.promise;
+      audioCacheRef.current.delete(key);
+      stale.then(s => s.unloadAsync()).catch(() => {});
+      entry = undefined;
+    }
+    if (!entry) {
+      const created: AudioEntry = { promise: openAudio(url, looping, urgent), ready: false, urgent };
+      created.promise.then(
+        () => { created.ready = true; },
+        // si falla, se reintenta la próxima vez
+        () => { if (audioCacheRef.current.get(key) === created) audioCacheRef.current.delete(key); },
+      );
+      audioCacheRef.current.set(key, created);
+      entry = created;
+    }
+    return entry.promise;
   };
   const releaseAudio = (key: string) => {
-    const p = audioCacheRef.current.get(key);
-    if (!p) return;
+    const entry = audioCacheRef.current.get(key);
+    if (!entry) return;
     audioCacheRef.current.delete(key);
-    p.then(s => s.unloadAsync()).catch(() => {});
+    entry.promise.then(s => s.unloadAsync()).catch(() => {});
   };
 
   const playTrack = async (url: string, volume: number) => {
@@ -805,7 +815,7 @@ export default function PageModernoReaderScreen() {
     currentTrackRef.current = url;
     trackVolumeRef.current = volume;
     try {
-      const sound = await loadAudio(url, true);
+      const sound = await loadAudio(url, true, true);
       if (gen !== playGenRef.current) return; // llegó otra pista mientras cargaba
       // Empieza en silencio y entra con un fundido; la anterior sale con otro
       cancelFade(sound);
@@ -897,7 +907,7 @@ export default function PageModernoReaderScreen() {
     if (!url) return;
     let cancelled = false;
     let playing: Audio.Sound | null = null;
-    loadAudio(url, false)
+    loadAudio(url, false, true)
       .then(sound => {
         if (cancelled || isMutedRef.current) return;
         playing = sound;
@@ -917,28 +927,51 @@ export default function PageModernoReaderScreen() {
     if (pages.length === 0) return;
     const musicOf = (chain: Page[]) => chain.find(p => p.musicUrl !== undefined)?.musicUrl || null;
     const wanted = new Set<string>();
+    const urgent = new Set<string>(); // lo de la página actual hace falta ya
     // Página actual, y la siguiente (que heredará de la actual al llegar desde ella)
     const nextIdx = getNextPageIndex();
-    const targets: { page?: Page; chain: Page[] }[] = [{ page: pages[current], chain: inheritChain }];
+    const targets: { page?: Page; chain: Page[]; now: boolean }[] = [{ page: pages[current], chain: inheritChain, now: true }];
     if (nextIdx !== null && pages[nextIdx]) {
-      targets.push({ page: pages[nextIdx], chain: [pages[nextIdx], ...inheritChain] });
+      targets.push({ page: pages[nextIdx], chain: [pages[nextIdx], ...inheritChain], now: false });
     }
     for (const t of targets) {
       const m = musicOf(t.chain);
-      if (m) wanted.add('music:' + m);
+      if (m) { wanted.add('music:' + m); if (t.now) urgent.add('music:' + m); }
       const s = t.page?.sfxUrl;
-      if (s) wanted.add('sfx:' + s);
+      if (s) { wanted.add('sfx:' + s); if (t.now) urgent.add('sfx:' + s); }
     }
     if (currentTrackRef.current) wanted.add('music:' + currentTrackRef.current);
     if (playingUrlRef.current) wanted.add('music:' + playingUrlRef.current);
     fadingOutRef.current.forEach(url => wanted.add('music:' + url));
 
     wanted.forEach(k => {
-      if (k.startsWith('music:')) loadAudio(k.slice('music:'.length), true).catch(() => {});
-      else loadAudio(k.slice('sfx:'.length), false).catch(() => {});
+      if (k.startsWith('music:')) loadAudio(k.slice('music:'.length), true, urgent.has(k)).catch(() => {});
+      else loadAudio(k.slice('sfx:'.length), false, urgent.has(k)).catch(() => {});
     });
     [...audioCacheRef.current.keys()].forEach(k => { if (!wanted.has(k)) releaseAudio(k); });
   }, [current, pages, inheritChain]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Capítulo siguiente: al acercarse al final se prepara su primera página ──
+  // Se descarga su música y su fondo, para que el capítulo nuevo empiece sin esperas.
+  const nextChapterWarmedRef = useRef(false);
+  useEffect(() => {
+    if (!nextChapter || nextChapterWarmedRef.current) return;
+    if (pages.length === 0 || current < pages.length - 2) return;
+    nextChapterWarmedRef.current = true;
+    const nextId = nextChapter.id;
+    getDocs(query(
+      collection(db, 'stories', storyId as string, 'chapters', nextId, 'pages'),
+      orderBy('order', 'asc'), limit(1),
+    )).then(snap => {
+      const first = snap.docs[0]?.data() as Omit<Page, 'id'> | undefined;
+      if (!first) return;
+      if (first.backgroundUrl) Image.prefetch(first.backgroundUrl).catch(() => {});
+      if (first.musicUrl) {
+        chapterStartHint = { chapterId: nextId, musicUrl: first.musicUrl, musicVolume: first.musicVolume };
+        downloadAudio(first.musicUrl).catch(() => {});
+      }
+    }).catch(() => {});
+  }, [nextChapter, current, pages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Cleanup al salir del reader ───────────────────────────────────────────
   useEffect(() => {
@@ -947,7 +980,7 @@ export default function PageModernoReaderScreen() {
       fadeTimersRef.current.forEach(t => clearInterval(t));
       fadeTimersRef.current.clear();
       stopBars();
-      audioCacheRef.current.forEach(p => p.then(s => s.unloadAsync()).catch(() => {}));
+      audioCacheRef.current.forEach(entry => entry.promise.then(s => s.unloadAsync()).catch(() => {}));
       audioCacheRef.current.clear();
       soundRef.current = null;
     };
@@ -1343,9 +1376,19 @@ export default function PageModernoReaderScreen() {
 
   // Estable entre renders para que el Typewriter (memo) no se repinte sin motivo
   const textFontSize = FONT_SIZES[effectiveTextSize] * TEXT_SCALE[textScale];
-  const typewriterTextStyle = useMemo(
-    () => [styles.vnText, { fontSize: textFontSize, lineHeight: textFontSize * 1.6 }],
+  const typewriterTextStyle = useMemo<OutlineStyle>(
+    () => ({
+      fontFamily: RETRO_FONT, fontWeight: 700, color: '#FFFFFF', outlineColor: '#000', outlineWidth: 2,
+      fontSize: textFontSize, lineHeight: textFontSize * 1.6, letterSpacing: TEXT_BOX.letterSpacing,
+    }),
     [textFontSize],
+  );
+  const endChapterStyle = useMemo<OutlineStyle>(
+    () => ({
+      fontFamily: RETRO_FONT, fontWeight: 700, color: accentColor, outlineColor: '#000', outlineWidth: 1.5,
+      fontSize: 10, letterSpacing: 2,
+    }),
+    [accentColor],
   );
   const linkPressRef = useRef(handleLinkPress);
   linkPressRef.current = handleLinkPress;
@@ -1458,7 +1501,7 @@ export default function PageModernoReaderScreen() {
         {/* ── Badge "Fin del capítulo" — arriba de la pantalla ── */}
         {isLastPage && (
           <View style={[styles.endChapterBadge, { borderColor: accentColor }]}>
-            <OutlineText style={[styles.endChapterText, { color: accentColor }]}>— FIN DEL CAPÍTULO —</OutlineText>
+            <OutlineText inline segments={END_CHAPTER_SEGMENTS} style={endChapterStyle} />
           </View>
         )}
 
@@ -1797,13 +1840,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.emerald,
     borderRadius: 4,
   },
-  endChapterText: {
-    fontFamily: RETRO_FONT,
-    fontSize: 10,
-    fontWeight: '700',
-    color: Colors.emerald,
-    letterSpacing: 2,
-  },
 
   // ── Bloque de texto — la posición/tamaño se aplican vía estilo inline ───────
   textBox: {
@@ -1818,14 +1854,6 @@ const styles = StyleSheet.create({
   },
   textScroll: {
     flex: 1,
-  },
-  vnText: {
-    fontFamily: RETRO_FONT,
-    color: '#FFFFFF',
-    fontSize: 15,
-    lineHeight: 24,
-    letterSpacing: TEXT_BOX.letterSpacing,
-    fontWeight: '700',
   },
   // Icono retroceder página — esquina inferior izquierda del recuadro
   prevHint: {
