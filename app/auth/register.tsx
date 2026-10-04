@@ -22,6 +22,7 @@ import { Colors } from '@/constants/theme';
 import { MIN_AGE, ageOf, buildBirthDate } from '@/constants/age';
 import { BirthDateInput, EMPTY_BIRTH_DATE } from '@/components/birth-date-input';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
+import { PasswordInput } from '@/components/password-input';
 
 export default function RegisterScreen() {
   const isDesktop = useIsDesktop();
@@ -140,23 +141,21 @@ export default function RegisterScreen() {
               />
 
               <Text style={styles.label}>Contraseña</Text>
-              <TextInput
+              <PasswordInput
                 style={styles.input}
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Mínimo 6 caracteres"
                 placeholderTextColor={Colors.textMuted}
-                secureTextEntry
               />
 
               <Text style={styles.label}>Confirmar contraseña</Text>
-              <TextInput
+              <PasswordInput
                 style={styles.input}
                 value={confirm}
                 onChangeText={setConfirm}
                 placeholder="Repite tu contraseña"
                 placeholderTextColor={Colors.textMuted}
-                secureTextEntry
               />
 
               <Text style={styles.label}>Fecha de nacimiento</Text>

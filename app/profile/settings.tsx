@@ -30,6 +30,7 @@ import {
 } from '@/constants/webnovel';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { DesktopColumn } from '@/components/desktop-column';
+import { PasswordInput } from '@/components/password-input';
 
 export default function SettingsScreen() {
   const isDesktop = useIsDesktop();
@@ -394,13 +395,12 @@ export default function SettingsScreen() {
                 No se puede deshacer.
               </Text>
               <Text style={styles.deleteText}>Escribe tu contraseña para confirmar:</Text>
-              <TextInput
+              <PasswordInput
                 style={styles.deleteInput}
                 value={deletePassword}
                 onChangeText={setDeletePassword}
                 placeholder="Contraseña"
                 placeholderTextColor={Colors.textMuted}
-                secureTextEntry
                 autoCapitalize="none"
                 editable={!deleting}
               />

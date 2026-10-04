@@ -18,6 +18,7 @@ import { auth } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { AppAlert } from '@/components/app-dialog';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
+import { PasswordInput } from '@/components/password-input';
 
 export default function LoginScreen() {
   const isDesktop = useIsDesktop();
@@ -93,13 +94,12 @@ export default function LoginScreen() {
             />
 
             <Text style={styles.label}>Contraseña</Text>
-            <TextInput
+            <PasswordInput
               style={styles.input}
               value={password}
               onChangeText={setPassword}
               placeholder="••••••••"
               placeholderTextColor={Colors.textMuted}
-              secureTextEntry
             />
             <TouchableOpacity onPress={handleForgotPassword} style={{ alignSelf: 'flex-end' }} hitSlop={8}>
               <Text style={styles.footerLink}>¿Olvidaste tu contraseña?</Text>

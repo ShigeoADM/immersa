@@ -309,7 +309,40 @@ const TEXT_SCALE_OPTIONS: { value: TextScale; label: string }[] = [
 type TypewriterHandle = {
   /** Si está escribiendo, muestra el párrafo completo y devuelve true. */
   finish: () => boolean;
+  /**
+   * Cuando el texto no cabe en el cuadro: sube (-1) o baja (1) un párrafo.
+   * Devuelve false si ya no se puede mover más en esa dirección.
+   */
+  scrollBy: (direction: -1 | 1) => boolean;
 };
+
+const NO_LINKS: PageLink[] = [];
+
+// Un párrafo del cuadro de texto. Va en su propio componente para que los párrafos ya
+// escritos no se vuelvan a pintar con cada letra del que se está escribiendo.
+const ParagraphBlock = React.memo(function ParagraphBlock({ text, links, textStyle, onLinkPress }: {
+  text: string;
+  links: PageLink[];
+  textStyle: OutlineStyle;
+  onLinkPress: (link: PageLink, x: number, y: number) => void;
+}) {
+  // Texto con borde. Los enlaces van en su color, subrayados y pulsables.
+  const segments = useMemo<OutlineSegment[]>(() => links.length === 0
+    ? [{ text }]
+    : parseParagraphSegments(text, links).map(seg =>
+        seg.type === 'link'
+          ? {
+              text: seg.content,
+              color: seg.link.color,
+              outlineColor: darkenHex(seg.link.color, 0.55),
+              bold: true,
+              underline: true,
+              onPress: (x: number, y: number) => onLinkPress(seg.link, x, y),
+            }
+          : { text: seg.content }),
+    [text, links, onLinkPress]);
+  return <OutlineText segments={segments} style={textStyle} />;
+});
 type TypewriterProps = {
   paragraphs: string[];
   paraIndex: number;
@@ -362,31 +395,49 @@ const Typewriter = React.memo(forwardRef<TypewriterHandle, TypewriterProps>(func
     return stop;
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Desplazamiento por párrafos ───────────────────────────────────────────
+  // Si el texto no cabe en el cuadro, la vista sigue a lo último que se escribe. Con la
+  // rueda del ratón o las flechas se puede subir a los párrafos anteriores y volver a
+  // bajar, siempre de párrafo en párrafo (no deslizando), como al avanzar.
+  const paraTops    = useRef<number[]>([]);  // posición vertical de cada párrafo
+  const scrollY     = useRef(0);
+  const contentH    = useRef(0);
+  const viewportH   = useRef(0);
+  const maxScroll = () => Math.max(0, contentH.current - viewportH.current);
+  const jumpTo = (y: number) => {
+    scrollY.current = y;
+    scrollRef.current?.scrollTo({ y, animated: false });
+  };
+  const scrollBy = (direction: -1 | 1): boolean => {
+    const tops = paraTops.current.filter(t => t !== undefined);
+    const y = scrollY.current;
+    if (direction === -1) {
+      const above = tops.filter(t => t < y - 1);
+      if (above.length === 0) return false;
+      jumpTo(Math.max(...above));
+      return true;
+    }
+    const max = maxScroll();
+    if (y >= max - 1) return false;
+    const below = tops.filter(t => t > y + 1);
+    jumpTo(Math.min(max, below.length ? Math.min(...below) : max));
+    return true;
+  };
+
   useImperativeHandle(ref, () => ({
     finish: () => {
       if (doneRef.current) return false;
       complete(key, current.length);
       return true;
     },
+    scrollBy,
   }), [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const revealedText = [...paragraphs.slice(0, paraIndex), current.slice(0, shown)].filter(Boolean).join('\n\n');
-
-  // Texto con borde (Skia). Los enlaces van en su color, subrayados y pulsables.
-  const segments: OutlineSegment[] = links.length === 0
-    ? [{ text: revealedText }]
-    : parseParagraphSegments(revealedText, links).map(seg =>
-        seg.type === 'link'
-          ? {
-              text: seg.content,
-              color: seg.link.color,
-              outlineColor: darkenHex(seg.link.color, 0.55),
-              bold: true,
-              underline: true,
-              onPress: (x: number, y: number) => onLinkPress(seg.link, x, y),
-            }
-          : { text: seg.content });
-  const content = <OutlineText segments={segments} style={textStyle} />;
+  // Párrafos a la vista: los ya leídos enteros y el actual hasta donde va escrito
+  const visibleParas = [...paragraphs.slice(0, paraIndex), current.slice(0, shown)];
+  // Entre párrafos, el hueco de una línea en blanco
+  const paraGap = textStyle.lineHeight ?? textStyle.fontSize * 1.6;
+  let drawn = 0;
 
   return (
     <ScrollView
@@ -394,10 +445,28 @@ const Typewriter = React.memo(forwardRef<TypewriterHandle, TypewriterProps>(func
       style={styles.textScroll}
       showsVerticalScrollIndicator={false}
       scrollEnabled={false}
-      // Solo cuando crece la altura (línea nueva), no en cada letra
-      onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+      onLayout={e => { viewportH.current = e.nativeEvent.layout.height; }}
+      // Solo cuando crece la altura (línea nueva), no en cada letra: la vista vuelve
+      // al final, a lo que se está escribiendo
+      onContentSizeChange={(_w, h) => {
+        contentH.current = h;
+        scrollY.current = maxScroll();
+        scrollRef.current?.scrollToEnd({ animated: false });
+      }}
     >
-      {content}
+      {visibleParas.map((text, i) => {
+        if (!text) return null;
+        const first = drawn++ === 0;
+        return (
+          <View
+            key={i}
+            style={first ? undefined : { marginTop: paraGap }}
+            onLayout={e => { paraTops.current[i] = e.nativeEvent.layout.y; }}
+          >
+            <ParagraphBlock text={text} links={links} textStyle={textStyle} onLinkPress={onLinkPress} />
+          </View>
+        );
+      })}
     </ScrollView>
   );
 }));
@@ -1386,8 +1455,20 @@ export default function PageModernoReaderScreen() {
 
   // ── Web: leer con el teclado ──────────────────────────────────────────────
   // Espacio, Intro o flecha derecha avanzan; flecha izquierda vuelve atrás.
-  const keyActionsRef = useRef({ next: goNext, prev: goPrev, blocked: false });
-  keyActionsRef.current = { next: goNext, prev: goPrev, blocked: showComments || showSettings || !!reportTarget };
+  // Flechas arriba y abajo, o la rueda del ratón, recorren el cuadro de texto.
+  // Subir y bajar dentro del cuadro de texto, de párrafo en párrafo. Bajar, cuando ya
+  // se está al final, sigue con el siguiente párrafo de la página (no cambia de página:
+  // eso se deja a espacio, Intro o flecha derecha, para no pasarla sin querer).
+  const textUp = () => { typewriterRef.current?.scrollBy(-1); };
+  const textDown = () => {
+    if (typewriterRef.current?.scrollBy(1)) return;
+    if (!paraComplete || paraIndex < paragraphs.length - 1) goNext();
+  };
+  const keyActionsRef = useRef({ next: goNext, prev: goPrev, up: textUp, down: textDown, blocked: false });
+  keyActionsRef.current = {
+    next: goNext, prev: goPrev, up: textUp, down: textDown,
+    blocked: showComments || showSettings || !!reportTarget,
+  };
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const win = globalThis as any;
@@ -1399,10 +1480,30 @@ export default function PageModernoReaderScreen() {
         keyActionsRef.current.next();
       } else if (e.key === 'ArrowLeft') {
         keyActionsRef.current.prev();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        keyActionsRef.current.up();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        keyActionsRef.current.down();
       }
     };
+    // Rueda del ratón: un paso por gesto (las ruedas mandan muchos eventos seguidos)
+    let lastWheel = 0;
+    const onWheel = (e: any) => {
+      if (keyActionsRef.current.blocked || Math.abs(e.deltaY) < 4) return;
+      const now = Date.now();
+      if (now - lastWheel < 220) return;
+      lastWheel = now;
+      if (e.deltaY < 0) keyActionsRef.current.up();
+      else keyActionsRef.current.down();
+    };
     win.addEventListener('keydown', onKey);
-    return () => win.removeEventListener('keydown', onKey);
+    win.addEventListener('wheel', onWheel, { passive: true });
+    return () => {
+      win.removeEventListener('keydown', onKey);
+      win.removeEventListener('wheel', onWheel);
+    };
   }, []);
 
   const page       = pages[current];
@@ -1627,7 +1728,7 @@ export default function PageModernoReaderScreen() {
                 paraIndex={paraIndex}
                 cps={TEXT_SPEED_CPS[textSpeed]}
                 textStyle={typewriterTextStyle}
-                links={page.links ?? []}
+                links={page.links ?? NO_LINKS}
                 onLinkPress={onTypewriterLinkPress}
                 onComplete={onParagraphComplete}
               />
