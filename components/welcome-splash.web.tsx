@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, Text, StyleSheet } from 'react-native';
 
 // Bienvenida de la versión web. Al abrir la página se ve el fondo de la app con la
-// palabra "Bienvenido": entra con un barrido de izquierda a derecha, se queda un
+// palabra "Bienvenido" en verde: entra con un barrido de arriba abajo, se queda un
 // momento y se desvanece despacio, dejando ver el inicio que ya está cargado debajo.
 // Sale una vez por visita (por pestaña), no en cada recarga. Un clic la salta.
 
@@ -73,9 +73,10 @@ export function WelcomeSplash() {
         style={[
           styles.word,
           {
-            // Barrido: la palabra se descubre de izquierda a derecha
-            clipPath: visible ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
-            transform: [{ translateX: visible ? 0 : -24 }],
+            // Barrido: la palabra aparece por arriba, descubriéndose de arriba abajo
+            // mientras baja ligeramente hasta su sitio
+            clipPath: visible ? 'inset(0 0 0% 0)' : 'inset(0 0 100% 0)',
+            transform: [{ translateY: visible ? 0 : -28 }],
             transitionProperty: 'clip-path, transform',
             transitionDuration: `${SWEEP_MS}ms`,
             transitionTimingFunction: 'cubic-bezier(0.22, 0.8, 0.24, 1)',
@@ -99,7 +100,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 'clamp(40px, 9vw, 96px)' as any,
     letterSpacing: 1,
-    color: '#F0F0F0',
+    color: '#00C878',
     paddingHorizontal: 8,
   },
 });
