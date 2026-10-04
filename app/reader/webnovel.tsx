@@ -218,7 +218,8 @@ export default function WebnovelReaderScreen() {
   const handleSendComment = async () => {
     const text = commentText.trim();
     const me = auth.currentUser;
-    if (!text || !me || !storyId || !chapterId || sending) return;
+    if (!me) { router.push('/auth/login'); return; } // invitado
+    if (!text || !storyId || !chapterId || sending) return;
     if (suspended) {
       AppAlert.alert('Cuenta suspendida', 'Tu cuenta está suspendida: no puedes comentar.');
       return;

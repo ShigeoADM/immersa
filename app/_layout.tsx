@@ -41,6 +41,16 @@ const WEB_SCROLLBAR_CSS = `
   input:focus, textarea:focus { outline: 1px solid rgba(0, 200, 120, 0.7); outline-offset: 0; }
 `;
 
+// En la web se puede entrar sin cuenta ("invitado"): explorar, buscar, ver fichas y leer.
+// La app de móvil sigue pidiendo iniciar sesión.
+const GUESTS_ALLOWED = Platform.OS === 'web';
+function isPublicRoute(segments: string[]): boolean {
+  const [first, second] = segments;
+  if (first === undefined) return true;                              // raíz (redirige al inicio)
+  if (first === '(tabs)') return second === undefined || second === 'index'; // solo Descubrir
+  return ['auth', 'search', 'story', 'reader', 'user'].includes(first);
+}
+
 function RootNavigator() {
   const { user, loading } = useAuth();
   const segments = useSegments();
@@ -75,12 +85,20 @@ function RootNavigator() {
   useEffect(() => {
     if (loading || !navReady) return;
     const inAuth = segments[0] === 'auth';
-    if (!user && !inAuth) {
+    if (!user && !inAuth && !GUESTS_ALLOWED) {
       router.replace('/auth/login');
     } else if (user && inAuth) {
       router.replace('/(tabs)');
     }
   }, [user, loading, navReady]);   // ← sin 'segments': evita bucles de navegación
+
+  // Web: un invitado puede explorar y leer, pero las secciones personales (biblioteca,
+  // escribir, perfil, notificaciones…) le llevan a iniciar sesión.
+  const route = segments.join('/');
+  useEffect(() => {
+    if (!GUESTS_ALLOWED || loading || !navReady || user) return;
+    if (!isPublicRoute(segments as string[])) router.replace('/auth/login');
+  }, [route, user, loading, navReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tocar una notificación del móvil abre la pantalla de notificaciones (también si
   // la app estaba cerrada: useLastNotificationResponse la recuerda).
@@ -105,7 +123,7 @@ function RootNavigator() {
   // Escritorio: la barra superior acompaña a todas las secciones menos el inicio de sesión,
   // los lectores y las pantallas de creación, que tienen su propia cabecera
   const section = segments[0] as string | undefined;
-  const showWebTopBar = isDesktop && !!user
+  const showWebTopBar = isDesktop && (!!user || GUESTS_ALLOWED)
     && section !== 'auth' && section !== 'reader' && section !== 'create';
 
   return (

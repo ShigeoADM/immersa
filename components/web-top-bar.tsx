@@ -16,7 +16,7 @@ type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
 
 export function WebTopBar() {
   const router = useRouter();
-  const { publicName, publicAvatar } = useAuth();
+  const { user, publicName, publicAvatar } = useAuth();
   const { unreadCount } = useNotifications();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -51,15 +51,29 @@ export function WebTopBar() {
           <TouchableOpacity style={styles.btn} activeOpacity={0.8} onPress={() => router.push('/search' as Href)}>
             <MaterialIcons name="search" size={24} color={Colors.emerald} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.btn} activeOpacity={0.8} onPress={() => openWrite('books')}>
-            <MaterialIcons name="edit" size={22} color={Colors.emerald} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.avatarBtn} activeOpacity={0.8} onPress={() => setMenuOpen(v => !v)}>
-            {publicAvatar
-              ? <Image source={{ uri: publicAvatar }} style={styles.avatar} contentFit="cover" />
-              : <Text style={styles.avatarInitial}>{(publicName || '?').charAt(0).toUpperCase()}</Text>}
-            {unreadCount > 0 && <View style={styles.avatarDot} />}
-          </TouchableOpacity>
+          {user ? (
+            <>
+              <TouchableOpacity style={styles.btn} activeOpacity={0.8} onPress={() => openWrite('books')}>
+                <MaterialIcons name="edit" size={22} color={Colors.emerald} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.avatarBtn} activeOpacity={0.8} onPress={() => setMenuOpen(v => !v)}>
+                {publicAvatar
+                  ? <Image source={{ uri: publicAvatar }} style={styles.avatar} contentFit="cover" />
+                  : <Text style={styles.avatarInitial}>{(publicName || '?').charAt(0).toUpperCase()}</Text>}
+                {unreadCount > 0 && <View style={styles.avatarDot} />}
+              </TouchableOpacity>
+            </>
+          ) : (
+            // Invitado: en vez de escribir y el perfil, entrar o crear una cuenta
+            <>
+              <TouchableOpacity style={styles.guestBtn} activeOpacity={0.8} onPress={() => router.push('/auth/login')}>
+                <Text style={styles.guestBtnText}>Iniciar sesión</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.guestBtn, styles.guestBtnAlt]} activeOpacity={0.8} onPress={() => router.push('/auth/register')}>
+                <Text style={[styles.guestBtnText, styles.guestBtnAltText]}>Registrarse</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
 
@@ -127,6 +141,13 @@ const styles = StyleSheet.create({
     width: BTN, height: BTN, borderRadius: 8, backgroundColor: '#000',
     alignItems: 'center', justifyContent: 'center',
   },
+  guestBtn: {
+    height: BTN, paddingHorizontal: 18, borderRadius: 8, backgroundColor: '#000',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  guestBtnText: { color: Colors.emerald, fontSize: 15, fontWeight: '700' },
+  guestBtnAlt: { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#000' },
+  guestBtnAltText: { color: '#000' },
   avatarBtn: {
     width: BTN, height: BTN, borderRadius: BTN / 2, backgroundColor: '#000',
     alignItems: 'center', justifyContent: 'center',

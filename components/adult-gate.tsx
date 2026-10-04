@@ -47,7 +47,11 @@ export function AdultGate({ onBack }: { onBack: () => void }) {
         <View style={styles.badge}><Text style={styles.badgeText}>+18</Text></View>
         <Text style={styles.title}>Contenido para adultos</Text>
 
-        {isAdult === false ? (
+        {!user ? (
+          <Text style={styles.text}>
+            Esta historia es para mayores de {ADULT_AGE} años. Inicia sesión con tu cuenta para verla.
+          </Text>
+        ) : isAdult === false ? (
           <Text style={styles.text}>
             Esta historia solo está disponible para mayores de {ADULT_AGE} años.
           </Text>

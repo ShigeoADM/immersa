@@ -230,7 +230,8 @@ export default function StoryDetailScreen() {
 
   // Me gusta: se pinta al instante y se deshace si falla
   const toggleLike = async () => {
-    if (!user || !story || liking) return;
+    if (!user) { router.push('/auth/login'); return; } // invitado
+    if (!story || liking) return;
     const next = !liked;
     setLiking(true);
     setLiked(next);
@@ -444,7 +445,7 @@ export default function StoryDetailScreen() {
               <TouchableOpacity
                 style={[styles.likeBtn, liked && styles.likeBtnOn]}
                 onPress={toggleLike}
-                disabled={!user || liking}
+                disabled={liking}
                 activeOpacity={0.8}
               >
                 <MaterialIcons name={liked ? 'favorite' : 'favorite-border'} size={16} color={liked ? '#FF69B4' : '#fff'} />

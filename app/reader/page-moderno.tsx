@@ -1212,7 +1212,8 @@ export default function PageModernoReaderScreen() {
     const text = commentText.trim();
     const me = auth.currentUser;
     const pg = pages[current];
-    if (!text || !me || !pg || sendingComment) return;
+    if (!me) { setShowComments(false); router.push('/auth/login'); return; } // invitado
+    if (!text || !pg || sendingComment) return;
     if (suspended) {
       AppAlert.alert('Cuenta suspendida', 'Tu cuenta está suspendida: no puedes comentar.');
       return;

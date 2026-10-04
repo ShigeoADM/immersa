@@ -125,6 +125,12 @@ export default function LoginScreen() {
               <Text style={styles.footerLink}>Regístrate</Text>
             </TouchableOpacity>
           </View>
+          {/* Web: también se puede explorar y leer sin cuenta */}
+          {Platform.OS === 'web' && (
+            <TouchableOpacity style={{ alignSelf: 'center', paddingVertical: 6 }} onPress={() => router.replace('/(tabs)')}>
+              <Text style={[styles.footerText, { textDecorationLine: 'underline' }]}>Explorar sin cuenta</Text>
+            </TouchableOpacity>
+          )}
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>

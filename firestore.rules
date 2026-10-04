@@ -41,14 +41,25 @@ service cloud.firestore {
     function storyPublished(storyId) {
       return get(/databases/$(database)/documents/stories/$(storyId)).data.published == true;
     }
+    // Lo que puede leer cualquiera, también sin cuenta (versión web): el contenido de
+    // las historias publicadas. Las +18 exigen haber iniciado sesión; a partir de ahí
+    // es la app la que comprueba la edad, igual que hasta ahora.
+    function storyAdult(storyId) {
+      return get(/databases/$(database)/documents/stories/$(storyId)).data.get('isAdult', false) == true;
+    }
+    function storyPublic(storyId) {
+      return storyPublished(storyId) && (signedIn() || !storyAdult(storyId));
+    }
 
     // ── Historias ─────────────────────────────────────────────────────────────
     match /stories/{storyId} {
+      // La ficha de una historia publicada (título, portada, sinopsis) es pública: la ve
+      // cualquiera, también sin cuenta. Los borradores, solo su autor y moderación.
       // resource == null: leer una historia que NO existe devuelve "no existe" en vez de
       // "sin permiso"; así la app detecta las historias borradas. No expone datos.
-      allow read: if signedIn()
-                  && (resource == null || resource.data.published == true
-                      || resource.data.uid == request.auth.uid || can('deleteStories'));
+      allow read: if (resource != null && resource.data.published == true)
+                  || (signedIn()
+                      && (resource == null || resource.data.uid == request.auth.uid || can('deleteStories')));
       // Una historia nace sin "me gusta"
       allow create: if signedIn() && request.auth.uid == request.resource.data.uid
                     && request.resource.data.get('likeCount', 0) == 0
@@ -80,13 +91,13 @@ service cloud.firestore {
 
       // ── Capítulos ───────────────────────────────────────────────────────────
       match /chapters/{chapterId} {
-        allow read: if signedIn() && (storyPublished(storyId) || ownsStory(storyId) || can('deleteStories'));
+        allow read: if storyPublic(storyId) || ownsStory(storyId) || can('deleteStories');
         allow create, update: if ownsStory(storyId) && !isSuspended();
         allow delete: if ownsStory(storyId) || can('deleteStories');
 
         // ── Páginas ─────────────────────────────────────────────────────────
         match /pages/{pageId} {
-          allow read: if signedIn() && (storyPublished(storyId) || ownsStory(storyId) || can('deleteStories'));
+          allow read: if storyPublic(storyId) || ownsStory(storyId) || can('deleteStories');
           allow create, update: if ownsStory(storyId) && !isSuspended();
           allow delete: if ownsStory(storyId) || can('deleteStories');
         }
@@ -144,7 +155,7 @@ service cloud.firestore {
       // Cualquier lector comenta con su propio uid; no se editan. Los borra quien lo
       // escribió, el autor de la novela o moderación.
       match /comments/{commentId} {
-        allow read: if signedIn() && (storyPublished(storyId) || ownsStory(storyId) || can('deleteStories'));
+        allow read: if storyPublic(storyId) || ownsStory(storyId) || can('deleteStories');
         allow create: if signedIn()
                       && request.resource.data.uid == request.auth.uid
                       && request.resource.data.text is string
@@ -162,13 +173,14 @@ service cloud.firestore {
     // el propio usuario, pero el rol solo se acepta si coincide con el real de users/{uid}:
     // nadie puede mostrarse como dueño o administrador sin serlo.
     match /profiles/{userId} {
-      allow read: if signedIn();
+      // Público: es lo que se muestra de un autor junto a sus historias
+      allow read: if true;
       allow create, update: if isUser(userId) && request.resource.data.get('role', '') == myRole();
       allow delete: if isUser(userId) || isOwner();
 
       // Seguidores (id = uid de quien sigue): cada uno se apunta y se borra a sí mismo
       match /followers/{followerId} {
-        allow read: if signedIn();
+        allow read: if true;
         allow create: if isUser(followerId) && followerId != userId;
         // También el dueño del perfil, al eliminar su cuenta
         allow delete: if isUser(followerId) || isUser(userId) || isOwner();

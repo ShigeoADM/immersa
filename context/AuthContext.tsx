@@ -63,7 +63,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Se escucha en vivo: un cambio de rol o permisos se refleja sin reiniciar la app
   useEffect(() => {
     if (!user) {
-      setStaff(NO_STAFF); setPublicInfo({ name: '', avatar: '' }); setIsAdult(null); setSuspended(false);
+      // Sin cuenta (invitado en la web): no ha indicado su edad, así que no se le
+      // muestra contenido +18
+      setStaff(NO_STAFF); setPublicInfo({ name: '', avatar: '' }); setIsAdult(false); setSuspended(false);
       return;
     }
     return onSnapshot(
