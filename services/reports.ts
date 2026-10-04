@@ -8,6 +8,7 @@ import { auth, db } from '@/config/firebase';
 export const REPORT_REASONS = [
   { key: 'adult',     label: 'Contenido +18 sin marcar' },
   { key: 'minors',    label: 'Contenido sexual con menores' },
+  { key: 'image',     label: 'Imagen con desnudos o violencia real' },
   { key: 'hate',      label: 'Odio, acoso o amenazas' },
   { key: 'copyright', label: 'Plagio o derechos de autor' },
   { key: 'spam',      label: 'Spam o engaño' },

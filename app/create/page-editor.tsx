@@ -772,7 +772,7 @@ export default function PageEditorScreen() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') { AppAlert.alert('Permiso denegado', 'Necesitamos acceso a tu galería.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], allowsEditing: true, aspect: [16, 9], quality: 0.85,
+      mediaTypes: ['images'], quality: 0.85,
     });
     if (!result.canceled && result.assets[0]) {
       const localUri = result.assets[0].uri;

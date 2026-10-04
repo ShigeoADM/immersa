@@ -42,11 +42,13 @@ export const LEGAL_DOCS: Record<LegalDoc, { title: string; sections: LegalSectio
       },
       {
         title: '4. Contenido para adultos',
-        body: `Si una historia contiene material sexual explícito, gore o violencia extrema, debes marcarla como contenido +18 e indicar el motivo. Ese contenido solo se muestra a usuarios de ${ADULT_AGE} años o más. Marcar mal una historia puede suponer su retirada.`,
+        body: `Si una historia contiene material sexual explícito, gore o violencia extrema, debes marcarla como contenido +18 e indicar el motivo. Ese contenido solo se muestra a usuarios de ${ADULT_AGE} años o más. Marcar mal una historia puede suponer su retirada.
+
+Esto se refiere al texto de la historia. Las imágenes (portadas, fondos y fotos de perfil) nunca pueden mostrar desnudos, actos sexuales ni violencia real, tampoco en historias +18.`,
       },
       {
         title: '5. Lo que no está permitido',
-        body: 'No se permite: contenido sexual con menores o que los sexualice; incitación al odio, acoso o amenazas; contenido ilegal o que promueva actividades ilegales; plagio o infracción de derechos de autor; spam, engaños o suplantación de identidad; intentar manipular estadísticas, acceder a cuentas ajenas o dañar el servicio.',
+        body: 'No se permite: contenido sexual con menores o que los sexualice; imágenes con desnudos, contenido sexual explícito o violencia real; incitación al odio, acoso o amenazas; contenido ilegal o que promueva actividades ilegales; plagio o infracción de derechos de autor; spam, engaños o suplantación de identidad; intentar manipular estadísticas, acceder a cuentas ajenas o dañar el servicio.',
       },
       {
         title: '6. Moderación y denuncias',

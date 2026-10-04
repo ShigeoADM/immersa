@@ -125,11 +125,8 @@ export default function ModernoDetailsScreen() {
       AppAlert.alert('Permiso denegado', 'Necesitamos acceso a tu galería para añadir la portada.');
       return;
     }
-    const aspect: [number, number] = coverOrientation === 'vertical' ? [2, 3] : [16, 9];
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect,
       quality: 0.9,
     });
     if (!result.canceled && result.assets[0]) {
