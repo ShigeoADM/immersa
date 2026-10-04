@@ -2,9 +2,12 @@ import React from 'react';
 import { Text, View } from 'react-native';
 
 // Versión web del texto con borde. En el móvil se dibuja con Skia (outline-text.tsx);
-// en el navegador basta el trazo de texto de CSS, sin cargar ningún motor gráfico.
-// "paint-order: stroke fill" pinta el trazo debajo del relleno, de modo que el borde
-// queda por fuera de la letra en vez de comérsela.
+// en el navegador se hace con sombras de texto de CSS, sin cargar ningún motor gráfico.
+//
+// El borde son muchas sombras nítidas repartidas en círculo alrededor de la letra, que
+// juntas forman un contorno redondeado. Antes se usaba el trazo de texto de CSS
+// (-webkit-text-stroke), pero une las esquinas en pico y dejaba puntas en letras como
+// la A o la M.
 
 export type OutlineSegment = {
   text: string;
@@ -26,6 +29,27 @@ export type OutlineStyle = {
   outlineWidth?: number;
 };
 
+// Sombras en dos anillos: el exterior marca el borde y el interior rellena el hueco
+// entre el borde y la letra cuando el borde es grueso.
+const RING = 24;
+const shadowCache = new Map<string, string>();
+function outlineShadow(width: number, color: string): string {
+  const key = `${width.toFixed(2)}|${color}`;
+  let css = shadowCache.get(key);
+  if (!css) {
+    const parts: string[] = [];
+    for (const radius of [width, width / 2]) {
+      for (let i = 0; i < RING; i++) {
+        const angle = (i / RING) * Math.PI * 2;
+        parts.push(`${(Math.cos(angle) * radius).toFixed(2)}px ${(Math.sin(angle) * radius).toFixed(2)}px 0 ${color}`);
+      }
+    }
+    css = parts.join(', ');
+    shadowCache.set(key, css);
+  }
+  return css;
+}
+
 type Props = {
   segments: OutlineSegment[];
   style: OutlineStyle;
@@ -34,10 +58,7 @@ type Props = {
 
 export function OutlineText({ segments, style, inline }: Props) {
   const outlineWidth = style.outlineWidth ?? 2;
-  const stroke = (color: string) => ({
-    WebkitTextStroke: `${outlineWidth * 2}px ${color}`,
-    paintOrder: 'stroke fill',
-  } as any);
+  const stroke = (color: string) => ({ textShadow: outlineShadow(outlineWidth, color) } as any);
 
   const text = (
     <Text

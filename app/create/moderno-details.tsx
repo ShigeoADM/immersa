@@ -60,6 +60,7 @@ export default function ModernoDetailsScreen() {
   const [title, setTitle]           = useState('');
   const [subtitle, setSubtitle]     = useState('');
   const [synopsis, setSynopsis]     = useState('');
+  const [credits, setCredits]       = useState('');
   const [language, setLanguage]     = useState('Español');
   const [langOpen, setLangOpen]     = useState(false);
   const [genres, setGenres]         = useState<string[]>([]);
@@ -88,6 +89,7 @@ export default function ModernoDetailsScreen() {
           setTitle(d.title ?? '');
           setSubtitle(d.subtitle ?? '');
           setSynopsis(d.synopsis ?? '');
+          setCredits(d.credits ?? '');
           setLanguage(d.language ?? 'Español');
           setGenres(d.genres ?? []);
           // Historias guardadas antes de esta regla: +18 con público menor → 18-25
@@ -175,6 +177,7 @@ export default function ModernoDetailsScreen() {
           authorName: publicName,
           subtitle: subtitle.trim(),
           synopsis: synopsis.trim(),
+          credits: credits.trim(),
           language,
           genres,
           audience,
@@ -196,6 +199,7 @@ export default function ModernoDetailsScreen() {
           authorName: publicName,
           subtitle: subtitle.trim(),
           synopsis: synopsis.trim(),
+          credits: credits.trim(),
           language,
           genres,
           audience,
@@ -360,6 +364,20 @@ export default function ModernoDetailsScreen() {
           textAlignVertical="top"
         />
         <Text style={styles.charCount}>{synopsis.length}/500</Text>
+
+        <Text style={styles.fieldLabel}>Créditos <Text style={styles.optional}>(opcional)</Text></Text>
+        <TextInput
+          style={[styles.input, styles.inputMultiline]}
+          value={credits}
+          onChangeText={setCredits}
+          placeholder={'De quién es la música, las imágenes o la portada.\nEj.: Música: «Título» de Autor (sitio.com)'}
+          placeholderTextColor={Colors.textMuted}
+          multiline
+          numberOfLines={4}
+          maxLength={1000}
+          textAlignVertical="top"
+        />
+        <Text style={styles.charCount}>{credits.length}/1000</Text>
 
         {/* ─── CLASIFICACIÓN ─── */}
         <Text style={styles.sectionLabel}>Clasificación</Text>

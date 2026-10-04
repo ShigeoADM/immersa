@@ -42,6 +42,7 @@ interface Story {
   format: string;
   status: string;
   synopsis?: string;
+  credits?: string;
   coverUrl?: string;
   publishedAt?: string;
   uid?: string;
@@ -560,6 +561,14 @@ export default function StoryDetailScreen() {
             })
           )}
         </View>
+
+        {/* Créditos: de quién son la música, las imágenes… (los escribe el autor) */}
+        {story.credits ? (
+          <View style={styles.section}>
+            <Text style={[styles.sectionLabel, themed.muted]}>Créditos</Text>
+            <Text style={[styles.description, themed.text]}>{story.credits}</Text>
+          </View>
+        ) : null}
 
         {/* ── Comentarios de toda la novela (por página en Moderno, por capítulo en Webnovel) ── */}
         <View style={styles.section}>
