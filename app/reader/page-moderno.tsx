@@ -43,11 +43,13 @@ import { getStaffRoles } from '@/services/profiles';
 import { enterReading, leaveReading } from '@/services/social';
 import type { Role } from '@/constants/permissions';
 import {
-  REF_SCREEN, FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, pageSfxCues, splitParagraphs, type SfxCue, MUSIC_FADE_MS, musicPlaybackVolume, sfxPlaybackVolume,
+  REF_SCREEN, FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, pageSfxCues, splitParagraphs, type SfxCue,
+  DEFAULT_PAGE_TRANSITION, type PageTransition, MUSIC_FADE_MS, musicPlaybackVolume, sfxPlaybackVolume,
   charLabelPos, charLabelSideStyle,
   type TextSize,
 } from '@/constants/reader-layout';
 import { promptLogin } from '@/components/login-prompt';
+import { PageTransitionOverlay, transitionHalfMs } from '@/components/page-transition';
 
 // ─── Colores de acento del lector ────────────────────────────────────────────
 const UI_ACCENT_KEY = 'immersa_ui_color';
@@ -105,6 +107,7 @@ interface Page {
   textBoxLayout?: TextBoxLayout;
   links?: PageLink[];
   hideTextBox?: boolean;            // página de solo ilustración: sin cuadro de texto
+  transition?: PageTransition;      // animación al entrar en la página (undefined = heredar)
   nextPageId?: string;              // "Al pasar la página" (por id)
   nextPageIndex?: number | null;    // formato antiguo (por número)
   sfxUrl?: string;                  // efecto de sonido al llegar a la página
@@ -560,6 +563,9 @@ export default function PageModernoReaderScreen() {
   // ── Transición de página ──────────────────────────────────────────────────
   const pageOpacity = useRef(new Animated.Value(1)).current;  // fondo
   const boxOpacity  = useRef(new Animated.Value(1)).current;  // cuadro de texto y nombres
+  // Animaciones de cambio de página que tapan la escena (barridos, cuadrados…)
+  const [transitionKind, setTransitionKind] = useState<PageTransition | null>(null);
+  const transitionProgress = useRef(new Animated.Value(0)).current;
 
   // ── Barras ecualizador ────────────────────────────────────────────────────
   const bars        = useRef([0.3, 0.6, 0.4, 0.5].map(v => new Animated.Value(v))).current;
@@ -1435,10 +1441,49 @@ export default function PageModernoReaderScreen() {
     fadingRef.current = true;
     if (record) pushHistory();
     playSfxPage();
+    const target = pages[newIndex];
+    // Con la escena fuera de la vista (o al instante), se pasa a la página nueva
+    const showNewPage = () => {
+      // Limpiar estado de texto ANTES de volver a ser visible — evita el flash
+      setParagraphs(['']);
+      setParaIndex(0);
+      setParaComplete(false);
+      setCurrent(newIndex);
+    };
+
+    // Animación de entrada de la página nueva: la suya o, si no define ninguna, la de la
+    // página de la que se viene (y las anteriores del camino).
+    const transition: PageTransition =
+      [target, ...inheritChain].find(p => p?.transition !== undefined)?.transition ?? DEFAULT_PAGE_TRANSITION;
+
+    if (transition === 'none') {
+      showNewPage();
+      fadingRef.current = false;
+      return;
+    }
+    if (transition !== 'fade') {
+      // Una capa tapa la escena, se cambia de página y la capa se retira
+      const half = transitionHalfMs(transition);
+      transitionProgress.setValue(0);
+      setTransitionKind(transition);
+      requestAnimationFrame(() => {
+        Animated.timing(transitionProgress, { toValue: 1, duration: half, useNativeDriver: true }).start(() => {
+          showNewPage();
+          fadingRef.current = false;
+          // Un instante para que la página nueva esté pintada antes de destaparla
+          setTimeout(() => {
+            Animated.timing(transitionProgress, { toValue: 2, duration: half, useNativeDriver: true })
+              .start(() => setTransitionKind(null));
+          }, 60);
+        });
+      });
+      return;
+    }
+
+    // Fundido.
     // Si la página nueva tiene el mismo fondo, el fondo no se toca: solo se desvanece y
     // reaparece el cuadro de texto. Así una ilustración se mantiene quieta mientras
     // cambia el texto, o mientras entra o sale el cuadro. Con otro fondo, funden los dos.
-    const target = pages[newIndex];
     const targetBg = [target, ...inheritChain].find(p => !!p?.backgroundUrl);
     const sameBackground = !!targetBg && !!effectiveBg
       && targetBg.backgroundUrl === effectiveBg.url
@@ -1449,11 +1494,7 @@ export default function PageModernoReaderScreen() {
     const fade = (toValue: number, duration: number) =>
       Animated.parallel(layers.map(v => Animated.timing(v, { toValue, duration, useNativeDriver: true })));
     fade(0, 160).start(() => {
-      // Limpiar estado de texto ANTES de volver a ser visible — evita el flash
-      setParagraphs(['']);
-      setParaIndex(0);
-      setParaComplete(false);
-      setCurrent(newIndex);
+      showNewPage();
       fadingRef.current = false;
       fade(1, 200).start();
     });
@@ -1789,6 +1830,16 @@ export default function PageModernoReaderScreen() {
             )}
           </View>
         </Animated.View>
+        )}
+
+        {/* Animación de cambio de página: tapa el fondo y el cuadro de texto */}
+        {transitionKind && (
+          <PageTransitionOverlay
+            kind={transitionKind}
+            progress={transitionProgress}
+            width={containerSize.width}
+            height={containerSize.height}
+          />
         )}
 
         {/* En una ilustración no hay cuadro de texto, así que la flecha de volver va suelta */}

@@ -54,6 +54,25 @@ export function splitParagraphs(text: string): string[] {
   return text.split(/\n\n+/).map(p => p.replace(/^\n+|\n+$/g, '')).filter(p => p.length > 0);
 }
 
+// Animación con la que ENTRA una página (al llegar a ella desde otra). Si la página
+// no define ninguna, la hereda de la página de la que se viene; por defecto, fundido.
+export type PageTransition =
+  | 'none' | 'fade'
+  | 'wipeLeft' | 'wipeRight' | 'wipeUp' | 'wipeDown'
+  | 'squares' | 'blinds' | 'flash';
+export const DEFAULT_PAGE_TRANSITION: PageTransition = 'fade';
+export const PAGE_TRANSITIONS: { value: PageTransition; label: string; icon: string }[] = [
+  { value: 'none',      label: 'Sin animación', icon: 'block' },
+  { value: 'fade',      label: 'Desvanecer',    icon: 'gradient' },
+  { value: 'wipeLeft',  label: 'Barrido',       icon: 'arrow-back' },
+  { value: 'wipeRight', label: 'Barrido',       icon: 'arrow-forward' },
+  { value: 'wipeUp',    label: 'Barrido',       icon: 'arrow-upward' },
+  { value: 'wipeDown',  label: 'Barrido',       icon: 'arrow-downward' },
+  { value: 'squares',   label: 'Cuadrados',     icon: 'grid-view' },
+  { value: 'blinds',    label: 'Persianas',     icon: 'view-week' },
+  { value: 'flash',     label: 'Destello',      icon: 'flash-on' },
+];
+
 // Duración del fundido de la música al entrar, salir o cambiar de pista
 export const MUSIC_FADE_MS = 450;
 

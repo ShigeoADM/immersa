@@ -36,6 +36,7 @@ import {
   REF_SCREEN, FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, BG_BLUR_MAX, BG_BLUR_PRESETS,
   MUSIC_VOLUME_MIN, MUSIC_VOLUME_MAX, MUSIC_VOLUME_STEP, SFX_VOLUME_MAX,
   musicPlaybackVolume, sfxPlaybackVolume, pageSfxCues, splitParagraphs,
+  PAGE_TRANSITIONS, type PageTransition,
   charLabelPos, charLabelSideStyle,
   type TextSize,
 } from '@/constants/reader-layout';
@@ -254,6 +255,8 @@ export default function PageEditorScreen() {
   const [jumpEnabled, setJumpEnabled]   = useState(false);
   // Página de solo ilustración: se ve el fondo, sin cuadro de texto
   const [hideTextBox, setHideTextBox]   = useState(false);
+  // Animación al entrar en esta página (undefined = heredar de la página anterior)
+  const [transition, setTransition]     = useState<PageTransition | undefined>(undefined);
   const [nextPageInput, setNextPageInput] = useState('');
   // Ids de las páginas del capítulo en orden: traduce número de página ↔ id
   const [chapterPageIds, setChapterPageIds] = useState<string[]>([]);
@@ -652,6 +655,7 @@ export default function PageEditorScreen() {
                       : -1;
         if (jumpIdx >= 0) { setJumpEnabled(true); setNextPageInput(String(jumpIdx + 1)); }
         setHideTextBox(p.hideTextBox === true);
+        setTransition(p.transition ?? undefined);
         setSfxCues(pageSfxCues(p).map(c =>
           newSfxCue(c.url, fileNameFromUrl(c.url, 'Efecto'), c.paragraph, c.volume ?? 1)));
         // Personajes
@@ -970,7 +974,7 @@ export default function PageEditorScreen() {
   // Instantánea de todo lo que se guarda; si difiere de la inicial hay cambios.
   const snapshot = JSON.stringify({
     pageText, bgUrl, imageAnchor, imageFit, bgBlur, musicMode, musicVolume, editMusicUrl, textSize, tbLayout, links,
-    jumpEnabled, nextPageInput, hideTextBox,
+    jumpEnabled, nextPageInput, hideTextBox, transition: transition ?? null,
     sfxCues: sfxCues.map(c => ({ paragraph: c.paragraph, url: c.url, volume: c.volume })),
     leftCharMode, leftCharName, rightCharMode, rightCharName,
     leftCharPos, rightCharPos, leftCharSide, rightCharSide,
@@ -1004,6 +1008,7 @@ export default function PageEditorScreen() {
     setLinks(d.links ?? []);
     setJumpEnabled(!!d.jumpEnabled); setNextPageInput(d.nextPageInput ?? '');
     setHideTextBox(!!d.hideTextBox);
+    setTransition(d.transition ?? undefined);
     setSfxCues(pageSfxCues(d).map(c =>
       newSfxCue(c.url, fileNameFromUrl(c.url, 'Efecto'), c.paragraph, c.volume ?? 1)));
     setLeftCharMode(d.leftCharMode ?? 'inherit');   setLeftCharName(d.leftCharName ?? '');
@@ -1122,6 +1127,7 @@ export default function PageEditorScreen() {
         updateData.nextPageId    = nextPageId ?? deleteField();
         updateData.nextPageIndex = deleteField(); // formato antiguo (por número)
         updateData.hideTextBox   = hideTextBox ? true : deleteField();
+        updateData.transition    = transition ?? deleteField();
         updateData.sfxCues       = savedSfxCues.length ? savedSfxCues : deleteField();
         // Formato antiguo (un solo efecto, al llegar): se mantiene para lectores sin actualizar
         updateData.sfxUrl        = legacySfx?.url ?? deleteField();
@@ -1164,6 +1170,7 @@ export default function PageEditorScreen() {
         };
         if (nextPageId) newData.nextPageId = nextPageId;
         if (hideTextBox) newData.hideTextBox = true;
+        if (transition) newData.transition = transition;
         if (savedSfxCues.length) newData.sfxCues = savedSfxCues;
         if (legacySfx) newData.sfxUrl = legacySfx.url;
         if (legacySfx?.volume !== undefined) newData.sfxVolume = legacySfx.volume;
@@ -1442,6 +1449,36 @@ export default function PageEditorScreen() {
               página siguiente. El texto que tuviera la página se conserva, pero no se muestra.
             </Text>
           )}
+        </View>
+
+        {/* Animación de entrada */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Animación al entrar en la página</Text>
+          <Text style={styles.sectionHint}>
+            Cómo aparece esta página al llegar a ella. «Heredar» usa la misma que la página de la
+            que se viene. Se ve al probar la página, no en esta vista previa.
+          </Text>
+          <View style={[styles.anchorRow, { flexWrap: 'wrap' }]}>
+            <TouchableOpacity
+              style={[styles.anchorBtn, transition === undefined && styles.anchorBtnActive]}
+              onPress={() => setTransition(undefined)}
+              activeOpacity={0.75}
+            >
+              <MaterialIcons name="subdirectory-arrow-right" size={13} color={transition === undefined ? '#000' : Colors.textSecondary} />
+              <Text style={[styles.anchorBtnText, transition === undefined && styles.anchorBtnTextActive]}>Heredar</Text>
+            </TouchableOpacity>
+            {PAGE_TRANSITIONS.map(opt => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[styles.anchorBtn, transition === opt.value && styles.anchorBtnActive]}
+                onPress={() => setTransition(opt.value)}
+                activeOpacity={0.75}
+              >
+                <MaterialIcons name={opt.icon as any} size={13} color={transition === opt.value ? '#000' : Colors.textSecondary} />
+                <Text style={[styles.anchorBtnText, transition === opt.value && styles.anchorBtnTextActive]}>{opt.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
         {/* Tamaño de texto */}
