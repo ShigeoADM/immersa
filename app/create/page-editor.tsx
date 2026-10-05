@@ -252,6 +252,8 @@ export default function PageEditorScreen() {
   const [links, setLinks]               = useState<PageLink[]>([]);
   // "Al pasar la página": saltar a otra página del capítulo (se guarda su id)
   const [jumpEnabled, setJumpEnabled]   = useState(false);
+  // Página de solo ilustración: se ve el fondo, sin cuadro de texto
+  const [hideTextBox, setHideTextBox]   = useState(false);
   const [nextPageInput, setNextPageInput] = useState('');
   // Ids de las páginas del capítulo en orden: traduce número de página ↔ id
   const [chapterPageIds, setChapterPageIds] = useState<string[]>([]);
@@ -649,6 +651,7 @@ export default function PageEditorScreen() {
                       : typeof p.nextPageIndex === 'number' ? p.nextPageIndex
                       : -1;
         if (jumpIdx >= 0) { setJumpEnabled(true); setNextPageInput(String(jumpIdx + 1)); }
+        setHideTextBox(p.hideTextBox === true);
         setSfxCues(pageSfxCues(p).map(c =>
           newSfxCue(c.url, fileNameFromUrl(c.url, 'Efecto'), c.paragraph, c.volume ?? 1)));
         // Personajes
@@ -967,7 +970,7 @@ export default function PageEditorScreen() {
   // Instantánea de todo lo que se guarda; si difiere de la inicial hay cambios.
   const snapshot = JSON.stringify({
     pageText, bgUrl, imageAnchor, imageFit, bgBlur, musicMode, musicVolume, editMusicUrl, textSize, tbLayout, links,
-    jumpEnabled, nextPageInput,
+    jumpEnabled, nextPageInput, hideTextBox,
     sfxCues: sfxCues.map(c => ({ paragraph: c.paragraph, url: c.url, volume: c.volume })),
     leftCharMode, leftCharName, rightCharMode, rightCharName,
     leftCharPos, rightCharPos, leftCharSide, rightCharSide,
@@ -1000,6 +1003,7 @@ export default function PageEditorScreen() {
     if (d.tbLayout) { setTbLayout(d.tbLayout); applyTbShared(d.tbLayout); }
     setLinks(d.links ?? []);
     setJumpEnabled(!!d.jumpEnabled); setNextPageInput(d.nextPageInput ?? '');
+    setHideTextBox(!!d.hideTextBox);
     setSfxCues(pageSfxCues(d).map(c =>
       newSfxCue(c.url, fileNameFromUrl(c.url, 'Efecto'), c.paragraph, c.volume ?? 1)));
     setLeftCharMode(d.leftCharMode ?? 'inherit');   setLeftCharName(d.leftCharName ?? '');
@@ -1117,6 +1121,7 @@ export default function PageEditorScreen() {
         };
         updateData.nextPageId    = nextPageId ?? deleteField();
         updateData.nextPageIndex = deleteField(); // formato antiguo (por número)
+        updateData.hideTextBox   = hideTextBox ? true : deleteField();
         updateData.sfxCues       = savedSfxCues.length ? savedSfxCues : deleteField();
         // Formato antiguo (un solo efecto, al llegar): se mantiene para lectores sin actualizar
         updateData.sfxUrl        = legacySfx?.url ?? deleteField();
@@ -1158,6 +1163,7 @@ export default function PageEditorScreen() {
           links: cleanLinks,
         };
         if (nextPageId) newData.nextPageId = nextPageId;
+        if (hideTextBox) newData.hideTextBox = true;
         if (savedSfxCues.length) newData.sfxCues = savedSfxCues;
         if (legacySfx) newData.sfxUrl = legacySfx.url;
         if (legacySfx?.volume !== undefined) newData.sfxVolume = legacySfx.volume;
@@ -1281,6 +1287,8 @@ export default function PageEditorScreen() {
         }
         <View style={styles.previewOverlay} />
 
+        {/* En una página de solo ilustración no hay cuadro de texto ni nombres */}
+        {!hideTextBox && (<>
         {/* Cuadro de texto redimensionable */}
         <Animated.View style={[
           styles.tbBox, { borderRadius: TEXT_BOX.radius * pvScale },
@@ -1366,6 +1374,8 @@ export default function PageEditorScreen() {
           </GestureDetector>
         )}
 
+        </>)}
+
         {/* Contador de caracteres */}
         <View style={styles.charCountBadge}>
           <Text style={styles.charCountText}>{pageText.length}/1000</Text>
@@ -1406,6 +1416,33 @@ export default function PageEditorScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+
+        {/* Tipo de página */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Tipo de página</Text>
+          <View style={styles.anchorRow}>
+            {([
+              { value: false, icon: 'notes', label: 'Con texto' },
+              { value: true,  icon: 'image', label: 'Solo ilustración' },
+            ] as const).map(opt => (
+              <TouchableOpacity
+                key={opt.label}
+                style={[styles.anchorBtn, hideTextBox === opt.value && styles.anchorBtnActive]}
+                onPress={() => setHideTextBox(opt.value)}
+                activeOpacity={0.75}
+              >
+                <MaterialIcons name={opt.icon} size={13} color={hideTextBox === opt.value ? '#000' : Colors.textSecondary} />
+                <Text style={[styles.anchorBtnText, hideTextBox === opt.value && styles.anchorBtnTextActive]}>{opt.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {hideTextBox && (
+            <Text style={styles.sectionHint}>
+              Se ve solo la imagen de fondo, sin cuadro de texto ni nombres. Un toque pasa a la
+              página siguiente. El texto que tuviera la página se conserva, pero no se muestra.
+            </Text>
+          )}
+        </View>
 
         {/* Tamaño de texto */}
         <View style={styles.section}>

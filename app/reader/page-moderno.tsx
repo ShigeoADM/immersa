@@ -104,6 +104,7 @@ interface Page {
   textSize?: TextSize;
   textBoxLayout?: TextBoxLayout;
   links?: PageLink[];
+  hideTextBox?: boolean;            // página de solo ilustración: sin cuadro de texto
   nextPageId?: string;              // "Al pasar la página" (por id)
   nextPageIndex?: number | null;    // formato antiguo (por número)
   sfxUrl?: string;                  // efecto de sonido al llegar a la página
@@ -557,7 +558,8 @@ export default function PageModernoReaderScreen() {
   const sfxPageRef = useRef<Audio.Sound | null>(null);
 
   // ── Transición de página ──────────────────────────────────────────────────
-  const pageOpacity = useRef(new Animated.Value(1)).current;
+  const pageOpacity = useRef(new Animated.Value(1)).current;  // fondo
+  const boxOpacity  = useRef(new Animated.Value(1)).current;  // cuadro de texto y nombres
 
   // ── Barras ecualizador ────────────────────────────────────────────────────
   const bars        = useRef([0.3, 0.6, 0.4, 0.5].map(v => new Animated.Value(v))).current;
@@ -712,12 +714,14 @@ export default function PageModernoReaderScreen() {
   // ── Efecto 1: al cambiar de página, dividir en párrafos y resetear ──────
   useEffect(() => {
     if (pages.length === 0) return;
-    const text = pages[current]?.text ?? '';
+    // Página de solo ilustración: no hay texto que escribir; un toque pasa de página
+    const illustration = pages[current]?.hideTextBox === true;
+    const text = illustration ? '' : pages[current]?.text ?? '';
     // Dividir solo en doble salto de línea — los \n simples se preservan dentro del párrafo
     const paras = splitParagraphs(text);
     setParagraphs(paras.length > 0 ? paras : ['']);
     setParaIndex(0);
-    setParaComplete(false);
+    setParaComplete(illustration);
   }, [current, pages]);
 
   // ── Efecto 3: auto-avance de párrafos (no páginas) ───────────────────────
@@ -1431,14 +1435,27 @@ export default function PageModernoReaderScreen() {
     fadingRef.current = true;
     if (record) pushHistory();
     playSfxPage();
-    Animated.timing(pageOpacity, { toValue: 0, duration: 160, useNativeDriver: true }).start(() => {
+    // Si la página nueva tiene el mismo fondo, el fondo no se toca: solo se desvanece y
+    // reaparece el cuadro de texto. Así una ilustración se mantiene quieta mientras
+    // cambia el texto, o mientras entra o sale el cuadro. Con otro fondo, funden los dos.
+    const target = pages[newIndex];
+    const targetBg = [target, ...inheritChain].find(p => !!p?.backgroundUrl);
+    const sameBackground = !!targetBg && !!effectiveBg
+      && targetBg.backgroundUrl === effectiveBg.url
+      && (targetBg.imageAnchor ?? 'center') === effectiveBg.anchor
+      && (targetBg.imageFit ?? 'cover') === effectiveBg.fit
+      && (targetBg.bgBlur ?? BG_BLUR_DEFAULT) === effectiveBg.blur;
+    const layers = sameBackground ? [boxOpacity] : [pageOpacity, boxOpacity];
+    const fade = (toValue: number, duration: number) =>
+      Animated.parallel(layers.map(v => Animated.timing(v, { toValue, duration, useNativeDriver: true })));
+    fade(0, 160).start(() => {
       // Limpiar estado de texto ANTES de volver a ser visible — evita el flash
       setParagraphs(['']);
       setParaIndex(0);
       setParaComplete(false);
       setCurrent(newIndex);
       fadingRef.current = false;
-      Animated.timing(pageOpacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+      fade(1, 200).start();
     });
   };
 
@@ -1520,6 +1537,7 @@ export default function PageModernoReaderScreen() {
   // Comentarios de esta página, sin los de usuarios bloqueados
   const pageComments = page ? chapterComments.filter(c => c.pageId === page.id && !blocked.has(c.uid)) : [];
   const isLastPage = current === pages.length - 1 && pages.length > 0;
+  const isIllustration = pages[current]?.hideTextBox === true;
   const hasNextOverride = page?.nextPageIndex !== undefined && page?.nextPageIndex !== null;
   const showArrowRight  = !isLastPage || hasNextOverride;
 
@@ -1715,6 +1733,10 @@ export default function PageModernoReaderScreen() {
 
         </Animated.View>
 
+        {/* Cuadro de texto y nombres: capa propia, para poder fundirla sin tocar el fondo.
+            En una página de solo ilustración no se pintan. */}
+        {!isIllustration && (
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: boxOpacity }]} pointerEvents="box-none">
         {/* ── Etiquetas de personaje ── */}
         {effectiveLeftChar &&
           renderCharLabel('left', effectiveLeftChar, effectiveLeftCharSide, effectiveLeftCharPos)}
@@ -1766,6 +1788,23 @@ export default function PageModernoReaderScreen() {
               </Animated.View>
             )}
           </View>
+        </Animated.View>
+        )}
+
+        {/* En una ilustración no hay cuadro de texto, así que la flecha de volver va suelta */}
+        {isIllustration && (historyLen > 0 || current > 0) && (
+          <TouchableOpacity
+            style={{
+              position: 'absolute', left: stage.left + 16, top: stage.top + stage.height - 92, // por encima del indicador de música
+              width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.5)',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+            onPress={goPrev}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons name="keyboard-backspace" size={16} color={accentColor} />
+          </TouchableOpacity>
+        )}
 
       </TouchableOpacity>
 
