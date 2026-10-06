@@ -1623,7 +1623,9 @@ export default function PageModernoReaderScreen() {
   // la ventana y centrado. El cuadro de texto, las etiquetas y el tamaño de la letra se
   // miden respecto a ese escenario, así la página se ve igual de compuesta en un móvil,
   // una tablet o un monitor: lo que cambia es el tamaño, no las proporciones.
-  // El fondo también se encuadra dentro del escenario (ver más abajo).
+  // El fondo sí ocupa toda la ventana. Y lo que el autor pega a un borde del escenario
+  // (un cuadro de texto a ras del borde inferior, por ejemplo) se lleva hasta el borde
+  // de la ventana, para que no quede flotando con imagen por detrás.
   const stageScale = Math.max(0.01, Math.min(
     containerSize.width / REF_SCREEN.width,
     containerSize.height / REF_SCREEN.height,
@@ -1634,9 +1636,6 @@ export default function PageModernoReaderScreen() {
     left:   (containerSize.width - REF_SCREEN.width * stageScale) / 2,
     top:    (containerSize.height - REF_SCREEN.height * stageScale) / 2,
   };
-
-  // La ventana no tiene la proporción del escenario: sobra hueco a los lados o arriba y abajo
-  const stageHasMargins = stage.left > 0.5 || stage.top > 0.5;
 
   const textFontSize = FONT_SIZES[effectiveTextSize] * TEXT_SCALE[textScale] * stageScale;
   const typewriterTextStyle = useMemo<OutlineStyle>(
@@ -1671,11 +1670,21 @@ export default function PageModernoReaderScreen() {
   // Lado al que va pegada la etiqueta (por defecto arriba)
   const effectiveLeftCharSide  = inherit(p => p.leftCharSide)  ?? 1;
   const effectiveRightCharSide = inherit(p => p.rightCharSide) ?? 1;
+  // El cuadro se mide sobre el escenario. Los lados que el autor dejó pegados al borde
+  // del escenario se estiran hasta el borde de la ventana (que puede ser más alta o más
+  // ancha que el escenario): así el cuadro sigue "pegado" como en la vista previa.
+  const EDGE = 0.75; // % de tolerancia para considerar que toca el borde
+  const tbEdges = {
+    left:   tbl.x <= EDGE ? 0 : stage.left + (tbl.x / 100) * stage.width,
+    top:    tbl.y <= EDGE ? 0 : stage.top + (tbl.y / 100) * stage.height,
+    right:  tbl.x + tbl.w >= 100 - EDGE ? containerSize.width  : stage.left + ((tbl.x + tbl.w) / 100) * stage.width,
+    bottom: tbl.y + tbl.h >= 100 - EDGE ? containerSize.height : stage.top + ((tbl.y + tbl.h) / 100) * stage.height,
+  };
   const tbPixels = {
-    left:   stage.left + (tbl.x / 100) * stage.width,
-    top:    stage.top  + (tbl.y / 100) * stage.height,
-    width:  (tbl.w / 100) * stage.width,
-    height: (tbl.h / 100) * stage.height,
+    left:   tbEdges.left,
+    top:    tbEdges.top,
+    width:  tbEdges.right - tbEdges.left,
+    height: tbEdges.bottom - tbEdges.top,
   };
 
   // ── Etiquetas de personaje ────────────────────────────────────────────────
@@ -1757,21 +1766,11 @@ export default function PageModernoReaderScreen() {
       >
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: pageOpacity }]}>
 
-        {/* ── FONDO — hereda imagen si la página no tiene una propia ──
-            El fondo se pinta dentro del escenario, con el mismo encuadre que enseña la
-            vista previa del editor: lo que el autor compone es lo que se ve. Si la
-            ventana no tiene la proporción del escenario (un monitor 16:9, por ejemplo),
-            el hueco que sobra se rellena con la misma imagen muy desenfocada y oscurecida,
-            en vez de con franjas negras. */}
+        {/* ── FONDO COMPLETO — hereda imagen si la página no tiene una propia ──
+            Ocupa toda la ventana, sea cual sea su proporción. */}
         {effectiveBg
           ? <>
-            {stageHasMargins && (
-              <>
-                <Image source={{ uri: effectiveBg.url }} style={StyleSheet.absoluteFill} resizeMode="cover" blurRadius={30} />
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} />
-              </>
-            )}
-            <View style={{ position: 'absolute', left: stage.left, top: stage.top, width: stage.width, height: stage.height, overflow: 'hidden' }}>
+            <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
               <Image
                 source={{ uri: effectiveBg.url }}
                 style={
