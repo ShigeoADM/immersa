@@ -57,20 +57,29 @@ export function splitParagraphs(text: string): string[] {
 // Animación con la que se PASA una página (al salir de ella hacia otra). Si la página
 // no define ninguna, la hereda de la página de la que se vino; por defecto, fundido.
 export type PageTransition =
-  | 'none' | 'fade'
+  | 'none' | 'fade' | 'fadeBlack' | 'flash'
   | 'wipeLeft' | 'wipeRight' | 'wipeUp' | 'wipeDown'
-  | 'squares' | 'blinds' | 'flash';
+  | 'curtain' | 'eyelid'
+  | 'blinds' | 'blindsH'
+  | 'squares' | 'squaresCenter' | 'mosaic' | 'diamonds';
 export const DEFAULT_PAGE_TRANSITION: PageTransition = 'fade';
 export const PAGE_TRANSITIONS: { value: PageTransition; label: string; icon: string }[] = [
-  { value: 'none',      label: 'Sin animación', icon: 'block' },
-  { value: 'fade',      label: 'Desvanecer',    icon: 'gradient' },
-  { value: 'wipeLeft',  label: 'Barrido',       icon: 'arrow-back' },
-  { value: 'wipeRight', label: 'Barrido',       icon: 'arrow-forward' },
-  { value: 'wipeUp',    label: 'Barrido',       icon: 'arrow-upward' },
-  { value: 'wipeDown',  label: 'Barrido',       icon: 'arrow-downward' },
-  { value: 'squares',   label: 'Cuadrados',     icon: 'grid-view' },
-  { value: 'blinds',    label: 'Persianas',     icon: 'view-week' },
-  { value: 'flash',     label: 'Destello',      icon: 'flash-on' },
+  { value: 'none',          label: 'Sin animación',        icon: 'block' },
+  { value: 'fade',          label: 'Desvanecer',           icon: 'gradient' },
+  { value: 'fadeBlack',     label: 'Fundido a negro',      icon: 'brightness-2' },
+  { value: 'flash',         label: 'Destello',             icon: 'flash-on' },
+  { value: 'wipeLeft',      label: 'Barrido',              icon: 'arrow-back' },
+  { value: 'wipeRight',     label: 'Barrido',              icon: 'arrow-forward' },
+  { value: 'wipeUp',        label: 'Barrido',              icon: 'arrow-upward' },
+  { value: 'wipeDown',      label: 'Barrido',              icon: 'arrow-downward' },
+  { value: 'curtain',       label: 'Telón',                icon: 'compare-arrows' },
+  { value: 'eyelid',        label: 'Parpadeo',             icon: 'unfold-less' },
+  { value: 'blinds',        label: 'Persianas verticales', icon: 'view-week' },
+  { value: 'blindsH',       label: 'Persianas horizontales', icon: 'view-stream' },
+  { value: 'squares',       label: 'Cuadrados en diagonal', icon: 'grid-view' },
+  { value: 'squaresCenter', label: 'Cuadrados desde el centro', icon: 'filter-center-focus' },
+  { value: 'mosaic',        label: 'Mosaico',              icon: 'apps' },
+  { value: 'diamonds',      label: 'Rombos',               icon: 'grid-4x4' },
 ];
 
 // Duración del fundido de la música al entrar, salir o cambiar de pista

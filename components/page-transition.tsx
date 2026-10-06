@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import type { PageTransition } from '@/constants/reader-layout';
 
@@ -14,83 +14,133 @@ type Props = {
   height: number;
 };
 
-const SQUARE_COLS = 10;
-const SQUARE_ROWS = 5;
-const BLINDS = 9;
+const COLS = 10;
+const ROWS = 5;
+const STRIPS_V = 9;   // persianas verticales
+const STRIPS_H = 6;   // persianas horizontales
+
+// Piezas que aparecen y desaparecen escalonadas: cada una empieza en `start` (0…spread)
+// y tarda `1 - spread` en completarse, tanto al tapar como al destapar.
+function staggered(progress: Animated.Value, start: number, spread: number, full = 1.02) {
+  const span = 1 - spread;
+  return progress.interpolate({
+    inputRange: [start, start + span, 1 + start, 1 + start + span],
+    outputRange: [0, full, full, 0],
+    extrapolate: 'clamp',
+  });
+}
+
+// Orden pseudoaleatorio pero fijo para cada casilla (mismo dibujo en cada cambio)
+const scatter = (c: number, r: number) => {
+  const x = Math.sin((c + 1) * 127.1 + (r + 1) * 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+type CellOrder = (c: number, r: number) => number; // 0…1: cuándo empieza cada casilla
+const ORDER: Record<string, CellOrder> = {
+  // En diagonal, de la esquina superior izquierda a la inferior derecha
+  squares: (c, r) => (c + r) / (COLS + ROWS - 2),
+  // Del centro hacia fuera
+  squaresCenter: (c, r) => {
+    const dx = (c - (COLS - 1) / 2) / ((COLS - 1) / 2);
+    const dy = (r - (ROWS - 1) / 2) / ((ROWS - 1) / 2);
+    return Math.min(1, Math.sqrt(dx * dx + dy * dy) / Math.SQRT2);
+  },
+  // Salteado, como un mosaico que se va rellenando
+  mosaic: scatter,
+  // Rombos, de izquierda a derecha
+  diamonds: (c, r) => (c + (r % 2) * 0.5) / (COLS - 0.5),
+};
 
 export function PageTransitionOverlay({ kind, progress, width, height }: Props) {
-  // Barridos: un panel negro cruza la pantalla en una dirección
-  const wipe = useMemo(() => {
-    const axis = kind === 'wipeUp' || kind === 'wipeDown' ? 'translateY' : 'translateX';
-    const size = axis === 'translateX' ? width : height;
+  const through = (a: number, b: number, c: number) =>
+    progress.interpolate({ inputRange: [0, 1, 2], outputRange: [a, b, c] });
+
+  // ── Barridos: un panel negro cruza la pantalla en una dirección ─────────────
+  if (kind === 'wipeLeft' || kind === 'wipeRight' || kind === 'wipeUp' || kind === 'wipeDown') {
+    const vertical = kind === 'wipeUp' || kind === 'wipeDown';
+    const size = vertical ? height : width;
     // Izquierda / arriba: entra por el lado contrario y sale por ese lado
     const sign = kind === 'wipeLeft' || kind === 'wipeUp' ? 1 : -1;
-    return {
-      axis,
-      value: progress.interpolate({ inputRange: [0, 1, 2], outputRange: [sign * size, 0, -sign * size] }),
-    };
-  }, [kind, progress, width, height]);
-
-  if (kind === 'wipeLeft' || kind === 'wipeRight' || kind === 'wipeUp' || kind === 'wipeDown') {
+    const value = through(sign * size, 0, -sign * size);
     return (
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip]}>
         <Animated.View
-          style={[StyleSheet.absoluteFill, styles.black, { transform: [{ [wipe.axis]: wipe.value } as any] }]}
+          style={[StyleSheet.absoluteFill, styles.black, { transform: [vertical ? { translateY: value } : { translateX: value }] }]}
         />
       </View>
     );
   }
 
-  if (kind === 'flash') {
+  // ── Fundido a negro y destello blanco ───────────────────────────────────────
+  if (kind === 'flash' || kind === 'fadeBlack') {
     return (
       <Animated.View
         pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFill,
-          { backgroundColor: '#fff', opacity: progress.interpolate({ inputRange: [0, 1, 2], outputRange: [0, 1, 0] }) },
-        ]}
+        style={[StyleSheet.absoluteFill, { backgroundColor: kind === 'flash' ? '#fff' : '#000', opacity: through(0, 1, 0) }]}
       />
     );
   }
 
-  if (kind === 'blinds') {
-    // Persianas: franjas verticales que se cierran y se abren, una detrás de otra
-    const stripW = width / BLINDS;
+  // ── Telón: dos paneles se cierran desde los lados (o desde arriba y abajo) ──
+  if (kind === 'curtain' || kind === 'eyelid') {
+    const vertical = kind === 'eyelid';
+    const half = (vertical ? height : width) / 2;
+    const first  = through(-half, 0, -half);
+    const second = through(half, 0, half);
+    const panel = vertical
+      ? { left: 0, right: 0, height: half + 1 }
+      : { top: 0, bottom: 0, width: half + 1 };
     return (
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip, styles.row]}>
-        {Array.from({ length: BLINDS }, (_, i) => {
-          const start = (i / (BLINDS - 1)) * 0.45;
-          const scaleX = progress.interpolate({
-            inputRange: [start, start + 0.55, 1 + start, 1 + start + 0.55],
-            outputRange: [0, 1, 1, 0],
-            extrapolate: 'clamp',
-          });
-          // +1 de ancho para que no quede rendija entre franjas
-          return <Animated.View key={i} style={[styles.black, { width: stripW + 1, height, transform: [{ scaleX }] }]} />;
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip]}>
+        <Animated.View
+          style={[styles.abs, styles.black, panel, vertical ? { top: 0 } : { left: 0 },
+            { transform: [vertical ? { translateY: first } : { translateX: first }] }]}
+        />
+        <Animated.View
+          style={[styles.abs, styles.black, panel, vertical ? { bottom: 0 } : { right: 0 },
+            { transform: [vertical ? { translateY: second } : { translateX: second }] }]}
+        />
+      </View>
+    );
+  }
+
+  // ── Persianas: franjas que se cierran y se abren, una detrás de otra ────────
+  if (kind === 'blinds' || kind === 'blindsH') {
+    const horizontal = kind === 'blindsH';
+    const count = horizontal ? STRIPS_H : STRIPS_V;
+    const stripW = width / STRIPS_V;
+    const stripH = height / STRIPS_H;
+    return (
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip, horizontal ? null : styles.row]}>
+        {Array.from({ length: count }, (_, i) => {
+          const scale = staggered(progress, (i / (count - 1)) * 0.45, 0.45, 1);
+          // +1 para que no quede rendija entre franjas
+          return horizontal
+            ? <Animated.View key={i} style={[styles.black, { width, height: stripH + 1, transform: [{ scaleY: scale }] }]} />
+            : <Animated.View key={i} style={[styles.black, { width: stripW + 1, height, transform: [{ scaleX: scale }] }]} />;
         })}
       </View>
     );
   }
 
-  if (kind === 'squares') {
-    // Cuadrados: una cuadrícula que se va rellenando en diagonal y luego se vacía
-    const cellW = width / SQUARE_COLS;
-    const cellH = height / SQUARE_ROWS;
+  // ── Cuadrícula: cuadrados (o rombos) que se rellenan en distinto orden ──────
+  const order = ORDER[kind];
+  if (order) {
+    const diamond = kind === 'diamonds';
+    const cellW = width / COLS;
+    const cellH = height / ROWS;
     const cells: React.ReactNode[] = [];
-    for (let r = 0; r < SQUARE_ROWS; r++) {
-      for (let c = 0; c < SQUARE_COLS; c++) {
-        const start = ((c + r) / (SQUARE_COLS + SQUARE_ROWS - 2)) * 0.6;
-        const scale = progress.interpolate({
-          inputRange: [start, start + 0.4, 1 + start, 1 + start + 0.4],
-          outputRange: [0, 1.02, 1.02, 0],
-          extrapolate: 'clamp',
-        });
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        // Un rombo (cuadrado girado 45°) tiene que crecer más para cubrir su casilla
+        const scale = staggered(progress, order(c, r) * 0.6, 0.6, diamond ? 1.6 : 1.02);
         cells.push(
           <Animated.View
             key={`${r}-${c}`}
-            style={[styles.black, {
-              position: 'absolute', left: c * cellW, top: r * cellH, width: cellW + 1, height: cellH + 1,
-              transform: [{ scale }],
+            style={[styles.abs, styles.black, {
+              left: c * cellW, top: r * cellH, width: cellW + 1, height: cellH + 1,
+              transform: diamond ? [{ rotate: '45deg' }, { scale }] : [{ scale }],
             }]}
           />,
         );
@@ -104,13 +154,24 @@ export function PageTransitionOverlay({ kind, progress, width, height }: Props) 
 
 // Duración de cada mitad (tapar / destapar), en ms
 export function transitionHalfMs(kind: PageTransition): number {
-  if (kind === 'squares' || kind === 'blinds') return 480;
-  if (kind === 'flash') return 220;
-  return 340;
+  switch (kind) {
+    case 'squares': case 'squaresCenter': case 'mosaic': case 'diamonds':
+    case 'blinds': case 'blindsH':
+      return 480;
+    case 'flash':
+      return 220;
+    case 'fadeBlack':
+      return 420;
+    case 'curtain': case 'eyelid':
+      return 380;
+    default:
+      return 340;
+  }
 }
 
 const styles = StyleSheet.create({
   clip:  { overflow: 'hidden' },
   row:   { flexDirection: 'row' },
+  abs:   { position: 'absolute' },
   black: { backgroundColor: '#000' },
 });
