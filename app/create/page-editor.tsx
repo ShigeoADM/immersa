@@ -282,9 +282,20 @@ function MediaLibraryPicker({ kind, loading, urls, onPick }: {
 }
 
 // Nombre legible de un archivo a partir de su URL
+// Nombre para mostrar de un archivo a partir de su dirección: solo el nombre (sin la
+// carpeta) y sin la marca de tiempo que se le antepone al subirlo.
 const fileNameFromUrl = (url: string, fallback: string) => {
-  try { return decodeURIComponent(url.split('/').pop()?.split('?')[0] ?? fallback); }
-  catch { return fallback; }
+  try {
+    const path = decodeURIComponent(url.split('/').pop()?.split('?')[0] ?? '');
+    const name = (path.split('/').pop() ?? '').replace(/^\d{10,}_/, '');
+    return name || fallback;
+  } catch { return fallback; }
+};
+// Nombre con el que se guarda un archivo subido: una marca de tiempo (para que no choque
+// con otro igual) seguida de su nombre original, que es el que se enseña después.
+const storedFileName = (originalName: string, fallbackExt: string) => {
+  const clean = originalName.trim().replace(/[\/#?%*:|"<>\[\]]/g, '_').slice(-80);
+  return `${Date.now()}_${clean.includes('.') ? clean : `${clean || 'archivo'}.${fallbackExt}`}`;
 };
 
 // Fila "Volumen: − 100% +  [Escuchar]" (música y efecto de sonido).
@@ -814,7 +825,7 @@ export default function PageEditorScreen() {
         else if (p.musicUrl === null)    { setMusicMode('silence'); }
         else { setMusicMode('play'); setMusicVolume(p.musicVolume ?? 1);
           setMusicParagraph(p.musicParagraph ?? 1); setMusicBeforeSilence(p.musicBefore === 'silence');
-          setEditMusicUrl(p.musicUrl); setMusicFileName(decodeURIComponent(p.musicUrl.split('/').pop()?.split('?')[0] ?? 'Pista')); }
+          setEditMusicUrl(p.musicUrl); setMusicFileName(fileNameFromUrl(p.musicUrl, 'Pista')); }
         // Enlaces antiguos del mismo capítulo: se les asigna el id de su página destino
         setLinks((p.links ?? []).map((l: PageLink) =>
           l.targetPageId || l.targetChapterId || ids[l.targetPageIndex] === undefined
@@ -1004,8 +1015,7 @@ export default function PageEditorScreen() {
         const asset = result.assets[0];
         setUploadingMusic(true);
         try {
-          const ext = asset.name.split('.').pop() ?? 'mp3';
-          const url = await uploadLocalFile(asset.uri, `music/${storyId}/${chapterId}/${Date.now()}.${ext}`);
+          const url = await uploadLocalFile(asset.uri, `music/${storyId}/${chapterId}/${storedFileName(asset.name, 'mp3')}`);
           setEditMusicUrl(url); setMusicFileName(asset.name); setMusicMode('play');
         } catch (e: any) { AppAlert.alert('Error al subir música', e?.message ?? 'Inténtalo de nuevo.'); }
         finally { setUploadingMusic(false); }
@@ -1142,8 +1152,7 @@ export default function PageEditorScreen() {
       const asset = result.assets[0];
       setUploadingSfx(true);
       try {
-        const ext = asset.name.split('.').pop() ?? 'mp3';
-        const url = await uploadLocalFile(asset.uri, `sfx/${storyId}/${chapterId}/${Date.now()}.${ext}`);
+        const url = await uploadLocalFile(asset.uri, `sfx/${storyId}/${chapterId}/${storedFileName(asset.name, 'mp3')}`);
         addSfxCue(url, asset.name);
       } catch (e: any) { AppAlert.alert('Error al subir el sonido', e?.message ?? 'Inténtalo de nuevo.'); }
       finally { setUploadingSfx(false); }
