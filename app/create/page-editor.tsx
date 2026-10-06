@@ -255,8 +255,11 @@ export default function PageEditorScreen() {
   const [jumpEnabled, setJumpEnabled]   = useState(false);
   // Página de solo ilustración: se ve el fondo, sin cuadro de texto
   const [hideTextBox, setHideTextBox]   = useState(false);
-  // Animación al entrar en esta página (undefined = heredar de la página anterior)
+  // Animación al pasar esta página (undefined = heredar de la página anterior)
   const [transition, setTransition]     = useState<PageTransition | undefined>(undefined);
+  const [transitionOpen, setTransitionOpen] = useState(false);
+  const transitionOption = PAGE_TRANSITIONS.find(o => o.value === transition)
+    ?? { label: 'Heredar', icon: 'subdirectory-arrow-right' };
   const [nextPageInput, setNextPageInput] = useState('');
   // Ids de las páginas del capítulo en orden: traduce número de página ↔ id
   const [chapterPageIds, setChapterPageIds] = useState<string[]>([]);
@@ -1451,12 +1454,25 @@ export default function PageEditorScreen() {
           )}
         </View>
 
-        {/* Animación de entrada */}
+        {/* Animación al pasar la página */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Animación al entrar en la página</Text>
+          {/* Plegable: cerrado muestra solo la opción elegida */}
+          <TouchableOpacity
+            style={styles.foldHeader}
+            onPress={() => setTransitionOpen(v => !v)}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.sectionLabel, { flex: 1 }]}>Animación al pasar esta página</Text>
+            <View style={styles.foldValue}>
+              <MaterialIcons name={transitionOption.icon as any} size={13} color={Colors.emerald} />
+              <Text style={styles.foldValueText}>{transitionOption.label}</Text>
+            </View>
+            <MaterialIcons name={transitionOpen ? 'expand-less' : 'expand-more'} size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
+          {transitionOpen && (<>
           <Text style={styles.sectionHint}>
-            Cómo aparece esta página al llegar a ella. «Heredar» usa la misma que la página de la
-            que se viene. Se ve al probar la página, no en esta vista previa.
+            La animación que se ve al salir de esta página hacia la siguiente. «Heredar» usa la
+            misma que la página anterior. Se ve al probar la página, no en esta vista previa.
           </Text>
           <View style={[styles.anchorRow, { flexWrap: 'wrap' }]}>
             <TouchableOpacity
@@ -1479,6 +1495,7 @@ export default function PageEditorScreen() {
               </TouchableOpacity>
             ))}
           </View>
+          </>)}
         </View>
 
         {/* Tamaño de texto */}
@@ -2398,6 +2415,10 @@ const styles = StyleSheet.create({
 
   // Config scrollable
   config:        { flex: 1 },
+  // Cabecera de un apartado plegable
+  foldHeader:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  foldValue:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 6, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  foldValueText: { fontSize: 12, fontWeight: '600', color: Colors.textPrimary },
   // Tarjeta de un efecto de sonido
   sfxCueCard:    { gap: 8, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
   sfxCueSnippet: { fontSize: 11, color: Colors.textMuted, fontStyle: 'italic' },

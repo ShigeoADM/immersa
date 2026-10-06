@@ -54,8 +54,8 @@ export function splitParagraphs(text: string): string[] {
   return text.split(/\n\n+/).map(p => p.replace(/^\n+|\n+$/g, '')).filter(p => p.length > 0);
 }
 
-// Animación con la que ENTRA una página (al llegar a ella desde otra). Si la página
-// no define ninguna, la hereda de la página de la que se viene; por defecto, fundido.
+// Animación con la que se PASA una página (al salir de ella hacia otra). Si la página
+// no define ninguna, la hereda de la página de la que se vino; por defecto, fundido.
 export type PageTransition =
   | 'none' | 'fade'
   | 'wipeLeft' | 'wipeRight' | 'wipeUp' | 'wipeDown'

@@ -107,7 +107,7 @@ interface Page {
   textBoxLayout?: TextBoxLayout;
   links?: PageLink[];
   hideTextBox?: boolean;            // página de solo ilustración: sin cuadro de texto
-  transition?: PageTransition;      // animación al entrar en la página (undefined = heredar)
+  transition?: PageTransition;      // animación al pasar esta página (undefined = heredar)
   nextPageId?: string;              // "Al pasar la página" (por id)
   nextPageIndex?: number | null;    // formato antiguo (por número)
   sfxUrl?: string;                  // efecto de sonido al llegar a la página
@@ -1451,10 +1451,11 @@ export default function PageModernoReaderScreen() {
       setCurrent(newIndex);
     };
 
-    // Animación de entrada de la página nueva: la suya o, si no define ninguna, la de la
-    // página de la que se viene (y las anteriores del camino).
+    // La animación es la de la página que se DEJA (la actual): la que tenga elegida o, si
+    // no define ninguna, la que herede de la página de la que se vino (y las anteriores
+    // del camino). inheritChain empieza por la página actual.
     const transition: PageTransition =
-      [target, ...inheritChain].find(p => p?.transition !== undefined)?.transition ?? DEFAULT_PAGE_TRANSITION;
+      inheritChain.find(p => p.transition !== undefined)?.transition ?? DEFAULT_PAGE_TRANSITION;
 
     if (transition === 'none') {
       showNewPage();
