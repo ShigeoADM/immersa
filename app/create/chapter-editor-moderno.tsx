@@ -23,7 +23,7 @@ import { db, storage } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { AppAlert } from '@/components/app-dialog';
 import {
-  countWords, duplicatePage, formatReadingStats, isBackgroundUsedElsewhere, migrateChapterRefsToIds, saveOrder,
+  countWords, duplicatePage, formatReadingStats, deleteUnusedMedia, pageMediaUrls, migrateChapterRefsToIds, saveOrder,
 } from '@/services/stories';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 
@@ -198,17 +198,12 @@ export default function ChapterEditorModernoScreen() {
       async () => {
         try {
           await ensureRefsById();
-          // El archivo del fondo solo se borra de Storage si ninguna otra página lo usa
-          // (se puede reutilizar con "Ya subidos" o al duplicar una página)
-          if (page.backgroundUrl) {
-            try {
-              const shared = await isBackgroundUsedElsewhere(storyId as string, page.backgroundUrl, page.id);
-              if (!shared) await deleteObject(ref(storage, page.backgroundUrl));
-            } catch (_) {}
-          }
           await deleteDoc(
             doc(db, 'stories', storyId as string, 'chapters', chapterId as string, 'pages', page.id)
           );
+          // Sus archivos (fondo, música, efectos) solo se borran del almacenamiento si
+          // ninguna otra página los usa: se pueden reutilizar con "Ya subidos" o al duplicar
+          deleteUnusedMedia(storyId as string, pageMediaUrls(page));
           setPages(prev => prev.filter(p => p.id !== page.id));
         } catch (e) {
           console.error('Error borrando página:', e);

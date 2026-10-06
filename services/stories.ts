@@ -3,6 +3,7 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
+import { deleteStoredFile, isStoredFile } from '@/services/media';
 
 export type DeletedBy = 'author' | 'admin';
 
@@ -91,13 +92,52 @@ export async function migrateChapterRefsToIds(storyId: string, chapterId: string
 // ¿Usa esta imagen de fondo alguna otra página de la historia? Los fondos se pueden
 // reutilizar entre páginas ("Ya subidos" o al duplicar), así que antes de borrar el
 // archivo de Storage hay que comprobar que nadie más lo necesita.
-export async function isBackgroundUsedElsewhere(storyId: string, url: string, exceptPageId: string) {
+// ── Archivos de las páginas (fondos, música, efectos) ────────────────────────
+// Un mismo archivo puede estar en varias páginas: al elegirlo en "Ya subidos" o al
+// duplicar una página se reutiliza, no se sube otra vez. Por eso un archivo solo se
+// borra del almacenamiento cuando ya no lo usa NINGUNA página de la historia.
+
+// Archivos que usa una página
+export function pageMediaUrls(page: any): string[] {
+  if (!page) return [];
+  const urls: unknown[] = [
+    page.backgroundUrl,
+    page.musicUrl,
+    page.sfxUrl,
+    ...(Array.isArray(page.sfxCues) ? page.sfxCues.map((c: any) => c?.url) : []),
+  ];
+  return urls.filter((u): u is string => typeof u === 'string' && !!u);
+}
+
+// Todos los archivos que usan las páginas de la historia (menos las indicadas)
+async function mediaInUse(storyId: string, exceptPageIds: string[] = []): Promise<Set<string>> {
+  const used = new Set<string>();
   const chapters = await getDocs(collection(db, 'stories', storyId, 'chapters'));
   for (const ch of chapters.docs) {
     const pages = await getDocs(collection(db, 'stories', storyId, 'chapters', ch.id, 'pages'));
-    if (pages.docs.some(p => p.id !== exceptPageId && p.data().backgroundUrl === url)) return true;
+    pages.docs.forEach(p => {
+      if (!exceptPageIds.includes(p.id)) pageMediaUrls(p.data()).forEach(u => used.add(u));
+    });
   }
-  return false;
+  return used;
+}
+
+// Borra del almacenamiento los archivos de la lista que ya no usa ninguna página.
+// `exceptPageIds`: páginas que no cuentan (la que se está borrando, por ejemplo).
+// Nunca lanza: si algo falla, el archivo se queda y ya está.
+export async function deleteUnusedMedia(storyId: string, urls: Iterable<string>, exceptPageIds: string[] = []) {
+  const candidates = [...new Set(urls)].filter(isStoredFile);
+  if (candidates.length === 0) return;
+  try {
+    const used = await mediaInUse(storyId, exceptPageIds);
+    await Promise.all(candidates.filter(u => !used.has(u)).map(deleteStoredFile));
+  } catch (e) {
+    console.error('Error limpiando archivos sin usar:', e);
+  }
+}
+
+export async function isBackgroundUsedElsewhere(storyId: string, url: string, exceptPageId: string) {
+  return (await mediaInUse(storyId, [exceptPageId])).has(url);
 }
 
 // Duplica una página justo detrás de la original (con todo su contenido).
@@ -119,8 +159,9 @@ export async function duplicatePage(storyId: string, chapterId: string, pageId: 
 }
 
 // Borra capítulo + todas sus páginas
-export async function deleteChapterWithCascade(storyId: string, chapterId: string) {
+export async function deleteChapterWithCascade(storyId: string, chapterId: string, cleanMedia = true) {
   const pagesSnap = await getDocs(collection(db, 'stories', storyId, 'chapters', chapterId, 'pages'));
+  const media = pagesSnap.docs.flatMap(pg => pageMediaUrls(pg.data()));
   for (const pg of pagesSnap.docs) {
     await deleteDoc(doc(db, 'stories', storyId, 'chapters', chapterId, 'pages', pg.id));
   }
@@ -132,6 +173,8 @@ export async function deleteChapterWithCascade(storyId: string, chapterId: strin
     console.error('Error borrando los me gusta del capítulo:', e);
   }
   await deleteDoc(doc(db, 'stories', storyId, 'chapters', chapterId));
+  // Los archivos de sus páginas que no use ningún otro capítulo
+  if (cleanMedia) await deleteUnusedMedia(storyId, media);
 }
 
 // Borra historia + todos sus capítulos + todas sus páginas.
@@ -147,9 +190,21 @@ export async function deleteStoryWithCascade(storyId: string, deletedBy: Deleted
     deletedAt: new Date().toISOString(),
   });
 
+  // Archivos de la historia (fondos, música, efectos y portada). Se recogen antes de
+  // borrar nada y se eliminan mientras la historia aún existe: las reglas del
+  // almacenamiento comprueban quién es su autor. Si la borra moderación no hay permiso
+  // sobre los archivos y se quedan.
+  const media: string[] = [];
+  if (storySnap.data()?.coverUrl) media.push(storySnap.data()!.coverUrl);
   const chaptersSnap = await getDocs(collection(db, 'stories', storyId, 'chapters'));
   for (const ch of chaptersSnap.docs) {
-    await deleteChapterWithCascade(storyId, ch.id);
+    const pagesSnap = await getDocs(collection(db, 'stories', storyId, 'chapters', ch.id, 'pages'));
+    pagesSnap.docs.forEach(pg => media.push(...pageMediaUrls(pg.data())));
+  }
+  await Promise.all([...new Set(media)].filter(isStoredFile).map(deleteStoredFile));
+
+  for (const ch of chaptersSnap.docs) {
+    await deleteChapterWithCascade(storyId, ch.id, false);
   }
   for (const sub of ['comments', 'likes', 'readers', 'saves']) {
     const snap = await getDocs(collection(db, 'stories', storyId, sub));

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import { AppAlert, useDialogAccent } from '@/components/app-dialog';
 import { ADULT_AUDIENCES, ADULT_CONTENT, AUDIENCES, GENRES } from '@/constants/story-meta';
 import { useAuth } from '@/context/AuthContext';
 import { DesktopColumn } from '@/components/desktop-column';
+import { deleteStoredFile } from '@/services/media';
 
 const LANGUAGES = ['Español', 'English', 'Português', 'Français', 'Deutsch', 'Otro'];
 
@@ -73,6 +74,7 @@ export default function ModernoDetailsScreen() {
 
   const [coverUri,       setCoverUri]       = useState<string | null>(null);
   const [coverUrl,       setCoverUrl]       = useState('');
+  const originalCoverRef = useRef(''); // portada guardada, para borrar su archivo si se cambia
   const [uploadingCover, setUploadingCover] = useState(false);
 
   const [saving, setSaving] = useState(false);
@@ -100,7 +102,7 @@ export default function ModernoDetailsScreen() {
           setStatus(d.status ?? 'ongoing');
           setRecommendedUiColor(d.recommendedUiColor ?? null);
           setFormat(d.format === 'Webnovel' ? 'Webnovel' : 'Moderno');
-          if (d.coverUrl) { setCoverUri(d.coverUrl); setCoverUrl(d.coverUrl); }
+          if (d.coverUrl) { setCoverUri(d.coverUrl); setCoverUrl(d.coverUrl); originalCoverRef.current = d.coverUrl; }
         }
       } catch (e) {
         console.error('Error cargando historia para editar:', e);
@@ -189,6 +191,10 @@ export default function ModernoDetailsScreen() {
           recommendedUiColor: recommendedUiColor ?? null,
           updatedAt: new Date().toISOString(),
         });
+        // La portada anterior ya no se usa: se borra su archivo
+        if (originalCoverRef.current && originalCoverRef.current !== coverUrl) {
+          deleteStoredFile(originalCoverRef.current);
+        }
         router.back();
       } else {
         // ── Crear historia nueva ──

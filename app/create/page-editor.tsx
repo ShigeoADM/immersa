@@ -41,6 +41,7 @@ import {
   type TextSize,
 } from '@/constants/reader-layout';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
+import { deleteUnusedMedia } from '@/services/stories';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 type ImageAnchor   = 'top' | 'center' | 'bottom';
@@ -1017,6 +1018,29 @@ export default function PageEditorScreen() {
   const isDirtyRef = useRef(false);
   isDirtyRef.current = isDirty;
 
+  // ── Archivos que dejan de usarse ──────────────────────────────────────────
+  // Se apuntan todos los archivos que pasan por esta página mientras se edita (los que
+  // tenía y los que se suben o eligen). Al guardar, los que ya no estén en la página se
+  // borran del almacenamiento si no los usa ninguna otra; al salir sin guardar, se
+  // borran los que se subieron en esta sesión.
+  const currentMedia = [bgUrl, editMusicUrl, ...sfxCues.map(c => c.url)].filter(Boolean);
+  const currentMediaKey = currentMedia.join('|');
+  const seenMediaRef = useRef(new Set<string>());
+  const originalMediaRef = useRef<string[] | null>(null);
+  const currentMediaRef = useRef<string[]>([]);
+  currentMediaRef.current = currentMedia;
+  useEffect(() => {
+    if (loading) return;
+    if (originalMediaRef.current === null) originalMediaRef.current = currentMedia;
+    currentMedia.forEach(u => seenMediaRef.current.add(u));
+  }, [loading, currentMediaKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // keep: archivos que deben conservarse pase lo que pase
+  const cleanUpMedia = (keep: string[]) => {
+    const leftovers = [...seenMediaRef.current].filter(u => !keep.includes(u));
+    // La página actual no cuenta como "uso": lo que queda en ella está en `keep`
+    if (leftovers.length) deleteUnusedMedia(storyId as string, leftovers, pageId ? [pageId as string] : []);
+  };
+
   // ── Borrador automático ───────────────────────────────────────────────────
   // Mientras hay cambios sin guardar, la instantánea se guarda en el móvil. Si la app
   // se cierra, al volver a abrir la página se ofrece recuperarla.
@@ -1098,7 +1122,13 @@ export default function PageEditorScreen() {
         'Cambios sin guardar',
         'Si sales ahora perderás los cambios de esta página.',
         'Salir sin guardar',
-        () => { allowLeaveRef.current = true; clearDraft(); navigation.dispatch(e.data.action); },
+        () => {
+          allowLeaveRef.current = true;
+          clearDraft();
+          // Lo subido en esta sesión no se llegó a guardar: se borra
+          cleanUpMedia(originalMediaRef.current ?? []);
+          navigation.dispatch(e.data.action);
+        },
       );
     });
   }, [navigation]);
@@ -1234,6 +1264,8 @@ export default function PageEditorScreen() {
       }
       allowLeaveRef.current = true;
       clearDraft();
+      // Archivos que se quitaron o se sustituyeron en esta página
+      cleanUpMedia(currentMediaRef.current);
       router.back();
     } catch (e) {
       console.error('Error guardando página:', e);
