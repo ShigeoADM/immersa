@@ -376,6 +376,10 @@ export default function PageEditorScreen() {
   // Párrafo en el que empieza la música de esta página (1 = al llegar) y qué suena antes
   const [musicParagraph, setMusicParagraph] = useState(1);
   const [musicBeforeSilence, setMusicBeforeSilence] = useState(false);
+  // Silencio momentáneo: la música se calla entre dos párrafos (sea propia o heredada)
+  const [quietOn, setQuietOn]           = useState(false);
+  const [quietFrom, setQuietFrom]       = useState(1);
+  const [quietTo, setQuietTo]           = useState(1);
   const [previewingMusic, setPreviewingMusic] = useState(false);
   const previewSoundRef = useRef<Audio.Sound | null>(null);
   const [textSize, setTextSize]         = useState<TextSize | undefined>(undefined);
@@ -847,6 +851,9 @@ export default function PageEditorScreen() {
           };
         }));
         setTransition(p.transition ?? undefined);
+        if (p.musicQuiet) {
+          setQuietOn(true); setQuietFrom(p.musicQuiet.from ?? 1); setQuietTo(p.musicQuiet.to ?? p.musicQuiet.from ?? 1);
+        }
         setSfxCues(pageSfxCues(p).map(c =>
           newSfxCue(c.url, fileNameFromUrl(c.url, 'Efecto'), c.paragraph, c.volume ?? 1)));
         // Personajes
@@ -1162,7 +1169,7 @@ export default function PageEditorScreen() {
   // ── Cambios sin guardar ───────────────────────────────────────────────────
   // Instantánea de todo lo que se guarda; si difiere de la inicial hay cambios.
   const snapshot = JSON.stringify({
-    pageText, bgUrl, imageAnchor, imageFit, bgBlur, bgNone, musicMode, musicVolume, musicParagraph, musicBeforeSilence, editMusicUrl, textSize, tbLayout, links,
+    pageText, bgUrl, imageAnchor, imageFit, bgBlur, bgNone, musicMode, musicVolume, musicParagraph, musicBeforeSilence, quietOn, quietFrom, quietTo, editMusicUrl, textSize, tbLayout, links,
     jumpEnabled, nextPageInput, hideTextBox, transition: transition ?? null,
     sfxCues: sfxCues.map(c => ({ paragraph: c.paragraph, url: c.url, volume: c.volume })),
     extraBoxes: extraBoxes.map(({ id, ...rest }) => rest),
@@ -1216,6 +1223,7 @@ export default function PageEditorScreen() {
     setBgNone(!!d.bgNone);
     setMusicMode(d.musicMode ?? 'inherit'); setMusicVolume(d.musicVolume ?? 1);
     setMusicParagraph(d.musicParagraph ?? 1); setMusicBeforeSilence(!!d.musicBeforeSilence);
+    setQuietOn(!!d.quietOn); setQuietFrom(d.quietFrom ?? 1); setQuietTo(d.quietTo ?? 1);
     setEditMusicUrl(d.editMusicUrl ?? '');
     setMusicFileName(d.editMusicUrl ? fileNameFromUrl(d.editMusicUrl, 'Pista') : '');
     setTextSize(d.textSize ?? undefined);
@@ -1333,6 +1341,11 @@ export default function PageEditorScreen() {
         musicMode === 'inherit' ? undefined : musicMode === 'silence' ? null : editMusicUrl;
 
       const cleanLinks = links.filter(l => l.word.trim());
+      // Silencio momentáneo de la música
+      const quietA = Math.min(quietFrom, paragraphCount);
+      const savedQuiet = quietOn
+        ? { from: quietA, to: Math.max(quietA, Math.min(quietTo, paragraphCount)) }
+        : null;
       // Cuadros de texto extra: solo los que tienen texto; el destino, por id de página
       const savedExtraBoxes = extraBoxes.filter(b => b.text.trim()).map(b => {
         const targetId = chapterPageIds[parseInt(b.target, 10) - 1];
@@ -1382,6 +1395,7 @@ export default function PageEditorScreen() {
         updateData.musicVolume = musicMode === 'play' && musicVolume !== 1 ? musicVolume : deleteField();
         updateData.musicParagraph = delayedMusic ? savedMusicParagraph : deleteField();
         updateData.musicBefore    = delayedMusic && musicBeforeSilence ? 'silence' : deleteField();
+        updateData.musicQuiet     = savedQuiet ?? deleteField();
         // Personajes
         if (leftCharMode === 'inherit')  updateData.leftChar = deleteField();
         else if (leftCharMode === 'hide') updateData.leftChar = '';
@@ -1426,6 +1440,7 @@ export default function PageEditorScreen() {
         if (musicMode === 'play' && editMusicUrl && musicVolume !== 1) newData.musicVolume = musicVolume;
         if (delayedMusic) newData.musicParagraph = savedMusicParagraph;
         if (delayedMusic && musicBeforeSilence) newData.musicBefore = 'silence';
+        if (savedQuiet) newData.musicQuiet = savedQuiet;
         // Personajes
         if (leftCharMode === 'show' && leftCharName.trim()) newData.leftChar = leftCharName.trim();
         else if (leftCharMode === 'hide') newData.leftChar = '';
@@ -2156,6 +2171,64 @@ export default function PageEditorScreen() {
               <Text style={styles.musicHintText}>La música se detendrá en esta página</Text>
             </View>
           )}
+        </View>
+
+        {/* Silencio momentáneo de la música */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Silencio momentáneo</Text>
+          <Text style={styles.sectionHint}>
+            Calla la música durante algunos párrafos de esta página, sea la suya o la heredada.
+            Después vuelve sola, por donde iba.
+          </Text>
+          <View style={styles.anchorRow}>
+            {([{ value: false, label: 'No' }, { value: true, label: 'Callar la música' }] as const).map(opt => (
+              <TouchableOpacity
+                key={opt.label}
+                style={[styles.anchorBtn, quietOn === opt.value && styles.anchorBtnActive]}
+                onPress={() => setQuietOn(opt.value)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.anchorBtnText, quietOn === opt.value && styles.anchorBtnTextActive]}>{opt.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {quietOn && (() => {
+            const from = Math.min(quietFrom, paragraphCount);
+            const to = Math.max(from, Math.min(quietTo, paragraphCount));
+            const row = (label: string, value: number, set: (n: number) => void, min: number) => (
+              <View style={styles.anchorRow}>
+                <Text style={styles.anchorLabel}>{label}</Text>
+                <TouchableOpacity
+                  style={[styles.blurStepBtn, value <= min && { opacity: 0.35 }]}
+                  onPress={() => set(Math.max(min, value - 1))}
+                  disabled={value <= min}
+                  hitSlop={6}
+                >
+                  <MaterialIcons name="remove" size={14} color={Colors.textSecondary} />
+                </TouchableOpacity>
+                <Text style={styles.blurValue}>{value}</Text>
+                <TouchableOpacity
+                  style={[styles.blurStepBtn, value >= paragraphCount && { opacity: 0.35 }]}
+                  onPress={() => set(Math.min(paragraphCount, value + 1))}
+                  disabled={value >= paragraphCount}
+                  hitSlop={6}
+                >
+                  <MaterialIcons name="add" size={14} color={Colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            );
+            return (
+              <>
+                {row('Desde el párrafo:', from, n => { setQuietFrom(n); if (n > quietTo) setQuietTo(n); }, 1)}
+                {row('Hasta el párrafo:', to, setQuietTo, from)}
+                <Text style={styles.sfxCueSnippet}>
+                  {to >= paragraphCount
+                    ? 'Llega hasta el final de la página: la música vuelve al pasar a la siguiente.'
+                    : `La música vuelve al aparecer el párrafo ${to + 1}.`}
+                </Text>
+              </>
+            );
+          })()}
         </View>
 
         {/* Efecto de sonido */}

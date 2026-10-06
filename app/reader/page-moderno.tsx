@@ -110,6 +110,9 @@ interface Page {
   // Hasta entonces sigue la música anterior, o hay silencio si musicBefore es 'silence'.
   musicParagraph?: number;
   musicBefore?: 'silence';
+  // Silencio momentáneo: la música (la que sea, propia o heredada) se calla entre esos
+  // párrafos y vuelve después por donde iba
+  musicQuiet?: { from: number; to: number };
   textSize?: TextSize;
   textBoxLayout?: TextBoxLayout;
   links?: PageLink[];
@@ -449,6 +452,8 @@ const MUSIC_TO_SILENCE_MS = 1200;
 // Cambio de una música a otra: la que se va baja durante MUSIC_FADE_MS; la nueva
 // empieza a subir un poco después y más despacio, para que apenas se solapen
 const MUSIC_IN_DELAY_MS = 600;
+// Silencio momentáneo dentro de una página: bajada y subida
+const MUSIC_QUIET_MS = 900;
 const MUSIC_IN_MS = 1400;
 
 // Un párrafo del cuadro de texto. Va en su propio componente para que los párrafos ya
@@ -687,6 +692,8 @@ export default function PageModernoReaderScreen() {
   // Fundidos de volumen en curso, y pistas que aún están saliendo (no se liberan)
   const fadeTimersRef  = useRef(new Map<Audio.Sound, ReturnType<typeof setInterval>>());
   const fadingOutRef   = useRef(new Set<string>());
+  // La página tiene la música callada en el párrafo actual (silencio momentáneo)
+  const quietRef = useRef(false);
   // Música heredada de capítulos anteriores, para las páginas del principio que no
   // definen ninguna. undefined = aún no se sabe; null = silencio.
   const [baseMusic, setBaseMusic] = useState<{ url: string; volume: number } | null | undefined>(undefined);
@@ -1019,7 +1026,8 @@ export default function PageModernoReaderScreen() {
     setIsMuted(newMuted);
     try {
       if (soundRef.current) cancelFade(soundRef.current);
-      await soundRef.current?.setStatusAsync({ volume: newMuted ? 0 : trackVolumeRef.current });
+      // Si la página tiene la música callada en este párrafo, sigue callada
+      await soundRef.current?.setStatusAsync({ volume: newMuted || quietRef.current ? 0 : trackVolumeRef.current });
     } catch (_) {}
   };
 
@@ -1105,7 +1113,9 @@ export default function PageModernoReaderScreen() {
       // va ya está baja cuando la nueva empieza a oírse y no suenan las dos a la vez.
       const fadeIn = () => {
         if (gen !== playGenRef.current || soundRef.current !== sound) return; // ya cambió otra vez
-        if (!isMutedRef.current) fadeVolume(sound, 0, trackVolumeRef.current, replacing ? MUSIC_IN_MS : MUSIC_FADE_MS);
+        if (!isMutedRef.current && !quietRef.current) {
+          fadeVolume(sound, 0, trackVolumeRef.current, replacing ? MUSIC_IN_MS : MUSIC_FADE_MS);
+        }
       };
       if (replacing) setTimeout(fadeIn, MUSIC_IN_DELAY_MS);
       else fadeIn();
@@ -1183,7 +1193,25 @@ export default function PageModernoReaderScreen() {
       : null;
   }, [pages, current, inheritChain, paraIndex, baseMusic]);
 
-  const pageHasMusic = !!effectiveMusic;
+  // ── Silencio momentáneo ───────────────────────────────────────────────────
+  // Entre los párrafos que indique la página, la música baja hasta callarse sin
+  // detenerse; al salir de ellos vuelve a subir y sigue por donde iba.
+  const quietRange = pages[current]?.musicQuiet;
+  const musicQuiet = !!quietRange && paraIndex >= quietRange.from - 1 && paraIndex <= quietRange.to - 1;
+  useEffect(() => {
+    if (quietRef.current === musicQuiet) return;
+    quietRef.current = musicQuiet;
+    const sound = soundRef.current;
+    if (!sound || isMutedRef.current) return;
+    if (musicQuiet) {
+      fadeVolume(sound, trackVolumeRef.current, 0, MUSIC_QUIET_MS);
+    } else if ((effectiveMusic?.url ?? null) === currentTrackRef.current) {
+      // Si a la vez cambia la pista, de la entrada ya se ocupa el cambio de música
+      fadeVolume(sound, 0, trackVolumeRef.current, MUSIC_QUIET_MS);
+    }
+  }, [musicQuiet]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pageHasMusic = !!effectiveMusic && !musicQuiet;
   useEffect(() => {
     if (!pageHasMusic || isMuted) return;
     startBars();
@@ -1209,7 +1237,9 @@ export default function PageModernoReaderScreen() {
       // Misma pista con otro volumen: ajustarlo sin cortarla
       const from = trackVolumeRef.current;
       trackVolumeRef.current = effectiveVolume;
-      if (!isMutedRef.current && soundRef.current) fadeVolume(soundRef.current, from, effectiveVolume, 250);
+      if (!isMutedRef.current && !quietRef.current && soundRef.current) {
+        fadeVolume(soundRef.current, from, effectiveVolume, 250);
+      }
     }
     // Si misma pista y mismo volumen: no hacer nada (sigue sonando)
   }, [pages, effectiveMusic?.url, effectiveMusic?.volume, baseMusic === undefined]); // eslint-disable-line react-hooks/exhaustive-deps
