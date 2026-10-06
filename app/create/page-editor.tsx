@@ -9,6 +9,7 @@ import {
   Image,
   ActivityIndicator,
   Platform,
+  PanResponder,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -37,6 +38,7 @@ import {
   MUSIC_VOLUME_MIN, MUSIC_VOLUME_MAX, MUSIC_VOLUME_STEP, SFX_VOLUME_MAX,
   musicPlaybackVolume, sfxPlaybackVolume, pageSfxCues, splitParagraphs,
   PAGE_TRANSITIONS, type PageTransition,
+  pageExtraBoxes, EXTRA_BOX_MAX, EXTRA_BOX_STYLE,
   charLabelPos, charLabelSideStyle,
   type TextSize,
 } from '@/constants/reader-layout';
@@ -51,6 +53,7 @@ type CharMode      = 'inherit' | 'show' | 'hide';
 type TextBoxLayout = { x: number; y: number; w: number; h: number };
 
 const DEFAULT_TB: TextBoxLayout = { x: 11, y: 23, w: 78, h: 53 };
+const TB_CLIPBOARD_KEY = 'immersa_textbox_clipboard';
 
 // ─── Enlace de texto ──────────────────────────────────────────────────────────
 type PageLink = {
@@ -120,6 +123,74 @@ const MEDIA_SOURCE_LABEL = { file: 'Archivo', url: 'URL / Drive', library: 'Ya s
 // Archivos ya usados en la historia (para reutilizarlos sin volver a subirlos)
 type MediaLibrary = { images: string[]; music: string[]; sfx: string[] };
 type PreviewBg = { uri: string; anchor: ImageAnchor; fit: ImageFit; blur: number };
+// Cuadro de texto extra en edición (id solo para la lista; target = nº de página o '')
+type EditorExtraBox = {
+  id: string; text: string; x: number; y: number; w: number;
+  rotation: number; paragraph: number; target: string;
+};
+let extraBoxSeq = 0;
+const ROTATION_PRESETS = [
+  { value: 0, label: 'Recto' }, { value: -90, label: 'Vertical ↑' }, { value: 90, label: 'Vertical ↓' },
+  { value: -20, label: 'Diagonal ↗' }, { value: 20, label: 'Diagonal ↘' },
+];
+const clampPct = (v: number, max = 100) => Math.max(0, Math.min(max, Math.round(v)));
+
+// Cuadro extra en la vista previa: se arrastra para colocarlo
+function PreviewExtraBox({ box, pvWidth, pvHeight, pvScale, fontSize, onMove }: {
+  box: EditorExtraBox; pvWidth: number; pvHeight: number; pvScale: number; fontSize: number;
+  onMove: (x: number, y: number) => void;
+}) {
+  const startRef = useRef({ x: box.x, y: box.y });
+  const boxRef = useRef(box);
+  boxRef.current = box;
+  const moveRef = useRef(onMove);
+  moveRef.current = onMove;
+  const sizeRef = useRef({ pvWidth, pvHeight });
+  sizeRef.current = { pvWidth, pvHeight };
+  const pan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => { startRef.current = { x: boxRef.current.x, y: boxRef.current.y }; },
+    onPanResponderMove: (_e, g) => {
+      const { pvWidth: w, pvHeight: h } = sizeRef.current;
+      if (!w || !h) return;
+      moveRef.current(
+        clampPct(startRef.current.x + (g.dx / w) * 100, 100 - 5),
+        clampPct(startRef.current.y + (g.dy / h) * 100, 100 - 5),
+      );
+    },
+  })).current;
+  return (
+    <View
+      {...pan.panHandlers}
+      style={{
+        position: 'absolute',
+        left: (box.x / 100) * pvWidth,
+        top: (box.y / 100) * pvHeight,
+        width: (box.w / 100) * pvWidth,
+        transform: [{ rotate: `${box.rotation}deg` }],
+        backgroundColor: 'rgba(22,24,30,0.82)',
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        borderColor: Colors.aqua,
+        borderRadius: EXTRA_BOX_STYLE.radius * pvScale,
+        paddingHorizontal: EXTRA_BOX_STYLE.paddingHorizontal * pvScale,
+        paddingVertical: EXTRA_BOX_STYLE.paddingVertical * pvScale,
+        ...(Platform.OS === 'web' ? ({ cursor: 'move', userSelect: 'none' } as any) : null),
+      }}
+    >
+      <Text
+        style={{
+          color: '#fff', fontWeight: '700', fontSize, lineHeight: fontSize * 1.5,
+          fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+        }}
+      >
+        {box.text || 'Texto…'}
+      </Text>
+    </View>
+  );
+}
+
 // Efecto de sonido en edición (id solo para la lista de la pantalla)
 type EditorSfxCue = { id: string; paragraph: number; url: string; name: string; volume: number };
 let sfxCueSeq = 0;
@@ -264,6 +335,23 @@ export default function PageEditorScreen() {
   const [jumpEnabled, setJumpEnabled]   = useState(false);
   // Página de solo ilustración: se ve el fondo, sin cuadro de texto
   const [hideTextBox, setHideTextBox]   = useState(false);
+  // Cuadro de texto copiado (se guarda en el dispositivo: sirve entre páginas,
+  // capítulos e historias)
+  const [tbClipboard, setTbClipboard]   = useState<TextBoxLayout | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem(TB_CLIPBOARD_KEY)
+      .then(raw => { if (raw) setTbClipboard(JSON.parse(raw)); })
+      .catch(() => {});
+  }, []);
+  const copyTextBox = () => {
+    setTbClipboard(tbLayout);
+    AsyncStorage.setItem(TB_CLIPBOARD_KEY, JSON.stringify(tbLayout)).catch(() => {});
+  };
+  const pasteTextBox = () => {
+    if (!tbClipboard) return;
+    setTbLayout(tbClipboard);
+    applyTbShared(tbClipboard);
+  };
   // Animación al pasar esta página (undefined = heredar de la página anterior)
   const [transition, setTransition]     = useState<PageTransition | undefined>(undefined);
   const [transitionOpen, setTransitionOpen] = useState(false);
@@ -279,6 +367,15 @@ export default function PageEditorScreen() {
   const [sfxSource, setSfxSource]       = useState<MediaSource>('file');
   const [sfxUrlInput, setSfxUrlInput]   = useState('');
   const [previewingSfxId, setPreviewingSfxId] = useState<string | null>(null);
+  // Cuadros de texto extra (voces de fondo, rótulos, decisiones)
+  const [extraBoxes, setExtraBoxes]     = useState<EditorExtraBox[]>([]);
+  const addExtraBox = () => setExtraBoxes(list => list.length >= EXTRA_BOX_MAX ? list : [
+    ...list,
+    { id: `box${++extraBoxSeq}`, text: '', x: 8 + list.length * 6, y: 6 + list.length * 8, w: 30, rotation: 0, paragraph: 1, target: '' },
+  ]);
+  const updateExtraBox = (id: string, patch: Partial<EditorExtraBox>) =>
+    setExtraBoxes(list => list.map(b => (b.id === id ? { ...b, ...patch } : b)));
+  const removeExtraBox = (id: string) => setExtraBoxes(list => list.filter(b => b.id !== id));
   const sfxPreviewRef = useRef<Audio.Sound | null>(null);
   // Archivos ya usados en la historia: se cargan la primera vez que se elige "Ya subidos"
   const [mediaLibrary, setMediaLibrary]     = useState<MediaLibrary | null>(null);
@@ -686,6 +783,14 @@ export default function PageEditorScreen() {
                       : -1;
         if (jumpIdx >= 0) { setJumpEnabled(true); setNextPageInput(String(jumpIdx + 1)); }
         setHideTextBox(p.hideTextBox === true);
+        setExtraBoxes(pageExtraBoxes(p).map(b => {
+          const targetIdx = b.targetPageId ? ids.indexOf(b.targetPageId) : -1;
+          return {
+            id: `box${++extraBoxSeq}`, text: b.text, x: b.x, y: b.y, w: b.w,
+            rotation: b.rotation ?? 0, paragraph: b.paragraph ?? 1,
+            target: targetIdx >= 0 ? String(targetIdx + 1) : '',
+          };
+        }));
         setTransition(p.transition ?? undefined);
         setSfxCues(pageSfxCues(p).map(c =>
           newSfxCue(c.url, fileNameFromUrl(c.url, 'Efecto'), c.paragraph, c.volume ?? 1)));
@@ -1007,6 +1112,7 @@ export default function PageEditorScreen() {
     pageText, bgUrl, imageAnchor, imageFit, bgBlur, bgNone, musicMode, musicVolume, musicParagraph, musicBeforeSilence, editMusicUrl, textSize, tbLayout, links,
     jumpEnabled, nextPageInput, hideTextBox, transition: transition ?? null,
     sfxCues: sfxCues.map(c => ({ paragraph: c.paragraph, url: c.url, volume: c.volume })),
+    extraBoxes: extraBoxes.map(({ id, ...rest }) => rest),
     leftCharMode, leftCharName, rightCharMode, rightCharName,
     leftCharPos, rightCharPos, leftCharSide, rightCharSide,
   });
@@ -1064,6 +1170,9 @@ export default function PageEditorScreen() {
     setLinks(d.links ?? []);
     setJumpEnabled(!!d.jumpEnabled); setNextPageInput(d.nextPageInput ?? '');
     setHideTextBox(!!d.hideTextBox);
+    setExtraBoxes(Array.isArray(d.extraBoxes)
+      ? d.extraBoxes.map((b: any) => ({ ...b, id: `box${++extraBoxSeq}` }))
+      : []);
     setTransition(d.transition ?? undefined);
     setSfxCues(pageSfxCues(d).map(c =>
       newSfxCue(c.url, fileNameFromUrl(c.url, 'Efecto'), c.paragraph, c.volume ?? 1)));
@@ -1171,6 +1280,17 @@ export default function PageEditorScreen() {
         musicMode === 'inherit' ? undefined : musicMode === 'silence' ? null : editMusicUrl;
 
       const cleanLinks = links.filter(l => l.word.trim());
+      // Cuadros de texto extra: solo los que tienen texto; el destino, por id de página
+      const savedExtraBoxes = extraBoxes.filter(b => b.text.trim()).map(b => {
+        const targetId = chapterPageIds[parseInt(b.target, 10) - 1];
+        const saved: Record<string, unknown> = {
+          text: b.text.trim(), x: b.x, y: b.y, w: b.w,
+          paragraph: Math.min(b.paragraph, paragraphCount),
+        };
+        if (b.rotation) saved.rotation = b.rotation;
+        if (targetId) saved.targetPageId = targetId;
+        return saved;
+      });
       // Música que empieza en un párrafo posterior al primero
       const savedMusicParagraph = Math.min(musicParagraph, paragraphCount);
       const delayedMusic = musicMode === 'play' && !!editMusicUrl && savedMusicParagraph > 1;
@@ -1195,6 +1315,7 @@ export default function PageEditorScreen() {
         updateData.bgNone        = !bgUrl && bgNone ? true : deleteField();
         updateData.transition    = transition ?? deleteField();
         updateData.sfxCues       = savedSfxCues.length ? savedSfxCues : deleteField();
+        updateData.extraBoxes    = savedExtraBoxes.length ? savedExtraBoxes : deleteField();
         // Formato antiguo (un solo efecto, al llegar): se mantiene para lectores sin actualizar
         updateData.sfxUrl        = legacySfx?.url ?? deleteField();
         updateData.sfxVolume     = legacySfx?.volume ?? deleteField();
@@ -1241,6 +1362,7 @@ export default function PageEditorScreen() {
         if (!bgUrl && bgNone) newData.bgNone = true;
         if (transition) newData.transition = transition;
         if (savedSfxCues.length) newData.sfxCues = savedSfxCues;
+        if (savedExtraBoxes.length) newData.extraBoxes = savedExtraBoxes;
         if (legacySfx) newData.sfxUrl = legacySfx.url;
         if (legacySfx?.volume !== undefined) newData.sfxVolume = legacySfx.volume;
         if (textSize !== undefined) newData.textSize = textSize;
@@ -1460,6 +1582,19 @@ export default function PageEditorScreen() {
 
         </>)}
 
+        {/* Cuadros de texto extra: se arrastran para colocarlos */}
+        {extraBoxes.map(box => (
+          <PreviewExtraBox
+            key={box.id}
+            box={box}
+            pvWidth={pvWidth}
+            pvHeight={pvWidth * REF_SCREEN.height / REF_SCREEN.width}
+            pvScale={pvScale}
+            fontSize={previewFontSize * EXTRA_BOX_STYLE.fontScale}
+            onMove={(x, y) => updateExtraBox(box.id, { x, y })}
+          />
+        ))}
+
         {/* Contador de caracteres */}
         <View style={styles.charCountBadge}>
           <Text style={styles.charCountText}>{pageText.length}/1000</Text>
@@ -1527,6 +1662,33 @@ export default function PageEditorScreen() {
             </Text>
           )}
         </View>
+
+        {/* Copiar / pegar el cuadro de texto */}
+        {!hideTextBox && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Cuadro de texto</Text>
+            <View style={styles.anchorRow}>
+              <TouchableOpacity style={styles.anchorBtn} onPress={copyTextBox} activeOpacity={0.75}>
+                <MaterialIcons name="content-copy" size={13} color={Colors.textSecondary} />
+                <Text style={styles.anchorBtnText}>Copiar posición y tamaño</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.anchorBtn, !tbClipboard && { opacity: 0.4 }]}
+                onPress={pasteTextBox}
+                disabled={!tbClipboard}
+                activeOpacity={0.75}
+              >
+                <MaterialIcons name="content-paste" size={13} color={Colors.textSecondary} />
+                <Text style={styles.anchorBtnText}>Pegar</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.sectionHint}>
+              {tbClipboard
+                ? 'Hay un cuadro copiado. «Pegar» coloca el de esta página exactamente igual; sirve también en otros capítulos e historias.'
+                : 'Copia el cuadro de esta página para ponerlo idéntico en otra, aunque sea de otro capítulo.'}
+            </Text>
+          </View>
+        )}
 
         {/* Animación al pasar la página */}
         <View style={styles.section}>
@@ -2057,6 +2219,102 @@ export default function PageEditorScreen() {
                 </View>
               )}
             </>
+          )}
+        </View>
+
+        {/* ── Cuadros de texto extra ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Cuadros de texto extra</Text>
+          <Text style={styles.sectionHint}>
+            Texto suelto que aparece en el párrafo que elijas: voces de fondo, un rótulo, una
+            decisión… Hasta {EXTRA_BOX_MAX}. Arrástralos en la vista previa para colocarlos.
+          </Text>
+          {extraBoxes.map((box, i) => {
+            const paragraph = Math.min(box.paragraph, paragraphCount);
+            const stepper = (label: string, value: string, onDown: () => void, onUp: () => void) => (
+              <View style={styles.anchorRow}>
+                <Text style={styles.anchorLabel}>{label}</Text>
+                <TouchableOpacity style={styles.blurStepBtn} onPress={onDown} hitSlop={6}>
+                  <MaterialIcons name="remove" size={14} color={Colors.textSecondary} />
+                </TouchableOpacity>
+                <Text style={[styles.blurValue, { minWidth: 44 }]}>{value}</Text>
+                <TouchableOpacity style={styles.blurStepBtn} onPress={onUp} hitSlop={6}>
+                  <MaterialIcons name="add" size={14} color={Colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            );
+            return (
+              <View key={box.id} style={styles.sfxCueCard}>
+                <View style={styles.musicTrackRow}>
+                  <MaterialIcons name="chat-bubble-outline" size={14} color={Colors.aqua} />
+                  <Text style={styles.musicTrackName}>Cuadro {i + 1}</Text>
+                  <TouchableOpacity
+                    onPress={() => removeExtraBox(box.id)}
+                    style={{ padding: 6 }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <MaterialIcons name="close" size={15} color="#FF6B6B" />
+                  </TouchableOpacity>
+                </View>
+                <TextInput
+                  style={[styles.urlInput, { minHeight: 56, textAlignVertical: 'top' }]}
+                  value={box.text}
+                  onChangeText={text => updateExtraBox(box.id, { text })}
+                  placeholder="Texto del cuadro…"
+                  placeholderTextColor={Colors.textMuted}
+                  multiline
+                  maxLength={200}
+                />
+                {stepper('Aparece en el párrafo:', String(paragraph),
+                  () => updateExtraBox(box.id, { paragraph: Math.max(1, paragraph - 1) }),
+                  () => updateExtraBox(box.id, { paragraph: Math.min(paragraphCount, paragraph + 1) }))}
+                {stepper('Ancho:', `${box.w}%`,
+                  () => updateExtraBox(box.id, { w: Math.max(10, box.w - 2) }),
+                  () => updateExtraBox(box.id, { w: Math.min(100, box.w + 2) }))}
+                {stepper('Giro:', `${box.rotation}°`,
+                  () => updateExtraBox(box.id, { rotation: Math.max(-180, box.rotation - 5) }),
+                  () => updateExtraBox(box.id, { rotation: Math.min(180, box.rotation + 5) }))}
+                <View style={[styles.anchorRow, { flexWrap: 'wrap' }]}>
+                  {ROTATION_PRESETS.map(p => (
+                    <TouchableOpacity
+                      key={p.value}
+                      style={[styles.anchorBtn, box.rotation === p.value && styles.anchorBtnActive]}
+                      onPress={() => updateExtraBox(box.id, { rotation: p.value })}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={[styles.anchorBtnText, box.rotation === p.value && styles.anchorBtnTextActive]}>{p.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <View style={styles.anchorRow}>
+                  <Text style={styles.anchorLabel}>Al pulsarlo, ir a la página:</Text>
+                  <TextInput
+                    style={[styles.urlInput, { flex: 0, width: 64, textAlign: 'center' }]}
+                    value={box.target}
+                    onChangeText={t => updateExtraBox(box.id, { target: t.replace(/[^0-9]/g, '') })}
+                    placeholder="—"
+                    placeholderTextColor={Colors.textMuted}
+                    keyboardType="number-pad"
+                    maxLength={3}
+                  />
+                </View>
+                {box.target !== '' && !chapterPageIds[parseInt(box.target, 10) - 1] ? (
+                  <Text style={[styles.sfxCueSnippet, { color: '#FF6B6B' }]}>
+                    El capítulo no tiene una página {box.target}: el cuadro no llevará a ningún sitio.
+                  </Text>
+                ) : (
+                  <Text style={styles.sfxCueSnippet}>
+                    {box.target ? 'Es una decisión: al pulsarlo se va a esa página.' : 'Vacío = solo texto, no se pulsa.'}
+                  </Text>
+                )}
+              </View>
+            );
+          })}
+          {extraBoxes.length < EXTRA_BOX_MAX && (
+            <TouchableOpacity style={styles.pickBtn} onPress={addExtraBox} activeOpacity={0.7}>
+              <MaterialIcons name="add" size={16} color={Colors.textSecondary} />
+              <Text style={styles.pickBtnText}>Añadir cuadro de texto</Text>
+            </TouchableOpacity>
           )}
         </View>
 

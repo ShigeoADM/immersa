@@ -44,7 +44,8 @@ import { enterReading, leaveReading, hasLikedChapter, setChapterLike } from '@/s
 import type { Role } from '@/constants/permissions';
 import {
   REF_SCREEN, FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, pageSfxCues, splitParagraphs, type SfxCue,
-  DEFAULT_PAGE_TRANSITION, type PageTransition, MUSIC_FADE_MS, musicPlaybackVolume, sfxPlaybackVolume,
+  DEFAULT_PAGE_TRANSITION, type PageTransition,
+  pageExtraBoxes, EXTRA_BOX_STYLE, type ExtraBox, MUSIC_FADE_MS, musicPlaybackVolume, sfxPlaybackVolume,
   charLabelPos, charLabelSideStyle,
   type TextSize,
 } from '@/constants/reader-layout';
@@ -113,6 +114,7 @@ interface Page {
   links?: PageLink[];
   hideTextBox?: boolean;            // página de solo ilustración: sin cuadro de texto
   transition?: PageTransition;      // animación al pasar esta página (undefined = heredar)
+  extraBoxes?: ExtraBox[];          // cuadros de texto extra (voces de fondo, decisiones…)
   nextPageId?: string;              // "Al pasar la página" (por id)
   nextPageIndex?: number | null;    // formato antiguo (por número)
   sfxUrl?: string;                  // efecto de sonido al llegar a la página
@@ -279,6 +281,16 @@ let mountedReaders = 0;
 // sin esperar a cargar sus páginas.
 let chapterStartHint: { chapterId: string; musicUrl: string; musicVolume?: number } | null = null;
 
+// Música que venía sonando al cambiar de capítulo dentro del lector. El lector del
+// capítulo nuevo la recibe ya cargada y sonando, y la sigue usando hasta que alguna de
+// sus páginas defina otra cosa: así la música continúa sin cortes entre capítulos.
+let musicCarry: {
+  toChapterId: string;
+  url: string | null;      // null = se venía en silencio
+  volume: number;          // volumen de reproducción
+  sound: Audio.Sound | null;
+} | null = null;
+
 // Historial de navegación: de qué página se vino en cada salto (capítulo + página).
 // "Atrás" deshace ese camino en vez de ir a la página anterior del capítulo: a una página
 // se puede llegar de varias formas (enlaces, "saltar a", otro capítulo) y hay que volver
@@ -327,6 +339,53 @@ type TypewriterHandle = {
 };
 
 const NO_LINKS: PageLink[] = [];
+
+// Cuadro de texto extra: aparece con un fundido corto cuando llega su párrafo
+function ExtraTextBox({ box, stage, stageScale, textStyle, onPress }: {
+  box: ExtraBox;
+  stage: { left: number; top: number; width: number; height: number };
+  stageScale: number;
+  textStyle: OutlineStyle;
+  onPress?: () => void;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(opacity, { toValue: 1, duration: 260, useNativeDriver: true }).start();
+  }, [opacity]);
+  const segments = useMemo<OutlineSegment[]>(() => [{ text: box.text }], [box.text]);
+  const content = (
+    <View
+      style={{
+        backgroundColor: 'rgba(22,24,30,0.82)',
+        borderWidth: 1,
+        borderColor: onPress ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.10)',
+        borderRadius: EXTRA_BOX_STYLE.radius * stageScale,
+        paddingHorizontal: EXTRA_BOX_STYLE.paddingHorizontal * stageScale,
+        paddingVertical: EXTRA_BOX_STYLE.paddingVertical * stageScale,
+      }}
+    >
+      <OutlineText segments={segments} style={textStyle} />
+    </View>
+  );
+  return (
+    <Animated.View
+      // Sin destino no captura el toque: pasa al fondo y avanza la lectura
+      pointerEvents={onPress ? 'auto' : 'none'}
+      style={{
+        position: 'absolute',
+        left: stage.left + (box.x / 100) * stage.width,
+        top: stage.top + (box.y / 100) * stage.height,
+        width: (box.w / 100) * stage.width,
+        opacity,
+        transform: [{ rotate: `${box.rotation ?? 0}deg` }],
+      }}
+    >
+      {onPress
+        ? <TouchableOpacity activeOpacity={0.8} onPress={onPress}>{content}</TouchableOpacity>
+        : content}
+    </Animated.View>
+  );
+}
 // Fundido de salida de la música al llegar a una página en silencio
 const MUSIC_TO_SILENCE_MS = 1200;
 // Cambio de una música a otra: la que se va baja durante MUSIC_FADE_MS; la nueva
@@ -570,6 +629,12 @@ export default function PageModernoReaderScreen() {
   // Fundidos de volumen en curso, y pistas que aún están saliendo (no se liberan)
   const fadeTimersRef  = useRef(new Map<Audio.Sound, ReturnType<typeof setInterval>>());
   const fadingOutRef   = useRef(new Set<string>());
+  // Música heredada de capítulos anteriores, para las páginas del principio que no
+  // definen ninguna. undefined = aún no se sabe; null = silencio.
+  const [baseMusic, setBaseMusic] = useState<{ url: string; volume: number } | null | undefined>(undefined);
+  const baseResolvedRef = useRef(false);
+  // Pista entregada al lector del capítulo siguiente: este no debe pararla ni liberarla
+  const handedOffRef = useRef<Audio.Sound | null>(null);
 
   // ── SFX de UI ─────────────────────────────────────────────────────────────
   const sfxParaRef = useRef<Audio.Sound | null>(null);
@@ -593,10 +658,26 @@ export default function PageModernoReaderScreen() {
     // Configurar audio una sola vez al entrar (evita delay en cada pista)
     Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
     pruneAudioCache();
+    // Se llega desde otro capítulo dentro del lector: la música que venía sonando
+    // sigue, ya cargada, sin reiniciarse
+    const carry = musicCarry;
+    musicCarry = null;
+    if (carry && carry.toChapterId === chapterId) {
+      baseResolvedRef.current = true;
+      setBaseMusic(carry.url ? { url: carry.url, volume: carry.volume } : null);
+      if (carry.url && carry.sound) {
+        audioCacheRef.current.set('music:' + carry.url, { promise: Promise.resolve(carry.sound), ready: true, urgent: true });
+        soundRef.current = carry.sound;
+        currentTrackRef.current = carry.url;
+        playingUrlRef.current = carry.url;
+        trackVolumeRef.current = carry.volume;
+      }
+    }
     // Se llega desde el capítulo anterior y ya se sabe con qué música empieza este
     const hint = chapterStartHint;
     chapterStartHint = null;
-    if (hint && hint.chapterId === chapterId && !pageIdParam && Number(pageIndexParam ?? 0) === 0) {
+    if (hint && hint.chapterId === chapterId && !pageIdParam && Number(pageIndexParam ?? 0) === 0
+        && hint.musicUrl !== currentTrackRef.current) { // si es la que ya suena, no se reinicia
       playTrack(hint.musicUrl, musicPlaybackVolume(hint.musicVolume));
     }
     // Precargar SFX de UI
@@ -692,6 +773,35 @@ export default function PageModernoReaderScreen() {
           .catch(e => console.error('Error cargando comentarios:', e));
         getStaffRoles().then(setStaffRoles)
           .catch(e => console.error('Error cargando el equipo:', e));
+        // Música heredada de capítulos anteriores. Si se llegó desde otro capítulo dentro
+        // del lector ya se sabe (la traía sonando). Si no (se abrió este capítulo desde
+        // la ficha), se busca la última música definida en los capítulos anteriores.
+        if (!baseResolvedRef.current) {
+          baseResolvedRef.current = true;
+          const visibleBefore = sortedChapters.slice(0, Math.max(0, currentIdx))
+            .filter(c => isStoryAuthor || c.published === true);
+          if (visibleBefore.length === 0 || data.every(p => p.musicUrl !== undefined)) {
+            setBaseMusic(null);
+          } else {
+            (async () => {
+              // Como mucho se miran los tres capítulos anteriores
+              for (const ch of visibleBefore.slice(-3).reverse()) {
+                const snap = await getDocs(query(
+                  collection(db, 'stories', storyId as string, 'chapters', ch.id, 'pages'),
+                  orderBy('order', 'asc'),
+                ));
+                const last = [...snap.docs].reverse().map(d => d.data()).find(p => p.musicUrl !== undefined);
+                if (last) {
+                  return last.musicUrl
+                    ? { url: last.musicUrl as string, volume: musicPlaybackVolume(last.musicVolume) }
+                    : null;
+                }
+              }
+              return null;
+            })().then(setBaseMusic).catch(() => setBaseMusic(null));
+          }
+        }
+
         // Me gusta del capítulo
         setChapterLikeCount(sortedChapters[currentIdx]?.likeCount ?? 0);
         if (currentUid && !isPreview) {
@@ -1007,10 +1117,13 @@ export default function PageModernoReaderScreen() {
       chain = inheritChain.slice(1); // como si esta página aún no hubiera puesto su música
     }
     const source = chain.find(p => p.musicUrl !== undefined);
-    return source?.musicUrl
+    // Ninguna página de este capítulo ha definido música todavía: sigue la que venía
+    // de los capítulos anteriores
+    if (!source) return baseMusic ?? null;
+    return source.musicUrl
       ? { url: source.musicUrl, volume: musicPlaybackVolume(source.musicVolume) }
       : null;
-  }, [pages, current, inheritChain, paraIndex]);
+  }, [pages, current, inheritChain, paraIndex, baseMusic]);
 
   const pageHasMusic = !!effectiveMusic;
   useEffect(() => {
@@ -1022,6 +1135,8 @@ export default function PageModernoReaderScreen() {
   // ── Efecto de música al cambiar de página (o al llegar al párrafo de la música) ──
   useEffect(() => {
     if (pages.length === 0) return;
+    // Aún se está averiguando qué música viene de capítulos anteriores
+    if (baseMusic === undefined && !inheritChain.some(p => p.musicUrl !== undefined)) return;
 
     const effectiveTrack: string | null = effectiveMusic?.url ?? null;
     const effectiveVolume = effectiveMusic?.volume ?? musicPlaybackVolume();
@@ -1039,7 +1154,7 @@ export default function PageModernoReaderScreen() {
       if (!isMutedRef.current && soundRef.current) fadeVolume(soundRef.current, from, effectiveVolume, 250);
     }
     // Si misma pista y mismo volumen: no hacer nada (sigue sonando)
-  }, [pages, effectiveMusic?.url, effectiveMusic?.volume]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pages, effectiveMusic?.url, effectiveMusic?.volume, baseMusic === undefined]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Efectos de sonido de la página ────────────────────────────────────────
   // Cada efecto suena al aparecer su párrafo (el del párrafo 1, al llegar a la página).
@@ -1138,7 +1253,7 @@ export default function PageModernoReaderScreen() {
     }
     return () => {
       const sound = soundRef.current;
-      if (!sound) return;
+      if (!sound || sound === handedOffRef.current) return; // sigue sonando en el capítulo siguiente
       pausedByBlurRef.current = true;
       sound.pauseAsync().catch(() => {});
     };
@@ -1151,7 +1266,8 @@ export default function PageModernoReaderScreen() {
       fadeTimersRef.current.forEach(t => clearInterval(t));
       fadeTimersRef.current.clear();
       stopBars();
-      audioCacheRef.current.forEach(entry => entry.promise.then(s => s.unloadAsync()).catch(() => {}));
+      const kept = handedOffRef.current; // la usa ya el lector del capítulo siguiente
+      audioCacheRef.current.forEach(entry => entry.promise.then(s => { if (s !== kept) s.unloadAsync(); }).catch(() => {}));
       audioCacheRef.current.clear();
       soundRef.current = null;
     };
@@ -1299,10 +1415,23 @@ export default function PageModernoReaderScreen() {
     return current < pages.length - 1 ? current + 1 : null;
   };
 
+  // Antes de pasar a otro capítulo dentro del lector: se entrega la música que suena
+  // al lector de ese capítulo (ver musicCarry)
+  const carryMusicTo = (toChapterId: string) => {
+    musicCarry = {
+      toChapterId,
+      url: currentTrackRef.current,
+      volume: trackVolumeRef.current,
+      sound: currentTrackRef.current && playingUrlRef.current === currentTrackRef.current ? soundRef.current : null,
+    };
+    handedOffRef.current = musicCarry.sound;
+  };
+
   // ── Navegación real (después del sparkle) ────────────────────────────────
   const doNavForLink = (link: PageLink) => {
     if (link.targetChapterId && link.targetChapterId !== chapterId) {
       pushHistory();
+      carryMusicTo(link.targetChapterId);
       router.replace(
         `/reader/page-moderno?storyId=${storyId}&chapterId=${link.targetChapterId}&pageIndex=${link.targetPageIndex}${link.targetPageId ? `&pageId=${link.targetPageId}` : ''}&hist=1${isPreview ? '&preview=1' : ''}`
       );
@@ -1589,6 +1718,7 @@ export default function PageModernoReaderScreen() {
       const entry = readerHistory.pop()!;
       setHistoryLen(readerHistory.length);
       if (entry.chapterId !== chapterId) {
+        carryMusicTo(entry.chapterId);
         router.replace(
           `/reader/page-moderno?storyId=${storyId}&chapterId=${entry.chapterId}&pageId=${entry.pageId}&hist=1${isPreview ? '&preview=1' : ''}`
         );
@@ -1717,6 +1847,15 @@ export default function PageModernoReaderScreen() {
       fontSize: textFontSize, lineHeight: textFontSize * 1.6, letterSpacing: TEXT_BOX.letterSpacing * stageScale,
     }),
     [textFontSize, stageScale],
+  );
+  // Texto de los cuadros extra: como el del cuadro principal, algo más pequeño
+  const extraBoxTextStyle = useMemo<OutlineStyle>(
+    () => ({
+      ...typewriterTextStyle,
+      fontSize: textFontSize * EXTRA_BOX_STYLE.fontScale,
+      lineHeight: textFontSize * EXTRA_BOX_STYLE.fontScale * 1.5,
+    }),
+    [typewriterTextStyle, textFontSize],
   );
   const endChapterStyle = useMemo<OutlineStyle>(
     () => ({
@@ -1932,6 +2071,24 @@ export default function PageModernoReaderScreen() {
         </Animated.View>
         )}
 
+        {/* Cuadros de texto extra: aparecen al llegar a su párrafo (también en ilustraciones) */}
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: boxOpacity }]} pointerEvents="box-none">
+          {pageExtraBoxes(page).map((box, i) => {
+            if ((box.paragraph ?? 1) - 1 > paraIndex) return null;
+            const targetIdx = box.targetPageId ? pages.findIndex(p => p.id === box.targetPageId) : -1;
+            return (
+              <ExtraTextBox
+                key={`${page?.id}-${i}`}
+                box={box}
+                stage={stage}
+                stageScale={stageScale}
+                textStyle={extraBoxTextStyle}
+                onPress={targetIdx >= 0 ? () => fadeToPage(targetIdx) : undefined}
+              />
+            );
+          })}
+        </Animated.View>
+
         {/* Animación de cambio de página: tapa el fondo y el cuadro de texto */}
         {transitionKind && (
           <PageTransitionOverlay
@@ -2131,6 +2288,7 @@ export default function PageModernoReaderScreen() {
           activeOpacity={0.8}
           onPress={() => {
             pushHistory();
+            carryMusicTo(nextChapter.id);
             router.replace(
               `/reader/page-moderno?storyId=${storyId}&chapterId=${nextChapter.id}&pageIndex=0&hist=1${isPreview ? '&preview=1' : ''}`
             );

@@ -39,6 +39,22 @@ export const SFX_VOLUME_MAX  = 1.2;     // 0,8 × 1,2 ≈ 1
 export const sfxPlaybackVolume = (sfxVolume = 1) =>
   Math.min(1, SFX_BASE_VOLUME * sfxVolume);
 
+// Cuadros de texto extra de una página: texto suelto que aparece en un párrafo concreto
+// (voces de fondo, un rótulo, una decisión…). Posición y ancho en % del escenario; se
+// pueden girar. Si tienen destino, pulsarlos lleva a esa página.
+export type ExtraBox = {
+  text: string;
+  x: number; y: number; w: number;   // % del escenario (esquina superior izquierda y ancho)
+  rotation?: number;                 // grados
+  paragraph?: number;                // párrafo en el que aparece (1 = desde el principio)
+  targetPageId?: string;             // decisión: página a la que lleva al pulsarlo
+};
+export const EXTRA_BOX_MAX = 3;
+export const EXTRA_BOX_STYLE = { paddingHorizontal: 14, paddingVertical: 9, radius: 10, fontScale: 0.9 };
+export function pageExtraBoxes(page?: { extraBoxes?: ExtraBox[] } | null): ExtraBox[] {
+  return Array.isArray(page?.extraBoxes) ? page!.extraBoxes!.filter(b => b && !!b.text) : [];
+}
+
 // Efectos de sonido de una página. Cada uno suena al aparecer un párrafo concreto
 // (1 = el primero, es decir, al llegar a la página). Puede haber varios.
 // Las páginas antiguas tienen un único efecto (sfxUrl / sfxVolume), que equivale a un
