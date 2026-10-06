@@ -1613,7 +1613,7 @@ export default function PageModernoReaderScreen() {
   // la ventana y centrado. El cuadro de texto, las etiquetas y el tamaño de la letra se
   // miden respecto a ese escenario, así la página se ve igual de compuesta en un móvil,
   // una tablet o un monitor: lo que cambia es el tamaño, no las proporciones.
-  // El fondo sí ocupa toda la ventana.
+  // El fondo también se encuadra dentro del escenario (ver más abajo).
   const stageScale = Math.max(0.01, Math.min(
     containerSize.width / REF_SCREEN.width,
     containerSize.height / REF_SCREEN.height,
@@ -1624,6 +1624,9 @@ export default function PageModernoReaderScreen() {
     left:   (containerSize.width - REF_SCREEN.width * stageScale) / 2,
     top:    (containerSize.height - REF_SCREEN.height * stageScale) / 2,
   };
+
+  // La ventana no tiene la proporción del escenario: sobra hueco a los lados o arriba y abajo
+  const stageHasMargins = stage.left > 0.5 || stage.top > 0.5;
 
   const textFontSize = FONT_SIZES[effectiveTextSize] * TEXT_SCALE[textScale] * stageScale;
   const typewriterTextStyle = useMemo<OutlineStyle>(
@@ -1744,9 +1747,21 @@ export default function PageModernoReaderScreen() {
       >
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: pageOpacity }]}>
 
-        {/* ── FONDO COMPLETO — hereda imagen si la página no tiene una propia ── */}
+        {/* ── FONDO — hereda imagen si la página no tiene una propia ──
+            El fondo se pinta dentro del escenario, con el mismo encuadre que enseña la
+            vista previa del editor: lo que el autor compone es lo que se ve. Si la
+            ventana no tiene la proporción del escenario (un monitor 16:9, por ejemplo),
+            el hueco que sobra se rellena con la misma imagen muy desenfocada y oscurecida,
+            en vez de con franjas negras. */}
         {effectiveBg
-          ? <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
+          ? <>
+            {stageHasMargins && (
+              <>
+                <Image source={{ uri: effectiveBg.url }} style={StyleSheet.absoluteFill} resizeMode="cover" blurRadius={30} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} />
+              </>
+            )}
+            <View style={{ position: 'absolute', left: stage.left, top: stage.top, width: stage.width, height: stage.height, overflow: 'hidden' }}>
               <Image
                 source={{ uri: effectiveBg.url }}
                 style={
@@ -1763,6 +1778,7 @@ export default function PageModernoReaderScreen() {
                 blurRadius={effectiveBg.blur}
               />
             </View>
+            </>
           : null
         }
 
