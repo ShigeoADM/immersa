@@ -98,6 +98,7 @@ interface Page {
   id: string;
   text: string;
   backgroundUrl: string;
+  bgNone?: boolean;                 // sin fondo (negro): corta la herencia de la imagen anterior
   bgBlur?: number;            // desenfoque del fondo (undefined = BG_BLUR_DEFAULT)
   imageAnchor?: ImageAnchor;
   imageFit?: ImageFit;
@@ -322,6 +323,8 @@ type TypewriterHandle = {
 };
 
 const NO_LINKS: PageLink[] = [];
+// Fundido de salida de la música al llegar a una página en silencio
+const MUSIC_TO_SILENCE_MS = 1100;
 
 // Un párrafo del cuadro de texto. Va en su propio componente para que los párrafos ya
 // escritos no se vuelvan a pintar con cada letra del que se está escribiendo.
@@ -814,14 +817,14 @@ export default function PageModernoReaderScreen() {
     fadeTimersRef.current.set(sound, timer);
   };
   // Baja una pista hasta el silencio y la para. Mientras sale, no se libera de la caché.
-  const fadeOutAndStop = (sound: Audio.Sound, url: string | null, fromVolume: number) => {
+  const fadeOutAndStop = (sound: Audio.Sound, url: string | null, fromVolume: number, ms = MUSIC_FADE_MS) => {
     const stop = () => {
       sound.stopAsync().catch(() => {});
       if (url) fadingOutRef.current.delete(url);
     };
     if (fromVolume <= 0) { cancelFade(sound); stop(); return; }
     if (url) fadingOutRef.current.add(url);
-    fadeVolume(sound, fromVolume, 0, MUSIC_FADE_MS, stop);
+    fadeVolume(sound, fromVolume, 0, ms, stop);
   };
 
   const toggleMute = async () => {
@@ -921,7 +924,11 @@ export default function PageModernoReaderScreen() {
   const stopTrack = () => {
     playGenRef.current++; // invalida cualquier playTrack en vuelo
     const sound = soundRef.current;
-    if (sound) fadeOutAndStop(sound, playingUrlRef.current, isMutedRef.current ? 0 : trackVolumeRef.current);
+    // Al pasar a una página en silencio no hay otra pista que tape el corte, así que la
+    // salida es más larga que el cruce entre dos músicas
+    if (sound) {
+      fadeOutAndStop(sound, playingUrlRef.current, isMutedRef.current ? 0 : trackVolumeRef.current, MUSIC_TO_SILENCE_MS);
+    }
     soundRef.current = null;
     playingUrlRef.current = null;
     currentTrackRef.current = null;
@@ -1485,7 +1492,8 @@ export default function PageModernoReaderScreen() {
     // Si la página nueva tiene el mismo fondo, el fondo no se toca: solo se desvanece y
     // reaparece el cuadro de texto. Así una ilustración se mantiene quieta mientras
     // cambia el texto, o mientras entra o sale el cuadro. Con otro fondo, funden los dos.
-    const targetBg = [target, ...inheritChain].find(p => !!p?.backgroundUrl);
+    const targetBgPage = [target, ...inheritChain].find(p => !!p?.backgroundUrl || p?.bgNone);
+    const targetBg = targetBgPage?.backgroundUrl ? targetBgPage : null;
     const sameBackground = !!targetBg && !!effectiveBg
       && targetBg.backgroundUrl === effectiveBg.url
       && (targetBg.imageAnchor ?? 'center') === effectiveBg.anchor
@@ -1593,7 +1601,9 @@ export default function PageModernoReaderScreen() {
   };
 
   // ── Imagen de fondo heredada (con su encuadre y desenfoque) ───────────────
-  const bgSource = inheritChain.find(p => !!p.backgroundUrl);
+  // La primera página del camino que define fondo: una imagen, o "sin fondo" (negro)
+  const bgPage = inheritChain.find(p => !!p.backgroundUrl || p.bgNone);
+  const bgSource = bgPage?.backgroundUrl ? bgPage : null;
   const effectiveBg = bgSource
     ? {
         url:    bgSource.backgroundUrl,

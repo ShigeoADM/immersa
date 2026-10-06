@@ -234,6 +234,8 @@ export default function PageEditorScreen() {
   const [imageAnchor, setImageAnchor]   = useState<ImageAnchor>('center');
   const [imageFit, setImageFit]         = useState<ImageFit>('cover');
   const [bgBlur, setBgBlur]             = useState(BG_BLUR_DEFAULT);
+  // Sin imagen: heredar la de la página anterior (false) o dejar el fondo en negro (true)
+  const [bgNone, setBgNone]             = useState(false);
   const [uploadingBg, setUploadingBg]   = useState(false);
   const [imageSource, setImageSource]   = useState<MediaSource>('file');
   const [imageUrlInput, setImageUrlInput] = useState('');
@@ -640,6 +642,7 @@ export default function PageEditorScreen() {
         setImageAnchor(p.imageAnchor ?? 'center');
         setImageFit(p.imageFit ?? 'cover');
         setBgBlur(p.bgBlur ?? BG_BLUR_DEFAULT);
+        setBgNone(p.bgNone === true);
         setTextSize(p.textSize ?? undefined);
         const tbl = p.textBoxLayout ?? DEFAULT_TB;
         setTbLayout(tbl); applyTbShared(tbl);
@@ -976,7 +979,7 @@ export default function PageEditorScreen() {
   // ── Cambios sin guardar ───────────────────────────────────────────────────
   // Instantánea de todo lo que se guarda; si difiere de la inicial hay cambios.
   const snapshot = JSON.stringify({
-    pageText, bgUrl, imageAnchor, imageFit, bgBlur, musicMode, musicVolume, editMusicUrl, textSize, tbLayout, links,
+    pageText, bgUrl, imageAnchor, imageFit, bgBlur, bgNone, musicMode, musicVolume, editMusicUrl, textSize, tbLayout, links,
     jumpEnabled, nextPageInput, hideTextBox, transition: transition ?? null,
     sfxCues: sfxCues.map(c => ({ paragraph: c.paragraph, url: c.url, volume: c.volume })),
     leftCharMode, leftCharName, rightCharMode, rightCharName,
@@ -1003,6 +1006,7 @@ export default function PageEditorScreen() {
     setBgUrl(d.bgUrl ?? ''); setBgUri(d.bgUrl || null);
     setImageAnchor(d.imageAnchor ?? 'center'); setImageFit(d.imageFit ?? 'cover');
     setBgBlur(d.bgBlur ?? BG_BLUR_DEFAULT);
+    setBgNone(!!d.bgNone);
     setMusicMode(d.musicMode ?? 'inherit'); setMusicVolume(d.musicVolume ?? 1);
     setEditMusicUrl(d.editMusicUrl ?? '');
     setMusicFileName(d.editMusicUrl ? fileNameFromUrl(d.editMusicUrl, 'Pista') : '');
@@ -1130,6 +1134,7 @@ export default function PageEditorScreen() {
         updateData.nextPageId    = nextPageId ?? deleteField();
         updateData.nextPageIndex = deleteField(); // formato antiguo (por número)
         updateData.hideTextBox   = hideTextBox ? true : deleteField();
+        updateData.bgNone        = !bgUrl && bgNone ? true : deleteField();
         updateData.transition    = transition ?? deleteField();
         updateData.sfxCues       = savedSfxCues.length ? savedSfxCues : deleteField();
         // Formato antiguo (un solo efecto, al llegar): se mantiene para lectores sin actualizar
@@ -1173,6 +1178,7 @@ export default function PageEditorScreen() {
         };
         if (nextPageId) newData.nextPageId = nextPageId;
         if (hideTextBox) newData.hideTextBox = true;
+        if (!bgUrl && bgNone) newData.bgNone = true;
         if (transition) newData.transition = transition;
         if (savedSfxCues.length) newData.sfxCues = savedSfxCues;
         if (legacySfx) newData.sfxUrl = legacySfx.url;
@@ -1613,6 +1619,28 @@ export default function PageEditorScreen() {
             </>
           ) : (
             <>
+              {/* Sin imagen propia: seguir con la de la página anterior o fondo negro */}
+              <View style={styles.anchorRow}>
+                {([
+                  { value: false, icon: 'subdirectory-arrow-right', label: 'Heredar la anterior' },
+                  { value: true,  icon: 'block', label: 'Sin fondo (negro)' },
+                ] as const).map(opt => (
+                  <TouchableOpacity
+                    key={opt.label}
+                    style={[styles.anchorBtn, bgNone === opt.value && styles.anchorBtnActive]}
+                    onPress={() => setBgNone(opt.value)}
+                    activeOpacity={0.75}
+                  >
+                    <MaterialIcons name={opt.icon} size={13} color={bgNone === opt.value ? '#000' : Colors.textSecondary} />
+                    <Text style={[styles.anchorBtnText, bgNone === opt.value && styles.anchorBtnTextActive]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.sectionHint}>
+                {bgNone
+                  ? 'Esta página se ve con el fondo en negro. Las siguientes que hereden también, hasta que una ponga imagen.'
+                  : 'Sin imagen propia, la página usa la de la anterior. O elige una nueva:'}
+              </Text>
               <View style={styles.sourceToggleRow}>
                 {MEDIA_SOURCES.map(src => (
                   <TouchableOpacity
