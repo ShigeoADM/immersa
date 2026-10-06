@@ -15,15 +15,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as ImagePicker from 'expo-image-picker';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { auth, db, storage } from '@/config/firebase';
+import { auth, db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { AppAlert, useDialogAccent } from '@/components/app-dialog';
 import { ADULT_AUDIENCES, ADULT_CONTENT, AUDIENCES, GENRES } from '@/constants/story-meta';
 import { useAuth } from '@/context/AuthContext';
 import { DesktopColumn } from '@/components/desktop-column';
-import { deleteStoredFile } from '@/services/media';
+import { uploadImage, deleteStoredFile } from '@/services/media';
 
 const LANGUAGES = ['Español', 'English', 'Português', 'Français', 'Deutsch', 'Otro'];
 
@@ -139,20 +138,7 @@ export default function ModernoDetailsScreen() {
       setCoverUri(localUri);   // preview inmediato
       setUploadingCover(true);
       try {
-        const filename = `covers/${auth.currentUser?.uid}/${Date.now()}.jpg`;
-        const storageRef = ref(storage, filename);
-        const blob: Blob = await new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.onload    = () => resolve(xhr.response);
-          xhr.onerror   = () => reject(new Error('No se pudo leer la imagen'));
-          xhr.ontimeout = () => reject(new Error('Tiempo de espera agotado al leer la imagen'));
-          xhr.responseType = 'blob';
-          xhr.timeout = 15000;
-          xhr.open('GET', localUri, true);
-          xhr.send(null);
-        });
-        await uploadBytes(storageRef, blob);
-        const url = await getDownloadURL(storageRef);
+        const url = await uploadImage(localUri, `covers/${auth.currentUser?.uid}/${Date.now()}`, 1400);
         setCoverUrl(url);
         setCoverUri(url);
       } catch (e: any) {

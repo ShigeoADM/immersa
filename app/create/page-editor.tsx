@@ -22,9 +22,8 @@ import {
   collection, addDoc, doc, updateDoc, getDoc, getDocs,
   deleteField, query, orderBy,
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/config/firebase';
-import { uploadLocalFile, mediaDisplayName, rememberMediaNames } from '@/services/media';
+import { db } from '@/config/firebase';
+import { uploadImage, uploadLocalFile, mediaDisplayName, rememberMediaNames } from '@/services/media';
 import { sortChapters } from '@/services/stories';
 import { Colors } from '@/constants/theme';
 import { AppAlert } from '@/components/app-dialog';
@@ -986,16 +985,7 @@ export default function PageEditorScreen() {
       setBgUri(localUri);
       setUploadingBg(true);
       try {
-        const filename  = `pages/${storyId}/${chapterId}/${Date.now()}.jpg`;
-        const storageRef = ref(storage, filename);
-        const blob: Blob = await new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.onload  = () => resolve(xhr.response);
-          xhr.onerror = () => reject(new Error('No se pudo leer el archivo'));
-          xhr.responseType = 'blob'; xhr.open('GET', localUri, true); xhr.send(null);
-        });
-        await uploadBytes(storageRef, blob);
-        const url = await getDownloadURL(storageRef);
+        const url = await uploadImage(localUri, `pages/${storyId}/${chapterId}/${Date.now()}`, 2560);
         setBgUrl(url); setBgUri(url);
       } catch (e: any) {
         AppAlert.alert('Error al subir', e?.message ?? 'Inténtalo de nuevo.');
