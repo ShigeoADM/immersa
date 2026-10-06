@@ -328,7 +328,11 @@ type TypewriterHandle = {
 
 const NO_LINKS: PageLink[] = [];
 // Fundido de salida de la música al llegar a una página en silencio
-const MUSIC_TO_SILENCE_MS = 1500;
+const MUSIC_TO_SILENCE_MS = 1200;
+// Cambio de una música a otra: la que se va baja durante MUSIC_FADE_MS; la nueva
+// empieza a subir un poco después y más despacio, para que apenas se solapen
+const MUSIC_IN_DELAY_MS = 600;
+const MUSIC_IN_MS = 1400;
 
 // Un párrafo del cuadro de texto. Va en su propio componente para que los párrafos ya
 // escritos no se vuelvan a pintar con cada letra del que se está escribiendo.
@@ -925,10 +929,18 @@ export default function PageModernoReaderScreen() {
         if (currentTrackRef.current !== url) sound.stopAsync().catch(() => {});
         return;
       }
-      if (previous && previous !== sound) fadeOutAndStop(previous, previousUrl, previousVolume);
+      const replacing = !!previous && previous !== sound;
+      if (replacing) fadeOutAndStop(previous!, previousUrl, previousVolume);
       soundRef.current = sound;
       playingUrlRef.current = url;
-      if (!isMutedRef.current) fadeVolume(sound, 0, volume, MUSIC_FADE_MS);
+      // Al sustituir a otra pista, la nueva espera un poco antes de subir: así la que se
+      // va ya está baja cuando la nueva empieza a oírse y no suenan las dos a la vez.
+      const fadeIn = () => {
+        if (gen !== playGenRef.current || soundRef.current !== sound) return; // ya cambió otra vez
+        if (!isMutedRef.current) fadeVolume(sound, 0, trackVolumeRef.current, replacing ? MUSIC_IN_MS : MUSIC_FADE_MS);
+      };
+      if (replacing) setTimeout(fadeIn, MUSIC_IN_DELAY_MS);
+      else fadeIn();
     } catch (e) {
       if (gen === playGenRef.current) currentTrackRef.current = null;
       console.error('Error reproduciendo música:', e);
@@ -1819,7 +1831,9 @@ export default function PageModernoReaderScreen() {
       <StatusBar hidden />
 
       <TouchableOpacity
-        style={styles.mainArea}
+        // Web: sin el recuadro de enfoque del navegador, que se veía como un borde
+        // claro alrededor de la escena (sobre todo con el fondo en negro)
+        style={[styles.mainArea, Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : null]}
         activeOpacity={1}
         onPress={goNext}
         onLayout={e => setContainerSize(e.nativeEvent.layout)}
