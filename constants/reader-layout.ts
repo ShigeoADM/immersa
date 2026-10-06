@@ -45,10 +45,35 @@ export const sfxPlaybackVolume = (sfxVolume = 1) =>
 export type ExtraBox = {
   text: string;
   x: number; y: number; w: number;   // % del escenario (esquina superior izquierda y ancho)
+  h?: number;                        // alto en % del escenario; sin él, se ajusta al texto
   rotation?: number;                 // grados
+  animation?: ExtraBoxAnimation;     // cómo aparece (por defecto, desvanecer)
   paragraph?: number;                // párrafo en el que aparece (1 = desde el principio)
   targetPageId?: string;             // decisión: página a la que lleva al pulsarlo
 };
+export type ExtraBoxAnimation =
+  | 'fade' | 'pop'
+  | 'slideTop' | 'slideBottom' | 'slideLeft' | 'slideRight'
+  | 'slideTopLeft' | 'slideTopRight' | 'slideBottomLeft' | 'slideBottomRight'
+  | 'wipeRight' | 'wipeLeft' | 'wipeDown' | 'wipeUp';
+// Deslizar: desde qué lado de la pantalla entra (x, y en -1 / 0 / 1)
+export const EXTRA_BOX_SLIDES: { value: ExtraBoxAnimation; icon: string; from: [number, number] }[] = [
+  { value: 'slideTopLeft',     icon: 'south-east', from: [-1, -1] },
+  { value: 'slideTop',         icon: 'south',      from: [0, -1] },
+  { value: 'slideTopRight',    icon: 'south-west', from: [1, -1] },
+  { value: 'slideLeft',        icon: 'east',       from: [-1, 0] },
+  { value: 'slideRight',       icon: 'west',       from: [1, 0] },
+  { value: 'slideBottomLeft',  icon: 'north-east', from: [-1, 1] },
+  { value: 'slideBottom',      icon: 'north',      from: [0, 1] },
+  { value: 'slideBottomRight', icon: 'north-west', from: [1, 1] },
+];
+// Barrido: hacia dónde se va descubriendo el cuadro
+export const EXTRA_BOX_WIPES: { value: ExtraBoxAnimation; icon: string; dir: [number, number] }[] = [
+  { value: 'wipeRight', icon: 'east',  dir: [1, 0] },
+  { value: 'wipeLeft',  icon: 'west',  dir: [-1, 0] },
+  { value: 'wipeDown',  icon: 'south', dir: [0, 1] },
+  { value: 'wipeUp',    icon: 'north', dir: [0, -1] },
+];
 export const EXTRA_BOX_MAX = 3;
 export const EXTRA_BOX_STYLE = { paddingHorizontal: 14, paddingVertical: 9, radius: 10, fontScale: 0.9 };
 export function pageExtraBoxes(page?: { extraBoxes?: ExtraBox[] } | null): ExtraBox[] {

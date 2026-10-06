@@ -38,7 +38,7 @@ import {
   MUSIC_VOLUME_MIN, MUSIC_VOLUME_MAX, MUSIC_VOLUME_STEP, SFX_VOLUME_MAX,
   musicPlaybackVolume, sfxPlaybackVolume, pageSfxCues, splitParagraphs,
   PAGE_TRANSITIONS, type PageTransition,
-  pageExtraBoxes, EXTRA_BOX_MAX, EXTRA_BOX_STYLE,
+  pageExtraBoxes, EXTRA_BOX_MAX, EXTRA_BOX_STYLE, EXTRA_BOX_SLIDES, EXTRA_BOX_WIPES, type ExtraBoxAnimation,
   charLabelPos, charLabelSideStyle,
   type TextSize,
 } from '@/constants/reader-layout';
@@ -126,67 +126,108 @@ type PreviewBg = { uri: string; anchor: ImageAnchor; fit: ImageFit; blur: number
 // Cuadro de texto extra en edición (id solo para la lista; target = nº de página o '')
 type EditorExtraBox = {
   id: string; text: string; x: number; y: number; w: number;
+  h: number | null;          // null = alto automático (se ajusta al texto)
   rotation: number; paragraph: number; target: string;
+  animation: ExtraBoxAnimation;
 };
 let extraBoxSeq = 0;
 const ROTATION_PRESETS = [
   { value: 0, label: 'Recto' }, { value: -90, label: 'Vertical ↑' }, { value: 90, label: 'Vertical ↓' },
   { value: -20, label: 'Diagonal ↗' }, { value: 20, label: 'Diagonal ↘' },
 ];
-const clampPct = (v: number, max = 100) => Math.max(0, Math.min(max, Math.round(v)));
+// Un cuadro girado puede necesitar salirse del escenario para llegar a los bordes
+// (gira sobre su centro), así que la posición admite valores negativos
+const clampPos = (v: number) => Math.max(-80, Math.min(100, Math.round(v * 10) / 10));
+const clampSize = (v: number, min: number) => Math.max(min, Math.min(100, Math.round(v * 10) / 10));
 
-// Cuadro extra en la vista previa: se arrastra para colocarlo
-function PreviewExtraBox({ box, pvWidth, pvHeight, pvScale, fontSize, onMove }: {
+// Cuadro extra en la vista previa: se arrastra para moverlo y se estira desde su
+// esquina inferior derecha para cambiarle el tamaño, como el cuadro principal.
+function PreviewExtraBox({ box, pvWidth, pvHeight, pvScale, fontSize, onChange }: {
   box: EditorExtraBox; pvWidth: number; pvHeight: number; pvScale: number; fontSize: number;
-  onMove: (x: number, y: number) => void;
+  onChange: (patch: Partial<EditorExtraBox>) => void;
 }) {
-  const startRef = useRef({ x: box.x, y: box.y });
-  const boxRef = useRef(box);
-  boxRef.current = box;
-  const moveRef = useRef(onMove);
-  moveRef.current = onMove;
-  const sizeRef = useRef({ pvWidth, pvHeight });
-  sizeRef.current = { pvWidth, pvHeight };
-  const pan = useRef(PanResponder.create({
+  const live = useRef({ box, pvWidth, pvHeight, onChange, measuredH: 0 });
+  live.current.box = box; live.current.pvWidth = pvWidth; live.current.pvHeight = pvHeight; live.current.onChange = onChange;
+  const start = useRef({ x: 0, y: 0, w: 0, h: 0 });
+
+  const movePan = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => { startRef.current = { x: boxRef.current.x, y: boxRef.current.y }; },
+    onPanResponderGrant: () => { start.current.x = live.current.box.x; start.current.y = live.current.box.y; },
     onPanResponderMove: (_e, g) => {
-      const { pvWidth: w, pvHeight: h } = sizeRef.current;
+      const { pvWidth: w, pvHeight: h, onChange: change } = live.current;
       if (!w || !h) return;
-      moveRef.current(
-        clampPct(startRef.current.x + (g.dx / w) * 100, 100 - 5),
-        clampPct(startRef.current.y + (g.dy / h) * 100, 100 - 5),
-      );
+      change({ x: clampPos(start.current.x + (g.dx / w) * 100), y: clampPos(start.current.y + (g.dy / h) * 100) });
     },
   })).current;
+
+  const resizePan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: () => {
+      const { box: b, pvHeight: h, measuredH } = live.current;
+      start.current.w = b.w;
+      start.current.h = b.h ?? (h ? (measuredH / h) * 100 : 20);
+    },
+    onPanResponderMove: (_e, g) => {
+      const { box: b, pvWidth: w, pvHeight: h, onChange: change } = live.current;
+      if (!w || !h) return;
+      // El arrastre se pasa a los ejes del cuadro, que puede estar girado
+      const a = (-b.rotation * Math.PI) / 180;
+      const dx = g.dx * Math.cos(a) - g.dy * Math.sin(a);
+      const dy = g.dx * Math.sin(a) + g.dy * Math.cos(a);
+      change({
+        w: clampSize(start.current.w + (dx / w) * 100, 6),
+        h: clampSize(start.current.h + (dy / h) * 100, 5),
+      });
+    },
+  })).current;
+
+  // Mismo margen interior que deja el texto con borde en el lector
+  const outlinePad = Math.max(1.5, 2 * pvScale) + 1;
   return (
     <View
-      {...pan.panHandlers}
+      {...movePan.panHandlers}
+      onLayout={e => { live.current.measuredH = e.nativeEvent.layout.height; }}
       style={{
         position: 'absolute',
         left: (box.x / 100) * pvWidth,
         top: (box.y / 100) * pvHeight,
         width: (box.w / 100) * pvWidth,
+        height: box.h ? (box.h / 100) * pvHeight : undefined,
         transform: [{ rotate: `${box.rotation}deg` }],
         backgroundColor: 'rgba(22,24,30,0.82)',
         borderWidth: 1,
         borderStyle: 'dashed',
         borderColor: Colors.aqua,
         borderRadius: EXTRA_BOX_STYLE.radius * pvScale,
-        paddingHorizontal: EXTRA_BOX_STYLE.paddingHorizontal * pvScale,
+        paddingHorizontal: EXTRA_BOX_STYLE.paddingHorizontal * pvScale + outlinePad,
         paddingVertical: EXTRA_BOX_STYLE.paddingVertical * pvScale,
         ...(Platform.OS === 'web' ? ({ cursor: 'move', userSelect: 'none' } as any) : null),
       }}
     >
-      <Text
+      <View style={{ flex: box.h ? 1 : undefined, overflow: 'hidden' }}>
+        <Text
+          style={{
+            color: '#fff', fontWeight: '700', fontSize, lineHeight: fontSize * 1.5,
+            letterSpacing: TEXT_BOX.letterSpacing * pvScale,
+            fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+          }}
+        >
+          {box.text || 'Texto…'}
+        </Text>
+      </View>
+      {/* Tirador para cambiar el tamaño */}
+      <View
+        {...resizePan.panHandlers}
         style={{
-          color: '#fff', fontWeight: '700', fontSize, lineHeight: fontSize * 1.5,
-          fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+          position: 'absolute', right: -7, bottom: -7, width: 14, height: 14, borderRadius: 4,
+          backgroundColor: Colors.aqua,
+          ...(Platform.OS === 'web' ? ({ cursor: 'nwse-resize' } as any) : null),
         }}
-      >
-        {box.text || 'Texto…'}
-      </Text>
+        hitSlop={10}
+      />
     </View>
   );
 }
@@ -371,7 +412,10 @@ export default function PageEditorScreen() {
   const [extraBoxes, setExtraBoxes]     = useState<EditorExtraBox[]>([]);
   const addExtraBox = () => setExtraBoxes(list => list.length >= EXTRA_BOX_MAX ? list : [
     ...list,
-    { id: `box${++extraBoxSeq}`, text: '', x: 8 + list.length * 6, y: 6 + list.length * 8, w: 30, rotation: 0, paragraph: 1, target: '' },
+    {
+      id: `box${++extraBoxSeq}`, text: '', x: 8 + list.length * 6, y: 6 + list.length * 8, w: 30, h: null,
+      rotation: 0, paragraph: 1, target: '', animation: 'fade',
+    },
   ]);
   const updateExtraBox = (id: string, patch: Partial<EditorExtraBox>) =>
     setExtraBoxes(list => list.map(b => (b.id === id ? { ...b, ...patch } : b)));
@@ -786,8 +830,8 @@ export default function PageEditorScreen() {
         setExtraBoxes(pageExtraBoxes(p).map(b => {
           const targetIdx = b.targetPageId ? ids.indexOf(b.targetPageId) : -1;
           return {
-            id: `box${++extraBoxSeq}`, text: b.text, x: b.x, y: b.y, w: b.w,
-            rotation: b.rotation ?? 0, paragraph: b.paragraph ?? 1,
+            id: `box${++extraBoxSeq}`, text: b.text, x: b.x, y: b.y, w: b.w, h: b.h ?? null,
+            rotation: b.rotation ?? 0, paragraph: b.paragraph ?? 1, animation: b.animation ?? 'fade',
             target: targetIdx >= 0 ? String(targetIdx + 1) : '',
           };
         }));
@@ -1171,7 +1215,7 @@ export default function PageEditorScreen() {
     setJumpEnabled(!!d.jumpEnabled); setNextPageInput(d.nextPageInput ?? '');
     setHideTextBox(!!d.hideTextBox);
     setExtraBoxes(Array.isArray(d.extraBoxes)
-      ? d.extraBoxes.map((b: any) => ({ ...b, id: `box${++extraBoxSeq}` }))
+      ? d.extraBoxes.map((b: any) => ({ h: null, animation: 'fade', ...b, id: `box${++extraBoxSeq}` }))
       : []);
     setTransition(d.transition ?? undefined);
     setSfxCues(pageSfxCues(d).map(c =>
@@ -1287,7 +1331,9 @@ export default function PageEditorScreen() {
           text: b.text.trim(), x: b.x, y: b.y, w: b.w,
           paragraph: Math.min(b.paragraph, paragraphCount),
         };
+        if (b.h) saved.h = b.h;
         if (b.rotation) saved.rotation = b.rotation;
+        if (b.animation !== 'fade') saved.animation = b.animation;
         if (targetId) saved.targetPageId = targetId;
         return saved;
       });
@@ -1591,7 +1637,7 @@ export default function PageEditorScreen() {
             pvHeight={pvWidth * REF_SCREEN.height / REF_SCREEN.width}
             pvScale={pvScale}
             fontSize={previewFontSize * EXTRA_BOX_STYLE.fontScale}
-            onMove={(x, y) => updateExtraBox(box.id, { x, y })}
+            onChange={patch => updateExtraBox(box.id, patch)}
           />
         ))}
 
@@ -2227,7 +2273,8 @@ export default function PageEditorScreen() {
           <Text style={styles.sectionLabel}>Cuadros de texto extra</Text>
           <Text style={styles.sectionHint}>
             Texto suelto que aparece en el párrafo que elijas: voces de fondo, un rótulo, una
-            decisión… Hasta {EXTRA_BOX_MAX}. Arrástralos en la vista previa para colocarlos.
+            decisión… Hasta {EXTRA_BOX_MAX}. En la vista previa, arrástralos para colocarlos y tira
+            de su esquina inferior derecha para cambiarles el tamaño.
           </Text>
           {extraBoxes.map((box, i) => {
             const paragraph = Math.min(box.paragraph, paragraphCount);
@@ -2268,9 +2315,26 @@ export default function PageEditorScreen() {
                 {stepper('Aparece en el párrafo:', String(paragraph),
                   () => updateExtraBox(box.id, { paragraph: Math.max(1, paragraph - 1) }),
                   () => updateExtraBox(box.id, { paragraph: Math.min(paragraphCount, paragraph + 1) }))}
-                {stepper('Ancho:', `${box.w}%`,
-                  () => updateExtraBox(box.id, { w: Math.max(10, box.w - 2) }),
+                {stepper('Ancho:', `${Math.round(box.w)}%`,
+                  () => updateExtraBox(box.id, { w: Math.max(6, box.w - 2) }),
                   () => updateExtraBox(box.id, { w: Math.min(100, box.w + 2) }))}
+                <View style={styles.anchorRow}>
+                  <Text style={styles.anchorLabel}>Alto:</Text>
+                  <TouchableOpacity
+                    style={[styles.anchorBtn, box.h === null && styles.anchorBtnActive]}
+                    onPress={() => updateExtraBox(box.id, { h: null })}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.anchorBtnText, box.h === null && styles.anchorBtnTextActive]}>Según el texto</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.blurStepBtn} onPress={() => updateExtraBox(box.id, { h: Math.max(5, (box.h ?? 20) - 2) })} hitSlop={6}>
+                    <MaterialIcons name="remove" size={14} color={Colors.textSecondary} />
+                  </TouchableOpacity>
+                  <Text style={[styles.blurValue, { minWidth: 44 }]}>{box.h === null ? '—' : `${Math.round(box.h)}%`}</Text>
+                  <TouchableOpacity style={styles.blurStepBtn} onPress={() => updateExtraBox(box.id, { h: Math.min(100, (box.h ?? 20) + 2) })} hitSlop={6}>
+                    <MaterialIcons name="add" size={14} color={Colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
                 {stepper('Giro:', `${box.rotation}°`,
                   () => updateExtraBox(box.id, { rotation: Math.max(-180, box.rotation - 5) }),
                   () => updateExtraBox(box.id, { rotation: Math.min(180, box.rotation + 5) }))}
@@ -2283,6 +2347,46 @@ export default function PageEditorScreen() {
                       activeOpacity={0.75}
                     >
                       <Text style={[styles.anchorBtnText, box.rotation === p.value && styles.anchorBtnTextActive]}>{p.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {/* Animación con la que aparece */}
+                <View style={[styles.anchorRow, { flexWrap: 'wrap' }]}>
+                  <Text style={styles.anchorLabel}>Aparece:</Text>
+                  {([{ value: 'fade', label: 'Desvanecer' }, { value: 'pop', label: 'Pop' }] as const).map(opt => (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[styles.anchorBtn, box.animation === opt.value && styles.anchorBtnActive]}
+                      onPress={() => updateExtraBox(box.id, { animation: opt.value })}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={[styles.anchorBtnText, box.animation === opt.value && styles.anchorBtnTextActive]}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <View style={[styles.anchorRow, { flexWrap: 'wrap' }]}>
+                  <Text style={styles.anchorLabel}>Deslizándose:</Text>
+                  {EXTRA_BOX_SLIDES.map(opt => (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[styles.blurStepBtn, box.animation === opt.value && styles.anchorBtnActive]}
+                      onPress={() => updateExtraBox(box.id, { animation: opt.value })}
+                      hitSlop={4}
+                    >
+                      <MaterialIcons name={opt.icon as any} size={15} color={box.animation === opt.value ? '#000' : Colors.textSecondary} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <View style={[styles.anchorRow, { flexWrap: 'wrap' }]}>
+                  <Text style={styles.anchorLabel}>Con barrido:</Text>
+                  {EXTRA_BOX_WIPES.map(opt => (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[styles.blurStepBtn, box.animation === opt.value && styles.anchorBtnActive]}
+                      onPress={() => updateExtraBox(box.id, { animation: opt.value })}
+                      hitSlop={4}
+                    >
+                      <MaterialIcons name={opt.icon as any} size={15} color={box.animation === opt.value ? '#000' : Colors.textSecondary} />
                     </TouchableOpacity>
                   ))}
                 </View>

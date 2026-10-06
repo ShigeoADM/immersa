@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Animated,
   Platform,
+  Easing,
   ScrollView,
   Modal,
   FlatList,
@@ -45,7 +46,7 @@ import type { Role } from '@/constants/permissions';
 import {
   REF_SCREEN, FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, pageSfxCues, splitParagraphs, type SfxCue,
   DEFAULT_PAGE_TRANSITION, type PageTransition,
-  pageExtraBoxes, EXTRA_BOX_STYLE, type ExtraBox, MUSIC_FADE_MS, musicPlaybackVolume, sfxPlaybackVolume,
+  pageExtraBoxes, EXTRA_BOX_STYLE, EXTRA_BOX_SLIDES, EXTRA_BOX_WIPES, type ExtraBox, MUSIC_FADE_MS, musicPlaybackVolume, sfxPlaybackVolume,
   charLabelPos, charLabelSideStyle,
   type TextSize,
 } from '@/constants/reader-layout';
@@ -340,7 +341,8 @@ type TypewriterHandle = {
 
 const NO_LINKS: PageLink[] = [];
 
-// Cuadro de texto extra: aparece con un fundido corto cuando llega su párrafo
+// Cuadro de texto extra: aparece cuando llega su párrafo, con la animación que eligió
+// el autor (desvanecer, pop, deslizarse desde un lado de la pantalla o barrido).
 function ExtraTextBox({ box, stage, stageScale, textStyle, onPress }: {
   box: ExtraBox;
   stage: { left: number; top: number; width: number; height: number };
@@ -348,14 +350,37 @@ function ExtraTextBox({ box, stage, stageScale, textStyle, onPress }: {
   textStyle: OutlineStyle;
   onPress?: () => void;
 }) {
-  const opacity = useRef(new Animated.Value(0)).current;
+  const progress = useRef(new Animated.Value(0)).current;
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const startedRef = useRef(false);
+  const animation = box.animation ?? 'fade';
+  const slide = EXTRA_BOX_SLIDES.find(s => s.value === animation);
+  const wipe = EXTRA_BOX_WIPES.find(w => w.value === animation);
+
+  // Arranca al conocer su tamaño (los barridos lo necesitan)
   useEffect(() => {
-    Animated.timing(opacity, { toValue: 1, duration: 260, useNativeDriver: true }).start();
-  }, [opacity]);
+    if (!size || startedRef.current) return;
+    startedRef.current = true;
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: animation === 'fade' ? 280 : animation === 'pop' ? 380 : 480,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [size, animation, progress]);
+
   const segments = useMemo<OutlineSegment[]>(() => [{ text: box.text }], [box.text]);
+  const width = (box.w / 100) * stage.width;
+  const height = box.h ? (box.h / 100) * stage.height : undefined;
+
   const content = (
     <View
+      onLayout={e => {
+        const { width: w, height: h } = e.nativeEvent.layout;
+        if (!size || Math.abs(size.w - w) > 1 || Math.abs(size.h - h) > 1) setSize({ w, h });
+      }}
       style={{
+        width, height, overflow: 'hidden',
         backgroundColor: 'rgba(22,24,30,0.82)',
         borderWidth: 1,
         borderColor: onPress ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.10)',
@@ -367,6 +392,39 @@ function ExtraTextBox({ box, stage, stageScale, textStyle, onPress }: {
       <OutlineText segments={segments} style={textStyle} />
     </View>
   );
+
+  // Barrido: una máscara se desplaza descubriendo el cuadro mientras el contenido
+  // se mueve al revés dentro de ella, de modo que el cuadro no se desplaza: se revela.
+  let body = content;
+  if (wipe && size) {
+    const [dx, dy] = wipe.dir;
+    const mask = (from: number) => progress.interpolate({ inputRange: [0, 1], outputRange: [from, 0] });
+    body = (
+      <Animated.View
+        style={{
+          width: size.w, height: size.h, overflow: 'hidden',
+          transform: [{ translateX: mask(-dx * size.w) }, { translateY: mask(-dy * size.h) }],
+        }}
+      >
+        <Animated.View style={{ transform: [{ translateX: mask(dx * size.w) }, { translateY: mask(dy * size.h) }] }}>
+          {content}
+        </Animated.View>
+      </Animated.View>
+    );
+  }
+
+  // Deslizar: entra desde fuera de la pantalla por el lado elegido
+  const slideX = slide ? progress.interpolate({ inputRange: [0, 1], outputRange: [slide.from[0] * stage.width * 0.7, 0] }) : 0;
+  const slideY = slide ? progress.interpolate({ inputRange: [0, 1], outputRange: [slide.from[1] * stage.height * 0.9, 0] }) : 0;
+  // Pop: crece pasándose un poco y se asienta
+  const scale = animation === 'pop'
+    ? progress.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.55, 1.08, 1] })
+    : 1;
+  // Los barridos no funden: se descubren. El resto aparece con la opacidad.
+  const opacity = wipe
+    ? (size ? 1 : 0)
+    : progress.interpolate({ inputRange: [0, slide ? 0.35 : 1], outputRange: [0, 1], extrapolate: 'clamp' });
+
   return (
     <Animated.View
       // Sin destino no captura el toque: pasa al fondo y avanza la lectura
@@ -375,14 +433,14 @@ function ExtraTextBox({ box, stage, stageScale, textStyle, onPress }: {
         position: 'absolute',
         left: stage.left + (box.x / 100) * stage.width,
         top: stage.top + (box.y / 100) * stage.height,
-        width: (box.w / 100) * stage.width,
         opacity,
-        transform: [{ rotate: `${box.rotation ?? 0}deg` }],
+        // El deslizamiento va en la pantalla (antes del giro); el giro y el pop, sobre el cuadro
+        transform: [{ translateX: slideX }, { translateY: slideY }, { rotate: `${box.rotation ?? 0}deg` }, { scale }],
       }}
     >
       {onPress
-        ? <TouchableOpacity activeOpacity={0.8} onPress={onPress}>{content}</TouchableOpacity>
-        : content}
+        ? <TouchableOpacity activeOpacity={0.8} onPress={onPress}>{body}</TouchableOpacity>
+        : body}
     </Animated.View>
   );
 }
