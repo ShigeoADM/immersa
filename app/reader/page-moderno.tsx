@@ -293,6 +293,7 @@ let musicCarry: {
   url: string | null;      // null = se venía en silencio
   volume: number;          // volumen de reproducción
   sound: Audio.Sound | null;
+  muted: boolean;          // el lector tenía la música silenciada
 } | null = null;
 
 // Historial de navegación: de qué página se vino en cada salto (capítulo + página).
@@ -694,6 +695,9 @@ export default function PageModernoReaderScreen() {
   const fadingOutRef   = useRef(new Set<string>());
   // La página tiene la música callada en el párrafo actual (silencio momentáneo)
   const quietRef = useRef(false);
+  // Todos los audios creados por este lector, y si el lector ya se cerró
+  const allSoundsRef = useRef(new Set<Audio.Sound>());
+  const readerClosedRef = useRef(false);
   // Música heredada de capítulos anteriores, para las páginas del principio que no
   // definen ninguna. undefined = aún no se sabe; null = silencio.
   const [baseMusic, setBaseMusic] = useState<{ url: string; volume: number } | null | undefined>(undefined);
@@ -730,8 +734,11 @@ export default function PageModernoReaderScreen() {
     if (carry && carry.toChapterId === chapterId) {
       baseResolvedRef.current = true;
       setBaseMusic(carry.url ? { url: carry.url, volume: carry.volume } : null);
+      // Si el lector tenía la música silenciada, sigue silenciada en este capítulo
+      if (carry.muted) { isMutedRef.current = true; setIsMuted(true); }
       if (carry.url && carry.sound) {
         audioCacheRef.current.set('music:' + carry.url, { promise: Promise.resolve(carry.sound), ready: true, urgent: true });
+        allSoundsRef.current.add(carry.sound);
         soundRef.current = carry.sound;
         currentTrackRef.current = carry.url;
         playingUrlRef.current = carry.url;
@@ -1040,8 +1047,15 @@ export default function PageModernoReaderScreen() {
   // que hace falta se abre desde el archivo, sin esperar a la red.
   type AudioEntry = { promise: Promise<Audio.Sound>; ready: boolean; urgent: boolean };
   const audioCacheRef = useRef(new Map<string, AudioEntry>());
+  // Todo audio que crea este lector queda apuntado, para poder cerrarlo al salir pase
+  // lo que pase (aunque ya no esté en la caché). Si termina de cargarse cuando el lector
+  // ya se ha cerrado, se descarta en el momento.
   const createSound = (uri: string, looping: boolean) =>
-    Audio.Sound.createAsync({ uri }, { shouldPlay: false, isLooping: looping, volume: 0 }).then(r => r.sound);
+    Audio.Sound.createAsync({ uri }, { shouldPlay: false, isLooping: looping, volume: 0 }).then(r => {
+      if (readerClosedRef.current) r.sound.unloadAsync().catch(() => {});
+      else allSoundsRef.current.add(r.sound);
+      return r.sound;
+    });
   // urgent: la pista hace falta ya. Si no está en el móvil se reproduce en directo
   // (empieza antes que esperando a descargarla entera) y se guarda para la próxima vez.
   // Si no es urgente (precarga), se descarga primero y se abre desde el archivo.
@@ -1354,8 +1368,12 @@ export default function PageModernoReaderScreen() {
       fadeTimersRef.current.forEach(t => clearInterval(t));
       fadeTimersRef.current.clear();
       stopBars();
+      readerClosedRef.current = true;
       const kept = handedOffRef.current; // la usa ya el lector del capítulo siguiente
       audioCacheRef.current.forEach(entry => entry.promise.then(s => { if (s !== kept) s.unloadAsync(); }).catch(() => {}));
+      // Y cualquier otro audio que este lector haya creado, esté o no en la caché
+      allSoundsRef.current.forEach(s => { if (s !== kept) s.unloadAsync().catch(() => {}); });
+      allSoundsRef.current.clear();
       audioCacheRef.current.clear();
       soundRef.current = null;
     };
@@ -1511,6 +1529,7 @@ export default function PageModernoReaderScreen() {
       url: currentTrackRef.current,
       volume: trackVolumeRef.current,
       sound: currentTrackRef.current && playingUrlRef.current === currentTrackRef.current ? soundRef.current : null,
+      muted: isMutedRef.current,
     };
     handedOffRef.current = musicCarry.sound;
   };

@@ -1031,7 +1031,14 @@ export default function PageEditorScreen() {
   };
 
   // ── Escuchar la pista en el editor (con el volumen elegido) ───────────────
+  // Cada "Escuchar" lleva un número de turno. Si se para (o se pide otro) mientras el
+  // audio aún se está cargando, al terminar de cargar ve que su turno ya pasó y se
+  // descarta. Sin esto quedaba sonando sin botón que lo parase.
+  const musicPreviewTurn = useRef(0);
+  const sfxPreviewTurn = useRef(0);
+
   const stopMusicPreview = useCallback(() => {
+    musicPreviewTurn.current++;
     const s = previewSoundRef.current;
     previewSoundRef.current = null;
     setPreviewingMusic(false);
@@ -1042,6 +1049,7 @@ export default function PageEditorScreen() {
   const toggleMusicPreview = async () => {
     if (previewingMusic) { stopMusicPreview(); return; }
     if (!editMusicUrl) return;
+    const turn = ++musicPreviewTurn.current;
     setPreviewingMusic(true);
     try {
       await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
@@ -1049,8 +1057,14 @@ export default function PageEditorScreen() {
         { uri: editMusicUrl },
         { shouldPlay: true, isLooping: true, volume: musicPlaybackVolume(musicVolume) },
       );
+      if (turn !== musicPreviewTurn.current) { // se paró mientras cargaba
+        sound.stopAsync().catch(() => {});
+        sound.unloadAsync().catch(() => {});
+        return;
+      }
       previewSoundRef.current = sound;
     } catch (e: any) {
+      if (turn !== musicPreviewTurn.current) return;
       setPreviewingMusic(false);
       AppAlert.alert('No se pudo reproducir', e?.message ?? 'Comprueba el archivo o el enlace.');
     }
@@ -1086,6 +1100,7 @@ export default function PageEditorScreen() {
 
   // ── Escuchar el efecto de sonido (una vez, con el volumen elegido) ─────────
   const stopSfxPreview = useCallback(() => {
+    sfxPreviewTurn.current++;
     const s = sfxPreviewRef.current;
     sfxPreviewRef.current = null;
     setPreviewingSfxId(null);
@@ -1097,6 +1112,7 @@ export default function PageEditorScreen() {
     const wasPlaying = previewingSfxId === cue.id;
     stopSfxPreview();
     if (wasPlaying) return;
+    const turn = ++sfxPreviewTurn.current;
     setPreviewingSfxId(cue.id);
     try {
       await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
@@ -1104,11 +1120,17 @@ export default function PageEditorScreen() {
         { uri: cue.url },
         { shouldPlay: true, volume: sfxPlaybackVolume(cue.volume) },
       );
+      if (turn !== sfxPreviewTurn.current) { // se paró mientras cargaba
+        sound.stopAsync().catch(() => {});
+        sound.unloadAsync().catch(() => {});
+        return;
+      }
       sfxPreviewRef.current = sound;
       sound.setOnPlaybackStatusUpdate(status => {
         if (status.isLoaded && status.didJustFinish) stopSfxPreview();
       });
     } catch (e: any) {
+      if (turn !== sfxPreviewTurn.current) return;
       setPreviewingSfxId(null);
       AppAlert.alert('No se pudo reproducir', e?.message ?? 'Comprueba el archivo o el enlace.');
     }
