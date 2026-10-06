@@ -23,6 +23,9 @@ import { WEBNOVEL_FONT, findRichMarks, stripRichText } from '@/constants/webnove
 import { RichText } from '@/components/rich-text';
 import { countWords, formatReadingStats } from '@/services/stories';
 import { DesktopColumn } from '@/components/desktop-column';
+import { useSaveShortcut } from '@/hooks/use-save-shortcut';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 
 const TITLE_MAX = 80;
 
@@ -131,6 +134,25 @@ export default function ChapterEditorWebnovelScreen() {
   // ── Guardar ───────────────────────────────────────────────────────────────
   const wordCount = countWords(stripRichText(content));
 
+  // Importar un archivo de texto (.txt): lo añade al final de lo que ya hubiera
+  const handleImportText = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: ['text/plain', 'text/markdown'], copyToCacheDirectory: true });
+      if (result.canceled || !result.assets[0]) return;
+      const asset = result.assets[0];
+      const raw = Platform.OS === 'web'
+        ? await (await fetch(asset.uri)).text()
+        : await FileSystem.readAsStringAsync(asset.uri);
+      // Saltos de línea de Windows, y líneas en blanco de más
+      const text = raw.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+      if (!text) { AppAlert.alert('Archivo vacío', 'Ese archivo no tiene texto.'); return; }
+      setContent(prev => (prev.trim() ? `${prev.replace(/\s+$/, '')}\n\n${text}` : text));
+      setPreview(false);
+    } catch (e: any) {
+      AppAlert.alert('No se pudo importar', e?.message ?? 'Comprueba que es un archivo de texto (.txt).');
+    }
+  };
+
   const handleSave = async () => {
     if (saving) return;
     const cleanTitle = title.trim();
@@ -156,6 +178,7 @@ export default function ChapterEditorWebnovelScreen() {
       setSaving(false);
     }
   };
+  useSaveShortcut(handleSave); // Ctrl+S en el navegador
 
   // ── Formato visible mientras se escribe ───────────────────────────────────
   // El texto se guarda con marcas (**negrita**, *cursiva*), pero el campo las pinta ya
@@ -287,6 +310,9 @@ export default function ChapterEditorWebnovelScreen() {
             activeOpacity={0.7}
           >
             <MaterialIcons name="format-italic" size={20} color={Colors.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.toolBtn} onPress={handleImportText} activeOpacity={0.7}>
+            <MaterialIcons name="upload-file" size={19} color={Colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.stats} numberOfLines={1}>{formatReadingStats(wordCount)}</Text>
           <TouchableOpacity

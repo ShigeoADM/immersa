@@ -151,6 +151,7 @@ function RootNavigator() {
       <Stack.Screen name="create/moderno-details" options={{ headerShown: false }} />
       <Stack.Screen name="create/editor-moderno" options={{ headerShown: false }} />
       <Stack.Screen name="create/chapter-editor-moderno" options={{ headerShown: false }} />
+      <Stack.Screen name="create/media-manager" options={{ headerShown: false }} />
       <Stack.Screen name="create/page-editor" options={{ headerShown: false }} />
       <Stack.Screen name="create/chapter-editor-webnovel" options={{ headerShown: false }} />
       <Stack.Screen name="reader/webnovel" options={{ headerShown: false }} />

@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  Platform,
+  Share,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -71,6 +73,8 @@ const STATUS_LABELS: Record<string, string> = {
   hiatus:    'En pausa',
   upcoming:  'Próximamente',
 };
+
+const WEB_URL = 'https://immersa.web.app';
 
 export default function StoryDetailScreen() {
   const isDesktop = useIsDesktop();
@@ -232,6 +236,26 @@ export default function StoryDetailScreen() {
   };
 
   // Me gusta: se pinta al instante y se deshace si falla
+  // Compartir la novela: en el móvil abre el menú de compartir; en el ordenador copia
+  // el enlace al portapapeles.
+  const shareStory = async () => {
+    if (!story) return;
+    const url = `${WEB_URL}/story/${story.id}`;
+    try {
+      if (Platform.OS !== 'web') {
+        await Share.share({ message: `${story.title} — ${url}` });
+        return;
+      }
+      const nav = (globalThis as any).navigator;
+      if (nav?.share && nav.maxTouchPoints > 0) {
+        await nav.share({ title: story.title, url });
+      } else {
+        await nav.clipboard.writeText(url);
+        AppAlert.alert('Enlace copiado', 'El enlace de la novela está en el portapapeles.');
+      }
+    } catch { /* el usuario cerró el menú de compartir */ }
+  };
+
   // Los "me gusta" se dan capítulo a capítulo, desde el lector. Aquí se ve el total.
   const explainLikes = () => {
     AppAlert.alert(
@@ -359,6 +383,12 @@ export default function StoryDetailScreen() {
             <MaterialIcons name="arrow-back" size={22} color="#fff" />
           </TouchableOpacity>
           <View style={styles.heroActions}>
+          {/* Compartir: copia o envía el enlace de la novela (solo si está publicada) */}
+          {story.published && (
+            <TouchableOpacity style={[styles.bookmarkBtn, { marginRight: 0 }]} onPress={shareStory} activeOpacity={0.8}>
+              <MaterialIcons name="share" size={20} color="#fff" />
+            </TouchableOpacity>
+          )}
           {/* Denunciar la historia (no la propia) */}
           {user && !isOwnStory && (
             <TouchableOpacity

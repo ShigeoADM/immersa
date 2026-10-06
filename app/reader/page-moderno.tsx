@@ -1905,6 +1905,25 @@ export default function PageModernoReaderScreen() {
   const page       = pages[current];
   // Comentarios de esta página, sin los de usuarios bloqueados
   const pageComments = page ? chapterComments.filter(c => c.pageId === page.id && !blocked.has(c.uid)) : [];
+  // ── Web: pantalla completa ────────────────────────────────────────────────
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const doc = (globalThis as any).document;
+    const sync = () => setIsFullscreen(!!doc.fullscreenElement);
+    doc.addEventListener('fullscreenchange', sync);
+    return () => {
+      doc.removeEventListener('fullscreenchange', sync);
+      // Al salir del lector se sale también de la pantalla completa
+      if (doc.fullscreenElement) doc.exitFullscreen?.().catch?.(() => {});
+    };
+  }, []);
+  const toggleFullscreen = () => {
+    const doc = (globalThis as any).document;
+    if (doc.fullscreenElement) doc.exitFullscreen?.().catch?.(() => {});
+    else doc.documentElement.requestFullscreen?.().catch?.(() => {});
+  };
+
   const isLastPage = current === pages.length - 1 && pages.length > 0;
   const isIllustration = pages[current]?.hideTextBox === true;
   const hasNextOverride = page?.nextPageIndex !== undefined && page?.nextPageIndex !== null;
@@ -2272,6 +2291,13 @@ export default function PageModernoReaderScreen() {
         <TouchableOpacity style={styles.hideUIBtn} onPress={toggleHUD} activeOpacity={0.75}>
           <MaterialIcons name="visibility-off" size={16} color="rgba(255,255,255,0.7)" />
         </TouchableOpacity>
+
+        {/* Pantalla completa (solo en el navegador) */}
+        {Platform.OS === 'web' && (
+          <TouchableOpacity style={[styles.hideUIBtn, { left: 142 }]} onPress={toggleFullscreen} activeOpacity={0.75}>
+            <MaterialIcons name={isFullscreen ? 'fullscreen-exit' : 'fullscreen'} size={18} color="rgba(255,255,255,0.7)" />
+          </TouchableOpacity>
+        )}
 
         {/* Panel de ajustes */}
         {showSettings && (

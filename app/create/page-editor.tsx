@@ -24,7 +24,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/config/firebase';
-import { uploadLocalFile } from '@/services/media';
+import { uploadLocalFile, mediaDisplayName, rememberMediaNames } from '@/services/media';
 import { sortChapters } from '@/services/stories';
 import { Colors } from '@/constants/theme';
 import { AppAlert } from '@/components/app-dialog';
@@ -44,6 +44,7 @@ import {
 } from '@/constants/reader-layout';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { deleteUnusedMedia } from '@/services/stories';
+import { useSaveShortcut } from '@/hooks/use-save-shortcut';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 type ImageAnchor   = 'top' | 'center' | 'bottom';
@@ -281,16 +282,9 @@ function MediaLibraryPicker({ kind, loading, urls, onPick }: {
   );
 }
 
-// Nombre legible de un archivo a partir de su URL
-// Nombre para mostrar de un archivo a partir de su dirección: solo el nombre (sin la
-// carpeta) y sin la marca de tiempo que se le antepone al subirlo.
-const fileNameFromUrl = (url: string, fallback: string) => {
-  try {
-    const path = decodeURIComponent(url.split('/').pop()?.split('?')[0] ?? '');
-    const name = (path.split('/').pop() ?? '').replace(/^\d{10,}_/, '');
-    return name || fallback;
-  } catch { return fallback; }
-};
+// Nombre para mostrar de un archivo: el que le puso el autor en el gestor de archivos o,
+// si no, el del propio archivo (sin la carpeta ni la marca de tiempo).
+const fileNameFromUrl = mediaDisplayName;
 // Nombre con el que se guarda un archivo subido: una marca de tiempo (para que no choque
 // con otro igual) seguida de su nombre original, que es el que se enseña después.
 const storedFileName = (originalName: string, fallbackExt: string) => {
@@ -787,9 +781,12 @@ export default function PageEditorScreen() {
     (async () => {
       try {
         const [snap, pagesSnap] = await Promise.all([
-          isEditing && pageId
+          // (y, de paso, los nombres que el autor ha puesto a sus archivos)
+          getDoc(doc(db, 'stories', storyId as string))
+            .then(s => rememberMediaNames(s.data()?.mediaNames)).catch(() => {})
+            .then(() => (isEditing && pageId
             ? getDoc(doc(db, 'stories', storyId as string, 'chapters', chapterId as string, 'pages', pageId as string))
-            : Promise.resolve(null),
+            : null)),
           getDocs(query(
             collection(db, 'stories', storyId as string, 'chapters', chapterId as string, 'pages'),
             orderBy('order', 'asc'),
@@ -1487,6 +1484,8 @@ export default function PageEditorScreen() {
     }
     finally     { setSaving(false); }
   };
+
+  useSaveShortcut(handleSave); // Ctrl+S en el navegador
 
   // Etiqueta del destino de un enlace (el número se calcula desde el id: sigue
   // siendo correcto aunque se reordenen las páginas)

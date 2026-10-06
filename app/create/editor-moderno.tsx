@@ -132,6 +132,45 @@ export default function EditorModernoScreen() {
     );
   };
 
+  // ── Exportar (copia de seguridad) ─────────────────────────────────────────
+  // Descarga un archivo .json con todo el texto y la configuración de la historia:
+  // sus datos, capítulos y páginas. Las imágenes y audios van como enlaces.
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async () => {
+    if (exporting || !storyId) return;
+    setExporting(true);
+    try {
+      const storySnap = await getDoc(doc(db, 'stories', storyId as string));
+      const chaptersSnap = await getDocs(collection(db, 'stories', storyId as string, 'chapters'));
+      const sorted = sortChapters(chaptersSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
+      const exported = await Promise.all(sorted.map(async ch => {
+        const pagesSnap = await getDocs(query(
+          collection(db, 'stories', storyId as string, 'chapters', ch.id, 'pages'), orderBy('order', 'asc'),
+        ));
+        return { ...ch, pages: pagesSnap.docs.map(p => ({ id: p.id, ...p.data() })) };
+      }));
+      const data = {
+        app: 'Immersa', exportVersion: 1, exportedAt: new Date().toISOString(),
+        story: { id: storyId, ...storySnap.data() },
+        chapters: exported,
+      };
+      const g = globalThis as any;
+      const href = g.URL.createObjectURL(new g.Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const a = g.document.createElement('a');
+      a.href = href;
+      a.download = `${storyTitle.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'historia'} - Immersa ${new Date().toISOString().slice(0, 10)}.json`;
+      g.document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => g.URL.revokeObjectURL(href), 2000);
+    } catch (e: any) {
+      console.error('Error exportando:', e);
+      AppAlert.alert('No se pudo exportar', e?.message ?? 'Inténtalo de nuevo.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // ── Ordenar capítulos ─────────────────────────────────────────────────────
   const moveChapter = async (i: number, dir: -1 | 1) => {
     const j = i + dir;
@@ -313,6 +352,24 @@ export default function EditorModernoScreen() {
             <Image source={require('@/assets/images/logo.png')} style={styles.logo} contentFit="contain" />
           </TouchableOpacity>
           <View style={styles.headerActions}>
+            {/* Archivos de la historia (imágenes y audios): solo las tiene el formato Moderno */}
+            {format === 'Moderno' && (
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                activeOpacity={0.7}
+                onPress={() => router.push(`/create/media-manager?storyId=${storyId}&title=${encodeURIComponent(storyTitle)}` as any)}
+              >
+                <MaterialIcons name="perm-media" size={18} color="rgba(255,255,255,0.85)" />
+              </TouchableOpacity>
+            )}
+            {/* Copia de seguridad: descarga la historia entera en un archivo (navegador) */}
+            {Platform.OS === 'web' && (
+              <TouchableOpacity style={styles.deleteBtn} activeOpacity={0.7} onPress={handleExport} disabled={exporting}>
+                {exporting
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <MaterialIcons name="file-download" size={20} color="rgba(255,255,255,0.85)" />}
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.deleteBtn}
               activeOpacity={0.7}

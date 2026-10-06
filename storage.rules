@@ -38,6 +38,11 @@ service firebase.storage {
     }
 
     // ── Archivos de una historia: solo su autor ──────────────────────────────
+    // El autor puede ver qué hay subido en las carpetas de su historia: así el gestor de
+    // archivos encuentra los que ya no usa ninguna página.
+    match /pages/{storyId}/{rest=**} { allow list: if ownsStory(storyId); }
+    match /music/{storyId}/{rest=**} { allow list: if ownsStory(storyId); }
+    match /sfx/{storyId}/{rest=**}   { allow list: if ownsStory(storyId); }
     // Fondos de página
     match /pages/{storyId}/{chapterId}/{file} {
       allow write: if ownsStory(storyId) && deletingOr(8);
