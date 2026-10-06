@@ -104,6 +104,10 @@ interface Page {
   imageFit?: ImageFit;
   musicUrl?: string | null;
   musicVolume?: number;       // ajuste del autor para esta pista (1 = 100 %)
+  // La música de esta página puede empezar en un párrafo concreto (1 = al llegar).
+  // Hasta entonces sigue la música anterior, o hay silencio si musicBefore es 'silence'.
+  musicParagraph?: number;
+  musicBefore?: 'silence';
   textSize?: TextSize;
   textBoxLayout?: TextBoxLayout;
   links?: PageLink[];
@@ -324,7 +328,7 @@ type TypewriterHandle = {
 
 const NO_LINKS: PageLink[] = [];
 // Fundido de salida de la música al llegar a una página en silencio
-const MUSIC_TO_SILENCE_MS = 1100;
+const MUSIC_TO_SILENCE_MS = 1500;
 
 // Un párrafo del cuadro de texto. Va en su propio componente para que los párrafos ya
 // escritos no se vuelvan a pintar con cada letra del que se está escribiendo.
@@ -968,21 +972,37 @@ export default function PageModernoReaderScreen() {
   // que la pista haya terminado de cargar. La animación arranca cuando las barras ya
   // están en pantalla, y se para al silenciar (las sustituye el icono) o al quedarse
   // sin música.
-  const pageHasMusic = !!inheritChain.find(p => p.musicUrl !== undefined)?.musicUrl;
+  //
+  // Música que toca ahora mismo: la de la primera página de la cadena de herencia que
+  // define música. Si la página actual pone una pista que empieza en un párrafo
+  // posterior, hasta llegar a él vale lo de antes (la música anterior) o el silencio.
+  const effectiveMusic = useMemo(() => {
+    const here = pages[current];
+    let chain = inheritChain;
+    if (here && typeof here.musicUrl === 'string' && here.musicUrl
+        && (here.musicParagraph ?? 1) - 1 > paraIndex) {
+      if (here.musicBefore === 'silence') return null;
+      chain = inheritChain.slice(1); // como si esta página aún no hubiera puesto su música
+    }
+    const source = chain.find(p => p.musicUrl !== undefined);
+    return source?.musicUrl
+      ? { url: source.musicUrl, volume: musicPlaybackVolume(source.musicVolume) }
+      : null;
+  }, [pages, current, inheritChain, paraIndex]);
+
+  const pageHasMusic = !!effectiveMusic;
   useEffect(() => {
     if (!pageHasMusic || isMuted) return;
     startBars();
     return stopBars;
   }, [pageHasMusic, isMuted]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Efecto de música al cambiar de página ─────────────────────────────────
+  // ── Efecto de música al cambiar de página (o al llegar al párrafo de la música) ──
   useEffect(() => {
     if (pages.length === 0) return;
 
-    // Pista efectiva: la de la primera página de la cadena de herencia que define música
-    const source = inheritChain.find(p => p.musicUrl !== undefined);
-    const effectiveTrack: string | null = source?.musicUrl || null;
-    const effectiveVolume = musicPlaybackVolume(source?.musicVolume);
+    const effectiveTrack: string | null = effectiveMusic?.url ?? null;
+    const effectiveVolume = effectiveMusic?.volume ?? musicPlaybackVolume();
 
     if (effectiveTrack === null) {
       // Sin música: detener si algo sonaba
@@ -997,7 +1017,7 @@ export default function PageModernoReaderScreen() {
       if (!isMutedRef.current && soundRef.current) fadeVolume(soundRef.current, from, effectiveVolume, 250);
     }
     // Si misma pista y mismo volumen: no hacer nada (sigue sonando)
-  }, [current, pages, inheritChain]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pages, effectiveMusic?.url, effectiveMusic?.volume]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Efectos de sonido de la página ────────────────────────────────────────
   // Cada efecto suena al aparecer su párrafo (el del párrafo 1, al llegar a la página).
@@ -1043,6 +1063,9 @@ export default function PageModernoReaderScreen() {
     for (const t of targets) {
       const m = musicOf(t.chain);
       if (m) { wanted.add('music:' + m); if (t.now) urgent.add('music:' + m); }
+      // La pista propia de la página, aunque empiece en un párrafo posterior
+      const own = t.page?.musicUrl;
+      if (own) wanted.add('music:' + own);
       pageSfxCues(t.page).forEach(c => {
         wanted.add('sfx:' + c.url);
         if (t.now) urgent.add('sfx:' + c.url);

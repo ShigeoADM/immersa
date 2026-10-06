@@ -83,7 +83,7 @@ export const PAGE_TRANSITIONS: { value: PageTransition; label: string; icon: str
 ];
 
 // Duración del fundido de la música al entrar, salir o cambiar de pista
-export const MUSIC_FADE_MS = 450;
+export const MUSIC_FADE_MS = 1000;
 
 // Cuadro de texto del lector
 export const TEXT_BOX = {

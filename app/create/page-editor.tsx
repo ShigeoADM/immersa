@@ -249,6 +249,9 @@ export default function PageEditorScreen() {
   const [musicSource, setMusicSource]   = useState<MediaSource>('file');
   const [musicUrlInput, setMusicUrlInput] = useState('');
   const [musicVolume, setMusicVolume]   = useState(1);       // ajuste del autor (1 = 100 %)
+  // Párrafo en el que empieza la música de esta página (1 = al llegar) y qué suena antes
+  const [musicParagraph, setMusicParagraph] = useState(1);
+  const [musicBeforeSilence, setMusicBeforeSilence] = useState(false);
   const [previewingMusic, setPreviewingMusic] = useState(false);
   const previewSoundRef = useRef<Audio.Sound | null>(null);
   const [textSize, setTextSize]         = useState<TextSize | undefined>(undefined);
@@ -667,7 +670,9 @@ export default function PageEditorScreen() {
         setTbLayout(tbl); applyTbShared(tbl);
         if (p.musicUrl === undefined)    { setMusicMode('inherit'); }
         else if (p.musicUrl === null)    { setMusicMode('silence'); }
-        else { setMusicMode('play'); setMusicVolume(p.musicVolume ?? 1); setEditMusicUrl(p.musicUrl); setMusicFileName(decodeURIComponent(p.musicUrl.split('/').pop()?.split('?')[0] ?? 'Pista')); }
+        else { setMusicMode('play'); setMusicVolume(p.musicVolume ?? 1);
+          setMusicParagraph(p.musicParagraph ?? 1); setMusicBeforeSilence(p.musicBefore === 'silence');
+          setEditMusicUrl(p.musicUrl); setMusicFileName(decodeURIComponent(p.musicUrl.split('/').pop()?.split('?')[0] ?? 'Pista')); }
         // Enlaces antiguos del mismo capítulo: se les asigna el id de su página destino
         setLinks((p.links ?? []).map((l: PageLink) =>
           l.targetPageId || l.targetChapterId || ids[l.targetPageIndex] === undefined
@@ -998,7 +1003,7 @@ export default function PageEditorScreen() {
   // ── Cambios sin guardar ───────────────────────────────────────────────────
   // Instantánea de todo lo que se guarda; si difiere de la inicial hay cambios.
   const snapshot = JSON.stringify({
-    pageText, bgUrl, imageAnchor, imageFit, bgBlur, bgNone, musicMode, musicVolume, editMusicUrl, textSize, tbLayout, links,
+    pageText, bgUrl, imageAnchor, imageFit, bgBlur, bgNone, musicMode, musicVolume, musicParagraph, musicBeforeSilence, editMusicUrl, textSize, tbLayout, links,
     jumpEnabled, nextPageInput, hideTextBox, transition: transition ?? null,
     sfxCues: sfxCues.map(c => ({ paragraph: c.paragraph, url: c.url, volume: c.volume })),
     leftCharMode, leftCharName, rightCharMode, rightCharName,
@@ -1027,6 +1032,7 @@ export default function PageEditorScreen() {
     setBgBlur(d.bgBlur ?? BG_BLUR_DEFAULT);
     setBgNone(!!d.bgNone);
     setMusicMode(d.musicMode ?? 'inherit'); setMusicVolume(d.musicVolume ?? 1);
+    setMusicParagraph(d.musicParagraph ?? 1); setMusicBeforeSilence(!!d.musicBeforeSilence);
     setEditMusicUrl(d.editMusicUrl ?? '');
     setMusicFileName(d.editMusicUrl ? fileNameFromUrl(d.editMusicUrl, 'Pista') : '');
     setTextSize(d.textSize ?? undefined);
@@ -1135,6 +1141,9 @@ export default function PageEditorScreen() {
         musicMode === 'inherit' ? undefined : musicMode === 'silence' ? null : editMusicUrl;
 
       const cleanLinks = links.filter(l => l.word.trim());
+      // Música que empieza en un párrafo posterior al primero
+      const savedMusicParagraph = Math.min(musicParagraph, paragraphCount);
+      const delayedMusic = musicMode === 'play' && !!editMusicUrl && savedMusicParagraph > 1;
       // Efectos de sonido: en orden de párrafo; el volumen solo se guarda si no es el normal
       const savedSfxCues = [...sfxCues]
         .map(c => ({ ...c, paragraph: Math.min(c.paragraph, paragraphCount) }))
@@ -1165,6 +1174,8 @@ export default function PageEditorScreen() {
         else if (musicMode === 'silence') updateData.musicUrl = null;
         else updateData.musicUrl = editMusicUrl;
         updateData.musicVolume = musicMode === 'play' && musicVolume !== 1 ? musicVolume : deleteField();
+        updateData.musicParagraph = delayedMusic ? savedMusicParagraph : deleteField();
+        updateData.musicBefore    = delayedMusic && musicBeforeSilence ? 'silence' : deleteField();
         // Personajes
         if (leftCharMode === 'inherit')  updateData.leftChar = deleteField();
         else if (leftCharMode === 'hide') updateData.leftChar = '';
@@ -1206,6 +1217,8 @@ export default function PageEditorScreen() {
         if (musicMode === 'silence') newData.musicUrl = null;
         else if (musicMode === 'play' && editMusicUrl) newData.musicUrl = editMusicUrl;
         if (musicMode === 'play' && editMusicUrl && musicVolume !== 1) newData.musicVolume = musicVolume;
+        if (delayedMusic) newData.musicParagraph = savedMusicParagraph;
+        if (delayedMusic && musicBeforeSilence) newData.musicBefore = 'silence';
         // Personajes
         if (leftCharMode === 'show' && leftCharName.trim()) newData.leftChar = leftCharName.trim();
         else if (leftCharMode === 'hide') newData.leftChar = '';
@@ -1765,6 +1778,59 @@ export default function PageEditorScreen() {
                 onStep={changeMusicVolume}
                 playing={previewingMusic} onTogglePlay={toggleMusicPreview}
               />
+              {/* Párrafo en el que empieza a sonar (1 = al llegar a la página) */}
+              {(() => {
+                const paragraph = Math.min(musicParagraph, paragraphCount);
+                const snippet = splitParagraphs(pageText)[paragraph - 1] ?? '';
+                return (
+                  <>
+                    <View style={styles.anchorRow}>
+                      <Text style={styles.anchorLabel}>Empieza en el párrafo:</Text>
+                      <TouchableOpacity
+                        style={[styles.blurStepBtn, paragraph <= 1 && { opacity: 0.35 }]}
+                        onPress={() => setMusicParagraph(Math.max(1, paragraph - 1))}
+                        disabled={paragraph <= 1}
+                        hitSlop={6}
+                      >
+                        <MaterialIcons name="remove" size={14} color={Colors.textSecondary} />
+                      </TouchableOpacity>
+                      <Text style={styles.blurValue}>{paragraph}</Text>
+                      <TouchableOpacity
+                        style={[styles.blurStepBtn, paragraph >= paragraphCount && { opacity: 0.35 }]}
+                        onPress={() => setMusicParagraph(Math.min(paragraphCount, paragraph + 1))}
+                        disabled={paragraph >= paragraphCount}
+                        hitSlop={6}
+                      >
+                        <MaterialIcons name="add" size={14} color={Colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                    {paragraph > 1 && (
+                      <>
+                        {snippet ? (
+                          <Text style={styles.sfxCueSnippet} numberOfLines={1}>«{snippet.replace(/\n/g, ' ')}»</Text>
+                        ) : null}
+                        <View style={[styles.anchorRow, { flexWrap: 'wrap' }]}>
+                          <Text style={styles.anchorLabel}>Hasta entonces:</Text>
+                          {([
+                            { value: false, icon: 'subdirectory-arrow-right', label: 'Sigue la música anterior' },
+                            { value: true,  icon: 'volume-off', label: 'Silencio' },
+                          ] as const).map(opt => (
+                            <TouchableOpacity
+                              key={opt.label}
+                              style={[styles.anchorBtn, musicBeforeSilence === opt.value && styles.anchorBtnActive]}
+                              onPress={() => setMusicBeforeSilence(opt.value)}
+                              activeOpacity={0.75}
+                            >
+                              <MaterialIcons name={opt.icon} size={13} color={musicBeforeSilence === opt.value ? '#000' : Colors.textSecondary} />
+                              <Text style={[styles.anchorBtnText, musicBeforeSilence === opt.value && styles.anchorBtnTextActive]}>{opt.label}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </>
+                    )}
+                  </>
+                );
+              })()}
               </>
             ) : (
               <>
