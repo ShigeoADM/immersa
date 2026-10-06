@@ -20,7 +20,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { AppAlert, AppDialogHost } from '@/components/app-dialog';
 import { adultContentLabel, audienceLabel } from '@/constants/story-meta';
-import { hasLiked, setLike, setSaved } from '@/services/social';
+import { hasLikedStory, setSaved } from '@/services/social';
 import { AdultGate } from '@/components/adult-gate';
 import { ReportModal } from '@/components/report-modal';
 import type { ReportTarget } from '@/services/reports';
@@ -61,6 +61,7 @@ interface Chapter {
   publishedAt?: string;
   createdAt: string;
   wordCount?: number;
+  likeCount?: number;
   pageIds?: string[]; // ids de sus páginas en orden (lo mantiene el editor de capítulo)
 }
 
@@ -138,7 +139,7 @@ export default function StoryDetailScreen() {
           }
           setLikeCount(storySnap.data().likeCount ?? 0);
           if (user) {
-            hasLiked(id as string, user.uid).then(setLiked)
+            hasLikedStory(id as string, user.uid).then(setLiked)
               .catch(e => console.error('Error cargando me gusta:', e));
           }
           listStoryComments(id as string).then(setComments)
@@ -231,29 +232,12 @@ export default function StoryDetailScreen() {
   };
 
   // Me gusta: se pinta al instante y se deshace si falla
-  const toggleLike = async () => {
-    if (!user) { // invitado
-      promptLogin(() => router.push('/auth/login'), 'Necesitas una cuenta para dar me gusta.');
-      return;
-    }
-    if (!story || liking) return;
-    const next = !liked;
-    setLiking(true);
-    setLiked(next);
-    setLikeCount(c => Math.max(0, c + (next ? 1 : -1)));
-    try {
-      await setLike(
-        story.id, next,
-        { uid: user.uid, name: publicName || 'Alguien' },
-        { authorUid: story.uid, title: story.title, coverUrl: story.coverUrl, format: story.format },
-      );
-    } catch (e: any) {
-      setLiked(!next);
-      setLikeCount(c => Math.max(0, c + (next ? -1 : 1)));
-      AppAlert.alert('Error', e?.message ?? 'No se pudo guardar tu me gusta.');
-    } finally {
-      setLiking(false);
-    }
+  // Los "me gusta" se dan capítulo a capítulo, desde el lector. Aquí se ve el total.
+  const explainLikes = () => {
+    AppAlert.alert(
+      'Me gusta',
+      'Los «me gusta» se dan a cada capítulo, mientras lo lees. Aquí ves el total de la novela.',
+    );
   };
 
   // Sin los comentarios de usuarios bloqueados
@@ -449,8 +433,7 @@ export default function StoryDetailScreen() {
             {story.published && (
               <TouchableOpacity
                 style={[styles.likeBtn, liked && styles.likeBtnOn]}
-                onPress={toggleLike}
-                disabled={liking}
+                onPress={explainLikes}
                 activeOpacity={0.8}
               >
                 <MaterialIcons name={liked ? 'favorite' : 'favorite-border'} size={16} color={liked ? '#FF69B4' : '#fff'} />
@@ -537,8 +520,12 @@ export default function StoryDetailScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.chapterTitle, themed.text]} numberOfLines={1}>{ch.title}</Text>
-                    {ch.wordCount ? (
-                      <Text style={[styles.chapterStats, themed.muted]}>{formatReadingStats(ch.wordCount)}</Text>
+                    {ch.wordCount || ch.likeCount ? (
+                      <Text style={[styles.chapterStats, themed.muted]}>
+                        {ch.wordCount ? formatReadingStats(ch.wordCount) : ''}
+                        {ch.wordCount && ch.likeCount ? '  ·  ' : ''}
+                        {ch.likeCount ? `♥ ${ch.likeCount}` : ''}
+                      </Text>
                     ) : null}
                     {isBookmarked && (
                       <Text style={styles.chapterBookmarkHint}>

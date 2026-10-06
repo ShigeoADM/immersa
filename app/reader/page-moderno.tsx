@@ -40,7 +40,7 @@ import {
 } from '@/services/comments';
 import { CommentItem } from '@/components/comment-item';
 import { getStaffRoles } from '@/services/profiles';
-import { enterReading, leaveReading } from '@/services/social';
+import { enterReading, leaveReading, hasLikedChapter, setChapterLike } from '@/services/social';
 import type { Role } from '@/constants/permissions';
 import {
   REF_SCREEN, FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, pageSfxCues, splitParagraphs, type SfxCue,
@@ -534,6 +534,10 @@ export default function PageModernoReaderScreen() {
   // Siguiente capítulo (null si no existe o no está publicado — excepto para el autor)
   const [nextChapter, setNextChapter] = useState<{ id: string; title: string } | null>(null);
   const [isAuthor, setIsAuthor] = useState(false);
+  // Me gusta del capítulo
+  const [chapterLiked, setChapterLiked]         = useState(false);
+  const [chapterLikeCount, setChapterLikeCount] = useState(0);
+  const [likingChapter, setLikingChapter]       = useState(false);
   // Comentarios: se cargan los del capítulo y se reparten por página
   const { publicName, publicAvatar, can, blocked, suspended } = useAuth();
   const [storyMeta, setStoryMeta]           = useState<{ title?: string; authorUid?: string | null }>({});
@@ -684,6 +688,12 @@ export default function PageModernoReaderScreen() {
           .catch(e => console.error('Error cargando comentarios:', e));
         getStaffRoles().then(setStaffRoles)
           .catch(e => console.error('Error cargando el equipo:', e));
+        // Me gusta del capítulo
+        setChapterLikeCount(sortedChapters[currentIdx]?.likeCount ?? 0);
+        if (currentUid && !isPreview) {
+          hasLikedChapter(storyId as string, chapterId as string, currentUid).then(setChapterLiked)
+            .catch(e => console.error('Error cargando me gusta:', e));
+        }
         if (currentIdx !== -1) {
           const next = sortedChapters.slice(currentIdx + 1).find(c => isStoryAuthor || c.published === true);
           if (next) setNextChapter({ id: next.id, title: next.title ?? 'Siguiente capítulo' });
@@ -1345,6 +1355,33 @@ export default function PageModernoReaderScreen() {
   };
 
   // ── Comentarios de la página ──────────────────────────────────────────────
+  // Me gusta al capítulo (los invitados tienen que iniciar sesión)
+  const toggleChapterLike = async () => {
+    const me = auth.currentUser;
+    if (!me) {
+      promptLogin(() => router.push('/auth/login'), 'Necesitas una cuenta para dar me gusta.');
+      return;
+    }
+    if (likingChapter) return;
+    const next = !chapterLiked;
+    setLikingChapter(true);
+    setChapterLiked(next);
+    setChapterLikeCount(c => Math.max(0, c + (next ? 1 : -1)));
+    try {
+      await setChapterLike(
+        storyId as string, chapterId as string, next,
+        { uid: me.uid, name: publicName || 'Alguien' },
+        { authorUid: storyMeta.authorUid, title: storyMeta.title },
+      );
+    } catch (e: any) {
+      setChapterLiked(!next);
+      setChapterLikeCount(c => Math.max(0, c + (next ? -1 : 1)));
+      AppAlert.alert('Error', e?.message ?? 'No se pudo guardar el me gusta.');
+    } finally {
+      setLikingChapter(false);
+    }
+  };
+
   // Invitado: al intentar comentar se le pregunta si quiere iniciar sesión. Solo si
   // acepta se cierra el panel y se va a la pantalla de acceso (la música se pausa al
   // salir del lector y se reanuda al volver, ver más abajo).
@@ -2009,6 +2046,25 @@ export default function PageModernoReaderScreen() {
           </TouchableOpacity>
         )}
 
+        {/* Me gusta al capítulo (no en modo prueba del autor) */}
+        {!isPreview && page && (
+          <TouchableOpacity
+            style={[styles.commentsBtn, styles.chapterLikeBtn, chapterLiked && { borderWidth: 1, borderColor: '#FF69B4' }]}
+            activeOpacity={0.75}
+            onPress={toggleChapterLike}
+            disabled={likingChapter}
+          >
+            <MaterialIcons
+              name={chapterLiked ? 'favorite' : 'favorite-border'}
+              size={15}
+              color={chapterLiked ? '#FF69B4' : 'rgba(255,255,255,0.7)'}
+            />
+            {chapterLikeCount > 0 && (
+              <Text style={styles.commentsBtnCount}>{chapterLikeCount > 999 ? '999+' : chapterLikeCount}</Text>
+            )}
+          </TouchableOpacity>
+        )}
+
         {/* Botón marcador */}
         <TouchableOpacity
           style={[
@@ -2277,6 +2333,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.emerald,
   },
   // Comentarios: a la izquierda del marcador (58 + 34 + 8 = 100)
+  // El de me gusta usa la forma del de comentarios, encima de él
+  chapterLikeBtn: { bottom: 60 },
   commentsBtn: {
     position: 'absolute',
     bottom: 18,

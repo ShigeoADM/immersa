@@ -23,7 +23,7 @@ import {
   type StoryComment, COMMENT_MAX_LENGTH, addComment, deleteComment, listChapterComments,
 } from '@/services/comments';
 import { getStaffRoles } from '@/services/profiles';
-import { enterReading, leaveReading } from '@/services/social';
+import { enterReading, leaveReading, hasLikedChapter, setChapterLike } from '@/services/social';
 import { CommentItem } from '@/components/comment-item';
 import { AppAlert } from '@/components/app-dialog';
 import { ReportModal } from '@/components/report-modal';
@@ -51,6 +51,10 @@ export default function WebnovelReaderScreen() {
   const [loading, setLoading]   = useState(true);
   const [title, setTitle]       = useState('');
   const [content, setContent]   = useState('');
+  // Me gusta del capítulo
+  const [liked, setLiked]         = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+  const [liking, setLiking]       = useState(false);
   const [chapterNumber, setChapterNumber] = useState(1);
   const [prevChapter, setPrevChapter] = useState<ChapterRef | null>(null);
   const [nextChapter, setNextChapter] = useState<ChapterRef | null>(null);
@@ -109,6 +113,11 @@ export default function WebnovelReaderScreen() {
         if (chapterSnap.exists()) {
           setTitle(chapterSnap.data().title ?? '');
           setContent(chapterSnap.data().content ?? '');
+          setLikeCount(chapterSnap.data().likeCount ?? 0);
+        }
+        if (uid && !isPreview) {
+          hasLikedChapter(storyId, chapterId, uid).then(v => { if (!cancelled) setLiked(v); })
+            .catch(e => console.error('Error cargando me gusta:', e));
         }
 
         // Capítulo anterior / siguiente (publicados; el autor ve también los borradores)
@@ -219,6 +228,32 @@ export default function WebnovelReaderScreen() {
   // Invitado: al intentar comentar se le pregunta si quiere iniciar sesión
   const askLoginToComment = () =>
     promptLogin(() => router.push('/auth/login'), 'Necesitas una cuenta para comentar.');
+
+  // Me gusta al capítulo (los invitados tienen que iniciar sesión)
+  const toggleLike = async () => {
+    const me = auth.currentUser;
+    if (!me) {
+      promptLogin(() => router.push('/auth/login'), 'Necesitas una cuenta para dar me gusta.');
+      return;
+    }
+    if (!storyId || !chapterId || liking) return;
+    const next = !liked;
+    setLiking(true);
+    setLiked(next);
+    setLikeCount(c => Math.max(0, c + (next ? 1 : -1)));
+    try {
+      const s = storyRef.current;
+      await setChapterLike(storyId, chapterId, next, { uid: me.uid, name: publicName || 'Alguien' }, {
+        authorUid: s?.uid, title: s?.title, coverUrl: s?.coverUrl ?? null, format: s?.format,
+      });
+    } catch (e: any) {
+      setLiked(!next);
+      setLikeCount(c => Math.max(0, c + (next ? -1 : 1)));
+      AppAlert.alert('Error', e?.message ?? 'No se pudo guardar el me gusta.');
+    } finally {
+      setLiking(false);
+    }
+  };
 
   const handleSendComment = async () => {
     const text = commentText.trim();
@@ -355,6 +390,21 @@ export default function WebnovelReaderScreen() {
             )}
           </View>
 
+          {/* ── Me gusta del capítulo ── */}
+          {!isPreview && (
+            <TouchableOpacity
+              style={[styles.likeBtn, { borderColor: liked ? '#FF69B4' : theme.border, backgroundColor: theme.bar }]}
+              onPress={toggleLike}
+              disabled={liking}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name={liked ? 'favorite' : 'favorite-border'} size={18} color={liked ? '#FF69B4' : theme.muted} />
+              <Text style={[styles.likeBtnText, { color: liked ? '#FF69B4' : theme.text }]}>
+                {liked ? 'Te gusta este capítulo' : 'Me gusta este capítulo'}{likeCount > 0 ? `  ·  ${likeCount}` : ''}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {/* ── Comentarios del capítulo (no en el modo prueba del autor) ── */}
           {!isPreview && (
             <View style={[styles.commentsBlock, { borderTopColor: theme.border }]}>
@@ -425,6 +475,12 @@ const styles = StyleSheet.create({
   // Escritorio: el fondo del tema ocupa toda la ventana y el texto va en una columna
   // centrada, ancha pero con margen a los lados para que las líneas no sean eternas
   contentDesktop: { width: '100%', maxWidth: 980, alignSelf: 'center', paddingHorizontal: 48 },
+  likeBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    alignSelf: 'center', marginTop: 28, paddingHorizontal: 18, paddingVertical: 11,
+    borderRadius: 22, borderWidth: 1,
+  },
+  likeBtnText: { fontSize: 14, fontWeight: '600' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 8, paddingBottom: 6, borderBottomWidth: 1,

@@ -78,6 +78,20 @@ service cloud.firestore {
           );
       }
 
+      // Lo mismo para los "me gusta" por capítulo: el total de la historia sube o baja de
+      // uno en uno, acompañado del me gusta del capítulo indicado en lastLikedChapter.
+      function chapterLikeCountChange() {
+        let chapterId = request.resource.data.get('lastLikedChapter', '');
+        let likePath = /databases/$(database)/documents/stories/$(storyId)/chapters/$(chapterId)/likes/$(request.auth.uid);
+        let before = resource.data.get('likeCount', 0);
+        return chapterId is string && chapterId != ''
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'lastLikedChapter'])
+          && (
+            (request.resource.data.likeCount == before + 1 && !exists(likePath) && existsAfter(likePath))
+            || (request.resource.data.likeCount == before - 1 && exists(likePath) && !existsAfter(likePath))
+          );
+      }
+
       // El autor edita su historia, pero no puede cambiar su dueño ni tocar el contador
       allow update: if signedIn() && (
         (resource.data.uid == request.auth.uid
@@ -85,15 +99,50 @@ service cloud.firestore {
           && request.resource.data.get('likeCount', 0) == resource.data.get('likeCount', 0)
           && !isSuspended())
         || likeCountChange()
+        || chapterLikeCountChange()
       );
       // Borrar: el autor, o moderación
       allow delete: if signedIn() && (resource.data.uid == request.auth.uid || can('deleteStories'));
 
       // ── Capítulos ───────────────────────────────────────────────────────────
       match /chapters/{chapterId} {
+        function chapterPath() { return /databases/$(database)/documents/stories/$(storyId)/chapters/$(chapterId); }
+        function storyPath() { return /databases/$(database)/documents/stories/$(storyId); }
+        // Contador de "me gusta" del capítulo: cualquier lector, pero solo ese campo, de
+        // uno en uno y junto con su propio me gusta
+        function chapterLikeChange() {
+          let likePath = /databases/$(database)/documents/stories/$(storyId)/chapters/$(chapterId)/likes/$(request.auth.uid);
+          let before = resource.data.get('likeCount', 0);
+          return signedIn()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
+            && (
+              (request.resource.data.likeCount == before + 1 && !exists(likePath) && existsAfter(likePath))
+              || (request.resource.data.likeCount == before - 1 && exists(likePath) && !existsAfter(likePath))
+            );
+        }
+
         allow read: if storyPublic(storyId) || ownsStory(storyId) || can('deleteStories');
-        allow create, update: if ownsStory(storyId) && !isSuspended();
+        // Un capítulo nace sin "me gusta", y el autor no puede tocar su contador
+        allow create: if ownsStory(storyId) && !isSuspended()
+                      && request.resource.data.get('likeCount', 0) == 0;
+        allow update: if (ownsStory(storyId) && !isSuspended()
+                          && request.resource.data.get('likeCount', 0) == resource.data.get('likeCount', 0))
+                      || chapterLikeChange();
         allow delete: if ownsStory(storyId) || can('deleteStories');
+
+        // ── Me gusta del capítulo ───────────────────────────────────────────
+        // Un documento por lector (id = su uid). Crear o borrar el propio exige mover a
+        // la vez el contador del capítulo y el total de la historia.
+        match /likes/{userId} {
+          allow read: if signedIn();
+          allow create: if isUser(userId) && storyPublished(storyId)
+                        && getAfter(chapterPath()).data.likeCount == get(chapterPath()).data.get('likeCount', 0) + 1
+                        && getAfter(storyPath()).data.likeCount == get(storyPath()).data.get('likeCount', 0) + 1;
+          allow delete: if (isUser(userId)
+                            && getAfter(chapterPath()).data.likeCount == get(chapterPath()).data.get('likeCount', 0) - 1
+                            && getAfter(storyPath()).data.likeCount == get(storyPath()).data.get('likeCount', 0) - 1)
+                        || ownsStory(storyId) || can('deleteStories');
+        }
 
         // ── Páginas ─────────────────────────────────────────────────────────
         match /pages/{pageId} {

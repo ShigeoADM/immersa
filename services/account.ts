@@ -4,7 +4,7 @@ import { EmailAuthProvider, deleteUser, reauthenticateWithCredential } from 'fir
 import { collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
 import { deleteStoryWithCascade } from '@/services/stories';
-import { setFollow, setLike } from '@/services/social';
+import { setChapterLike, setFollow, setLike } from '@/services/social';
 
 // Borra todo lo que hay en una subcolección del usuario
 async function clearCollection(path: string) {
@@ -37,7 +37,12 @@ export async function deleteAccount(password: string) {
     getDocs(collection(db, 'profiles', uid, 'followers')),
   ]);
   await Promise.all([
-    ...liked.docs.map(d => quietly(setLike(d.id, false, me, {}))),
+    ...liked.docs.flatMap(d => {
+      const chapters: string[] = Array.isArray(d.data().chapters) ? d.data().chapters : [];
+      return chapters.length
+        ? chapters.map(ch => quietly(setChapterLike(d.id, ch, false, me, {})))
+        : [quietly(setLike(d.id, false, me, {}))]; // formato antiguo: un me gusta por historia
+    }),
     ...following.docs.map(d => quietly(setFollow(me, d.id, false))),
     ...library.docs.flatMap(d => [
       quietly(deleteDoc(doc(db, 'stories', d.id, 'readers', uid))),

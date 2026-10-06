@@ -124,6 +124,13 @@ export async function deleteChapterWithCascade(storyId: string, chapterId: strin
   for (const pg of pagesSnap.docs) {
     await deleteDoc(doc(db, 'stories', storyId, 'chapters', chapterId, 'pages', pg.id));
   }
+  // Los "me gusta" del capítulo (si fallara, no impide borrar el capítulo)
+  try {
+    const likesSnap = await getDocs(collection(db, 'stories', storyId, 'chapters', chapterId, 'likes'));
+    for (const like of likesSnap.docs) await deleteDoc(like.ref);
+  } catch (e) {
+    console.error('Error borrando los me gusta del capítulo:', e);
+  }
   await deleteDoc(doc(db, 'stories', storyId, 'chapters', chapterId));
 }
 

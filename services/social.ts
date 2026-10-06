@@ -1,15 +1,20 @@
 // Me gusta en historias y seguir a autores.
 //
-//   · Me gusta: stories/{storyId}/likes/{uid} + contador stories/{storyId}.likeCount.
-//     Se escriben juntos (batch); las reglas solo aceptan que el contador cambie de uno
-//     en uno y acompañado del propio "me gusta", así no se puede inflar.
-//     Además se apunta en users/{uid}/likedStories/{storyId} para poder listar
-//     "las historias que me gustan" sin recorrer todas las historias.
+//   · Me gusta: se dan por CAPÍTULO, no por historia.
+//       stories/{storyId}/chapters/{chapterId}/likes/{uid}
+//       + contador del capítulo (chapters/{chapterId}.likeCount)
+//       + contador de la historia (stories/{storyId}.likeCount), que es el total.
+//     Se escriben juntos (batch); las reglas solo aceptan que los contadores cambien de
+//     uno en uno y acompañados del propio "me gusta", así no se pueden inflar.
+//     Además se apunta en users/{uid}/likedStories/{storyId} (con la lista de capítulos)
+//     para poder listar "las historias que me gustan" sin recorrer todas las historias.
+//     Las versiones antiguas daban un único me gusta por historia
+//     (stories/{storyId}/likes/{uid}); esos siguen contando en el total.
 //   · Seguir: users/{uid}/following/{autor} (a quién sigo, para los avisos) y
 //     profiles/{autor}/followers/{uid} (quién le sigue, para el contador público).
 
 import {
-  collection, count as aggCount, deleteDoc, doc, getAggregateFromServer, getCountFromServer, getDoc,
+  arrayRemove, arrayUnion, collection, count as aggCount, deleteDoc, doc, getAggregateFromServer, getCountFromServer, getDoc,
   getDocs, increment, serverTimestamp, setDoc, sum, updateDoc, writeBatch,
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
@@ -28,7 +33,57 @@ async function notifyOnce(toUid: string, id: string, me: Me, n: Record<string, u
   } catch { /* ya avisado antes */ }
 }
 
-// ── Me gusta ─────────────────────────────────────────────────────────────────
+// ── Me gusta por capítulo ────────────────────────────────────────────────────
+export async function hasLikedChapter(storyId: string, chapterId: string, uid: string): Promise<boolean> {
+  return (await getDoc(doc(db, 'stories', storyId, 'chapters', chapterId, 'likes', uid))).exists();
+}
+
+// ¿Le ha gustado algún capítulo de esta historia?
+export async function hasLikedStory(storyId: string, uid: string): Promise<boolean> {
+  return (await getDoc(doc(db, 'users', uid, 'likedStories', storyId))).exists();
+}
+
+export async function setChapterLike(
+  storyId: string, chapterId: string, like: boolean, me: Me,
+  story: { authorUid?: string | null; title?: string; coverUrl?: string | null; format?: string },
+) {
+  const now = new Date().toISOString();
+  const batch = writeBatch(db);
+  const likeRef  = doc(db, 'stories', storyId, 'chapters', chapterId, 'likes', me.uid);
+  const likedRef = doc(db, 'users', me.uid, 'likedStories', storyId);
+  if (like) {
+    batch.set(likeRef, { createdAt: now });
+    batch.set(likedRef, {
+      storyId, title: story.title ?? '', coverUrl: story.coverUrl ?? null,
+      format: story.format ?? '', createdAt: now, chapters: arrayUnion(chapterId),
+    }, { merge: true });
+  } else {
+    batch.delete(likeRef);
+    batch.set(likedRef, { chapters: arrayRemove(chapterId) }, { merge: true });
+  }
+  const delta = increment(like ? 1 : -1);
+  batch.update(doc(db, 'stories', storyId, 'chapters', chapterId), { likeCount: delta });
+  // lastLikedChapter le dice a las reglas qué "me gusta" acompaña al cambio del total
+  batch.update(doc(db, 'stories', storyId), { likeCount: delta, lastLikedChapter: chapterId });
+  await batch.commit();
+
+  if (!like) {
+    // Si ya no le gusta ningún capítulo, la historia sale de su lista de "me gusta"
+    try {
+      const left = (await getDoc(likedRef)).data()?.chapters;
+      if (!Array.isArray(left) || left.length === 0) await deleteDoc(likedRef);
+    } catch { /* se limpiará al listar */ }
+  } else if (story.authorUid) {
+    notifyOnce(story.authorUid, `like_${storyId}_${chapterId}_${me.uid}`, me, {
+      type: 'like',
+      title: 'Nuevo me gusta',
+      body: `A ${me.name} le gusta un capítulo de "${story.title ?? 'tu novela'}".`,
+      storyId,
+    });
+  }
+}
+
+// ── Me gusta por historia (formato antiguo; se conserva para poder retirarlos) ──
 export async function hasLiked(storyId: string, uid: string): Promise<boolean> {
   return (await getDoc(doc(db, 'stories', storyId, 'likes', uid))).exists();
 }
