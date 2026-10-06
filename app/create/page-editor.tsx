@@ -118,6 +118,7 @@ const MEDIA_SOURCE_LABEL = { file: 'Archivo', url: 'URL / Drive', library: 'Ya s
 
 // Archivos ya usados en la historia (para reutilizarlos sin volver a subirlos)
 type MediaLibrary = { images: string[]; music: string[]; sfx: string[] };
+type PreviewBg = { uri: string; anchor: ImageAnchor; fit: ImageFit; blur: number };
 // Efecto de sonido en edición (id solo para la lista de la pantalla)
 type EditorSfxCue = { id: string; paragraph: number; url: string; name: string; volume: number };
 let sfxCueSeq = 0;
@@ -236,6 +237,8 @@ export default function PageEditorScreen() {
   const [bgBlur, setBgBlur]             = useState(BG_BLUR_DEFAULT);
   // Sin imagen: heredar la de la página anterior (false) o dejar el fondo en negro (true)
   const [bgNone, setBgNone]             = useState(false);
+  // Fondo que esta página heredaría de las anteriores del capítulo (para la vista previa)
+  const [inheritedBg, setInheritedBg]   = useState<PreviewBg | null>(null);
   const [uploadingBg, setUploadingBg]   = useState(false);
   const [imageSource, setImageSource]   = useState<MediaSource>('file');
   const [imageUrlInput, setImageUrlInput] = useState('');
@@ -634,6 +637,22 @@ export default function PageEditorScreen() {
         ]);
         const ids = pagesSnap.docs.map(d => d.id);
         setChapterPageIds(ids);
+        // Fondo heredado: el de la página anterior más cercana que lo defina. Una página
+        // "sin fondo" corta la herencia. (Una página nueva va al final del capítulo.)
+        const here = isEditing && pageId ? ids.indexOf(pageId as string) : ids.length;
+        for (let i = (here < 0 ? ids.length : here) - 1; i >= 0; i--) {
+          const prev = pagesSnap.docs[i].data();
+          if (prev.backgroundUrl) {
+            setInheritedBg({
+              uri: prev.backgroundUrl,
+              anchor: prev.imageAnchor ?? 'center',
+              fit: prev.imageFit ?? 'cover',
+              blur: prev.bgBlur ?? BG_BLUR_DEFAULT,
+            });
+            break;
+          }
+          if (prev.bgNone) break;
+        }
         if (!snap || !snap.exists()) return;
         const p = snap.data();
         setPageText(p.text ?? '');
@@ -1222,6 +1241,9 @@ export default function PageEditorScreen() {
   // Todo lo que se pinta en la preview usa las medidas del lector × pvScale,
   // así lo que cabe aquí es lo que cabe al leer. 'Auto' = 'md', igual que en el lector.
   const pvScale         = pvWidth / REF_SCREEN.width;
+  const previewBg: PreviewBg | null = bgUri
+    ? { uri: bgUri, anchor: imageAnchor, fit: imageFit, blur: bgBlur }
+    : bgNone ? null : inheritedBg;
   const previewFontSize = FONT_SIZES[textSize ?? 'md'] * pvScale;
   const previewLabelStyle = {
     paddingHorizontal: CHAR_LABEL.paddingHorizontal * pvScale,
@@ -1282,21 +1304,22 @@ export default function PageEditorScreen() {
           setPvWidth(e.nativeEvent.layout.width);
         }}
       >
-        {/* Fondo */}
-        {bgUri
+        {/* Fondo: el de la página o, si no tiene, el heredado de las anteriores
+            (salvo que la página esté marcada como "sin fondo") */}
+        {previewBg
           ? <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
               <Image
-                source={{ uri: bgUri }}
+                source={{ uri: previewBg.uri }}
                 style={
-                  imageFit === 'contain' ? StyleSheet.absoluteFill
-                  : imageAnchor === 'center' ? StyleSheet.absoluteFill
-                  : imageAnchor === 'top'
+                  previewBg.fit === 'contain' ? StyleSheet.absoluteFill
+                  : previewBg.anchor === 'center' ? StyleSheet.absoluteFill
+                  : previewBg.anchor === 'top'
                     ? { position: 'absolute', top: 0, left: 0, right: 0, aspectRatio: 16 / 9 }
                     : { position: 'absolute', bottom: 0, left: 0, right: 0, aspectRatio: 16 / 9 }
                 }
-                resizeMode={imageFit === 'contain' ? 'contain' : 'cover'}
+                resizeMode={previewBg.fit === 'contain' ? 'contain' : 'cover'}
                 // Escalado como el resto de la preview para que se vea igual que al leer
-                blurRadius={bgBlur * pvScale}
+                blurRadius={previewBg.blur * pvScale}
               />
             </View>
           : <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }]} />

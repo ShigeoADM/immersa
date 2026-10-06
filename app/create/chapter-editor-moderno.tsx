@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -47,6 +47,7 @@ interface Page {
   id: string;
   text: string;
   backgroundUrl: string;
+  bgNone?: boolean;
   imageAnchor?: ImageAnchor;
   imageFit?: ImageFit;
   musicUrl?: string | null;
@@ -148,6 +149,17 @@ export default function ChapterEditorModernoScreen() {
   //     aunque se reordenen, dupliquen o borren páginas
   const wordCount = pages.reduce((n, p) => n + countWords(p.text ?? ''), 0);
   const pageIdsKey = pages.map(p => p.id).join(',');
+
+  // Fondo que tendrá cada página al leer en orden: el suyo, o el de la página anterior
+  // que lo defina. Una página "sin fondo" lo deja en negro para ella y las siguientes.
+  const thumbBackgrounds = useMemo(() => {
+    let current: string | null = null;
+    return pages.map(p => {
+      if (p.backgroundUrl) current = p.backgroundUrl;
+      else if (p.bgNone) current = null;
+      return current;
+    });
+  }, [pages]);
   const savedStatsRef = useRef<{ words?: number; pageIds?: string } | null>(null);
   useEffect(() => {
     if (loadingPages || !savedStatsRef.current) return;
@@ -365,8 +377,9 @@ export default function ChapterEditorModernoScreen() {
                 onPress={() => router.push(`/reader/page-moderno?storyId=${storyId}&chapterId=${chapterId}&pageId=${page.id}&preview=1`)}
               >
                 <View style={styles.pageThumbnail}>
-                  {page.backgroundUrl
-                    ? <Image source={{ uri: page.backgroundUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+                  {/* El fondo que se verá al leer: el propio o el heredado de las anteriores */}
+                  {thumbBackgrounds[i]
+                    ? <Image source={{ uri: thumbBackgrounds[i]! }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
                     : null
                   }
                   <Text style={styles.pageThumbnailText} numberOfLines={3}>{page.text || ''}</Text>
