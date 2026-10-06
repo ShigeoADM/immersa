@@ -695,6 +695,10 @@ export default function PageModernoReaderScreen() {
   const fadingOutRef   = useRef(new Set<string>());
   // La página tiene la música callada en el párrafo actual (silencio momentáneo)
   const quietRef = useRef(false);
+  // La pista actual está a volumen cero por un silencio momentáneo. Aunque la página
+  // cambie, sigue en silencio hasta que algo la vuelva a subir: si va a salir, tiene
+  // que salir desde cero y no desde su volumen normal.
+  const soundSilentRef = useRef(false);
   // Todos los audios creados por este lector, y si el lector ya se cerró
   const allSoundsRef = useRef(new Set<Audio.Sound>());
   const readerClosedRef = useRef(false);
@@ -1105,7 +1109,7 @@ export default function PageModernoReaderScreen() {
     const gen = ++playGenRef.current; // captura la generación de esta llamada
     const previous       = soundRef.current;
     const previousUrl    = playingUrlRef.current;
-    const previousVolume = isMutedRef.current ? 0 : trackVolumeRef.current;
+    const previousVolume = isMutedRef.current || soundSilentRef.current ? 0 : trackVolumeRef.current;
     currentTrackRef.current = url;
     trackVolumeRef.current = volume;
     try {
@@ -1130,6 +1134,7 @@ export default function PageModernoReaderScreen() {
         if (!isMutedRef.current && !quietRef.current) {
           fadeVolume(sound, 0, trackVolumeRef.current, replacing ? MUSIC_IN_MS : MUSIC_FADE_MS);
         }
+        soundSilentRef.current = quietRef.current; // la pista nueva solo calla si toca silencio
       };
       if (replacing) setTimeout(fadeIn, MUSIC_IN_DELAY_MS);
       else fadeIn();
@@ -1145,8 +1150,10 @@ export default function PageModernoReaderScreen() {
     // Al pasar a una página en silencio no hay otra pista que tape el corte, así que la
     // salida es más larga que el cruce entre dos músicas
     if (sound) {
-      fadeOutAndStop(sound, playingUrlRef.current, isMutedRef.current ? 0 : trackVolumeRef.current, MUSIC_TO_SILENCE_MS);
+      const from = isMutedRef.current || soundSilentRef.current ? 0 : trackVolumeRef.current;
+      fadeOutAndStop(sound, playingUrlRef.current, from, MUSIC_TO_SILENCE_MS);
     }
+    soundSilentRef.current = false;
     soundRef.current = null;
     playingUrlRef.current = null;
     currentTrackRef.current = null;
@@ -1218,11 +1225,14 @@ export default function PageModernoReaderScreen() {
     const sound = soundRef.current;
     if (!sound || isMutedRef.current) return;
     if (musicQuiet) {
+      soundSilentRef.current = true;
       fadeVolume(sound, trackVolumeRef.current, 0, MUSIC_QUIET_MS);
     } else if ((effectiveMusic?.url ?? null) === currentTrackRef.current) {
-      // Si a la vez cambia la pista, de la entrada ya se ocupa el cambio de música
+      soundSilentRef.current = false;
       fadeVolume(sound, 0, trackVolumeRef.current, MUSIC_QUIET_MS);
     }
+    // Si a la vez cambia la pista (o se pasa a silencio), la que estaba callada no se
+    // sube: sigue a cero y el cambio de música la retira desde ahí.
   }, [musicQuiet]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pageHasMusic = !!effectiveMusic && !musicQuiet;
