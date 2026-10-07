@@ -15,7 +15,7 @@ export const PERMISSIONS: { key: Permission; label: string; description: string 
   { key: 'deleteStories', label: 'Moderar contenido',         description: 'Atender denuncias y borrar historias y comentarios' },
   { key: 'announcements', label: 'Publicar avisos',           description: 'Enviar noticias y avisos a todos' },
   { key: 'manageAdmins',  label: 'Gestionar administradores', description: 'Nombrar admins y cambiar sus permisos' },
-  { key: 'developer',     label: 'Desarrollo',                description: 'Entrar en la web de desarrollo y probar las novedades antes de publicarlas' },
+  { key: 'developer',     label: 'Desarrollo',                description: 'Ver la sección Desarrollo y probar las novedades antes de publicarlas' },
 ];
 
 export const ROLE_LABELS: Record<Role, string> = { owner: 'Dueño', admin: 'Administrador' };

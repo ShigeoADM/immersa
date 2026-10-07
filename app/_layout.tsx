@@ -131,7 +131,7 @@ function RootNavigator() {
 
   // A toda la ventana: las secciones principales, la ficha de una historia, los
   // lectores y las pantallas de creación. El resto va en una columna centrada.
-  const fullWidth = (['(tabs)', 'create', 'reader', 'story', 'notifications', 'search', 'admin', 'profile'] as string[])
+  const fullWidth = (['(tabs)', 'create', 'reader', 'story', 'notifications', 'search', 'admin', 'dev', 'profile'] as string[])
     .includes(segments[0] as string);
 
   // Escritorio: la barra superior acompaña a todas las secciones menos el inicio de sesión,
@@ -164,6 +164,7 @@ function RootNavigator() {
       <Stack.Screen name="profile/lists" options={{ headerShown: false }} />
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="admin" options={{ headerShown: false }} />
+      <Stack.Screen name="dev" options={{ headerShown: false }} />
       <Stack.Screen name="search" options={{ headerShown: false }} />
       <Stack.Screen name="user/[uid]" options={{ headerShown: false }} />
     </Stack>

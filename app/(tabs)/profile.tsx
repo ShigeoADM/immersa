@@ -21,7 +21,6 @@ import { Colors } from '@/constants/theme';
 import { RoleBadge } from '@/components/role-badge';
 import { getFollowerCount, getFollowingCount, getLikedCount } from '@/services/social';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
-import { DEV_SITE_URL, IS_DEV_SITE, PROD_SITE_URL } from '@/constants/site';
 
 interface UserProfile {
   displayName?: string;
@@ -182,14 +181,10 @@ export default function ProfileScreen() {
           <SafeAreaView edges={['top']} style={isDesktop ? { alignSelf: 'stretch' } : undefined}>
             {/* Engranaje de ajustes */}
             <View style={styles.heroTopBar}>
-              {/* Web de desarrollo (solo con ese permiso, y solo en el navegador) */}
-              {Platform.OS === 'web' && can('developer') && (
-                <TouchableOpacity
-                  style={styles.settingsBtn}
-                  activeOpacity={0.7}
-                  onPress={() => { (globalThis as any).open(IS_DEV_SITE ? PROD_SITE_URL : DEV_SITE_URL, '_blank'); }}
-                >
-                  <MaterialIcons name={IS_DEV_SITE ? 'public' : 'science'} size={22} color={Colors.emerald} />
+              {/* Desarrollo: pantalla privada de pruebas (solo con ese permiso) */}
+              {can('developer') && (
+                <TouchableOpacity style={styles.settingsBtn} activeOpacity={0.7} onPress={() => router.push('/dev' as any)}>
+                  <MaterialIcons name="science" size={22} color={Colors.emerald} />
                 </TouchableOpacity>
               )}
               {isStaff && (
