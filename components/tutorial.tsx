@@ -63,7 +63,7 @@ const STEPS: Step[] = [
   { target: 'write', action: true, pieces: [{ t: 'Aquí podrás crear las novelas. Selecciónalo, por favor.' }] },
   {
     target: 'myBooks', arrives: true, unless: 'formats',
-    pieces: [{ t: 'Si es tu primera vez en Immersa, es muy posible que este apartado esté vacío.' }],
+    pieces: [{ t: 'Aquí están todas tus novelas.' }],
   },
   { target: 'newBook', action: true, unless: 'formats', pieces: [{ t: 'Aquí podrás crear un nuevo libro.' }] },
 ];
