@@ -24,7 +24,7 @@ const subscribe = (l: () => void) => { listeners.add(l); return () => { listener
 export const startTutorial = () => setState({ step: 0 });
 export const stopTutorial = () => setState(null);
 // Solo en el servidor local de desarrollo: poder arrancarlo desde la consola del navegador
-if (__DEV__) (globalThis as any).__startTutorial = startTutorial;
+if (__DEV__) (globalThis as any).__startTutorial = (step = 0) => setState({ step });
 
 // Las pantallas marcan las zonas que el tutorial señala con estos identificadores
 // (nativeID): `tutorialZone(x)` en la zona entera y `tutorialTitle(x)` en su título.
@@ -37,7 +37,9 @@ export const tutorialTitle = (id: string) => `tut-title-${id}`;
 //     Sin target, el cuadro va en el centro de la pantalla.
 //   · sameBox: no se abre un cuadro nuevo; solo cambia el texto del que ya está.
 type Piece = { t: string; italic?: boolean };
-type Step = { pieces: Piece[]; target?: string; sameBox?: boolean };
+//   · action: el target es un botón que hay que pulsar. Se rodea con un círculo y el
+//     tutorial no sigue hasta que se pulsa (el botón hace lo suyo de verdad).
+type Step = { pieces: Piece[]; target?: string; sameBox?: boolean; action?: boolean };
 const STEPS: Step[] = [
   {
     pieces: [
@@ -52,6 +54,7 @@ const STEPS: Step[] = [
   { target: 'modernoNew',  pieces: [{ t: 'Aquí podrás encontrar las últimas Novelas Modernas publicadas.' }] },
   { target: 'webnovelNew', pieces: [{ t: 'Aquí podrás encontrar los últimos Webnovels publicados.' }] },
   { target: 'popular',     pieces: [{ t: 'Aquí encontrarás las novelas más populares, independientemente de su estilo.' }] },
+  { target: 'write', action: true, pieces: [{ t: 'Aquí podrás crear las novelas. Selecciónalo, por favor.' }] },
 ];
 // Los pasos encadenados con sameBox comparten cuadro: este es el primero de su cadena
 const groupOf = (i: number) => { let g = i; while (g > 0 && STEPS[g].sameBox) g--; return g; };
@@ -65,6 +68,9 @@ const SCROLL_MS = 650;    // lo que se espera a que la página se desplace hasta
 const SWEEP_MS = 550;     // la luz recorre la zona de izquierda a derecha
 const AFTER_SWEEP_MS = 280;
 const LETTER_MS = 22;
+const RING_MS = 650;      // el círculo alrededor de un botón se dibuja (y se desdibuja)
+const RING_WIDTH = 4;
+const RING_GAP = 9;       // aire entre el botón y el círculo
 
 const BOX_MAX_WIDTH = 440;
 // Alrededor del cuadro del centro queda una franja sin oscurecer: se ve la página con su
@@ -102,9 +108,12 @@ const run = (value: Animated.Value, toValue: number, duration: number, native = 
 // Dónde van la luz y el cuadro cuando el paso señala una zona de la página
 type Placement = {
   light: { x: number; y: number; w: number; h: number };
+  // Botón que hay que pulsar: la luz es un círculo a su alrededor
+  circle?: { cx: number; cy: number; r: number };
   // El cuadro va en la línea del título, a su derecha (centerY). Si ahí no cabe (pantallas
-  // estrechas), va justo encima de la zona, a todo lo ancho (bottomY).
-  box: { left: number; maxWidth: number; centerY?: number; bottomY?: number };
+  // estrechas), va justo encima de la zona, a todo lo ancho (bottomY). Con un botón, va
+  // debajo o encima de él (top / bottomY), pegado a su mismo lado de la pantalla.
+  box: { left?: number; right?: number; maxWidth: number; centerY?: number; bottomY?: number; top?: number };
 };
 
 // El elemento de la página con ese identificador QUE SE ESTÁ VIENDO. Puede haber varios:
@@ -112,13 +121,29 @@ type Placement = {
 // tapada sigue en la página pero sin tamaño, y no es la que hay que señalar.
 function visibleElement(id: string): any {
   if (!WEB) return null;
-  const all = [...(globalThis as any).document.querySelectorAll(`[id="${id}"]`)];
+  // (los botones de la barra de pestañas no admiten id: llevan el mismo nombre en data-testid)
+  const all = [...(globalThis as any).document.querySelectorAll(`[id="${id}"], [data-testid="${id}"]`)];
   return all.find((el: any) => el.getClientRects().length > 0 && el.getBoundingClientRect().width > 0) ?? null;
 }
 
-function measureTarget(target: string, winWidth: number): Placement | null {
+function measureTarget(target: string, winWidth: number, action?: boolean): Placement | null {
   const zone = visibleElement(tutorialZone(target))?.getBoundingClientRect();
   if (!zone) return null;
+  if (action) {
+    const winHeight = (globalThis as any).innerHeight as number;
+    const cx = zone.left + zone.width / 2, cy = zone.top + zone.height / 2;
+    // (un botón muy alargado, como los de la barra de pestañas, se rodea por su centro:
+    // el círculo no puede ser tan grande como su lado largo)
+    const short = Math.min(zone.width, zone.height);
+    const r = Math.min(Math.max(zone.width, zone.height), short * 1.3) / 2 + RING_GAP;
+    const light = { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
+    const maxWidth = Math.min(360, winWidth - 24);
+    const side = cx > winWidth / 2
+      ? { right: Math.max(12, winWidth - (cx + r)) }
+      : { left: Math.max(12, cx - r) };
+    const vertical = cy > winHeight / 2 ? { bottomY: cy - r - 14 } : { top: cy + r + 14 };
+    return { light, circle: { cx, cy, r }, box: { ...side, ...vertical, maxWidth } };
+  }
   const x = Math.max(ZONE_MARGIN, zone.left + ZONE_MARGIN);
   const right = Math.min(winWidth - ZONE_MARGIN, zone.right - ZONE_MARGIN);
   const light = { x, y: zone.top - ZONE_PAD, w: right - x, h: zone.height + ZONE_PAD * 2 };
@@ -150,6 +175,7 @@ export function TutorialOverlay() {
   const [typing, setTyping] = useState(false);           // el cuadro está abierto y escribiendo (o ya escrito)
   const [boxHeight, setBoxHeight] = useState(0);         // altura del cuadro abierto
   const [place, setPlace] = useState<Placement | null>(null);
+  const [ringOn, setRingOn] = useState(false);           // círculo dibujado
   const typingRef = useRef<any>(null);
   const busyRef = useRef(false);                         // en plena animación entre pasos
   const lastHeightRef = useRef(0);
@@ -185,7 +211,7 @@ export function TutorialOverlay() {
 
   // Al empezar: esperar a que se vea la pantalla y oscurecerla
   useEffect(() => {
-    if (!active) { setShown(false); setPlace(null); return; }
+    if (!active) { setShown(false); setPlace(null); setRingOn(false); return; }
     dim.setValue(0); layer.setValue(1); open.setValue(0); sweep.setValue(0);
     const t = setTimeout(() => {
       setShown(true);
@@ -219,15 +245,25 @@ export function TutorialOverlay() {
           if (stepIndex + 1 < STEPS.length) setState({ step: stepIndex + 1 }); else stopTutorial();
           return;
         }
-        // La página se desplaza hasta dejar la zona a la vista
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        await wait(SCROLL_MS);
-        if (cancelled) return;
         sweep.setValue(0);
-        setPlace(measureTarget(s.target, (globalThis as any).innerWidth));
-        await wait(40);
-        // La luz recorre la zona de izquierda a derecha y, poco después, sale el cuadro
-        await run(sweep, 1, SWEEP_MS);
+        if (s.action) {
+          // Un botón: se dibuja un círculo a su alrededor y su interior se ilumina
+          setRingOn(false);
+          setPlace(measureTarget(s.target, (globalThis as any).innerWidth, true));
+          await wait(60);
+          if (cancelled) return;
+          setRingOn(true);
+          await run(sweep, 1, RING_MS);
+        } else {
+          // La página se desplaza hasta dejar la zona a la vista
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          await wait(SCROLL_MS);
+          if (cancelled) return;
+          setPlace(measureTarget(s.target, (globalThis as any).innerWidth));
+          await wait(40);
+          // La luz recorre la zona de izquierda a derecha y, poco después, sale el cuadro
+          await run(sweep, 1, SWEEP_MS);
+        }
         await wait(AFTER_SWEEP_MS);
       } else {
         setPlace(null);
@@ -243,7 +279,7 @@ export function TutorialOverlay() {
   // Si cambia el tamaño de la ventana, la luz y el cuadro se recolocan
   useEffect(() => {
     if (!WEB || !step?.target || !place) return;
-    setPlace(measureTarget(step.target, win.width));
+    setPlace(measureTarget(step.target, win.width, step.action));
   }, [win.width, win.height]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Texto completo: se deja de escribir y aparece, parpadeando, el icono de continuar
@@ -268,6 +304,7 @@ export function TutorialOverlay() {
   const advance = async () => {
     if (!current || !shown || !typing || busyRef.current) return;
     if (!done) { play(sfxTextRef); setTyped(total); return; }
+    if (step?.action) return; // aquí no se avanza tocando: hay que pulsar el botón señalado
     const next = current.step + 1;
     if (next < STEPS.length && STEPS[next].sameBox) { play(sfxTextRef); setState({ step: next }); return; }
     play(sfxBoxRef);
@@ -280,6 +317,30 @@ export function TutorialOverlay() {
     if (next < STEPS.length) setState({ step: next });
     else close();
   };
+  // ── Paso con botón: se espera a que se pulse de verdad ─────────────────────
+  // El botón hace lo suyo (navegar, abrir…); aquí solo se retira el círculo, se cierra
+  // el cuadro y se sigue. La pantalla se queda a oscuras.
+  const actionTarget = step?.action && place?.circle ? step.target : undefined;
+  useEffect(() => {
+    if (!WEB || !actionTarget || stepIndex === undefined) return;
+    const doc = (globalThis as any).document;
+    const onClick = async (e: any) => {
+      const el = visibleElement(tutorialZone(actionTarget));
+      if (!el || !el.contains(e.target) || busyRef.current) return;
+      busyRef.current = true;
+      play(sfxBoxRef);
+      clearInterval(typingRef.current);
+      setRingOn(false);                       // el círculo se desdibuja
+      await Promise.all([run(open, 0, CLOSE_MS), run(sweep, 0, RING_MS)]);
+      busyRef.current = false;
+      if (state?.step !== stepIndex) return;
+      if (stepIndex + 1 < STEPS.length) setState({ step: stepIndex + 1 });
+      else { await wait(900); closeRef.current(); } // (aún no hay más pasos: se queda un momento a oscuras y termina)
+    };
+    doc.addEventListener('click', onClick, true);
+    return () => doc.removeEventListener('click', onClick, true);
+  }, [actionTarget, stepIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const advanceRef = useRef(advance);
   advanceRef.current = advance;
   const closeRef = useRef(close);
@@ -333,7 +394,7 @@ export function TutorialOverlay() {
           <Text style={[styles.text, compact && styles.textCompact, { opacity: 0 }]}>{renderPieces(total)}</Text>
           <Text style={[styles.text, compact && styles.textCompact, StyleSheet.absoluteFill]}>{renderPieces(typed)}</Text>
         </View>
-        {done && (
+        {done && !step.action && (
           <Animated.View style={[compact ? styles.hintCompact : styles.hint, { opacity: pulse }]}>
             <MaterialIcons name="keyboard-return" size={16} color={Colors.emerald} />
           </Animated.View>
@@ -341,6 +402,70 @@ export function TutorialOverlay() {
       </View>
     </Animated.View>
   );
+
+  // Paso con botón: la capa deja un hueco justo sobre el botón para que se pueda pulsar;
+  // el resto sigue tapado (tocar fuera solo completa el texto).
+  if (place?.circle) {
+    const { cx, cy, r } = place.circle;
+    const hole = { left: cx - r, top: cy - r, right: cx + r, bottom: cy + r };
+    const blocker = (style: any) => (
+      <TouchableOpacity
+        activeOpacity={1} onPress={advance}
+        style={[{ position: 'absolute' }, style, WEB ? ({ outlineStyle: 'none', cursor: 'default' } as any) : null]}
+      />
+    );
+    const length = 2 * Math.PI * r;
+    return (
+      <Animated.View style={[styles.layer, { opacity: layer }]} pointerEvents="box-none">
+        {!WEB && <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM, opacity: dim }]} />}
+        {blocker({ left: 0, right: 0, top: 0, height: Math.max(0, hole.top) })}
+        {blocker({ left: 0, right: 0, top: hole.bottom, bottom: 0 })}
+        {blocker({ left: 0, width: Math.max(0, hole.left), top: hole.top, height: r * 2 })}
+        {blocker({ left: hole.right, right: 0, top: hole.top, height: r * 2 })}
+        {/* Interior iluminado: crece desde el centro del botón. Su sombra es la oscuridad. */}
+        <Animated.View
+          pointerEvents="none"
+          style={[{
+            position: 'absolute', opacity: dim, borderRadius: r,
+            left: sweep.interpolate({ inputRange: [0, 1], outputRange: [cx, cx - r] }),
+            top: sweep.interpolate({ inputRange: [0, 1], outputRange: [cy, cy - r] }),
+            width: sweep.interpolate({ inputRange: [0, 1], outputRange: [0, r * 2] }),
+            height: sweep.interpolate({ inputRange: [0, 1], outputRange: [0, r * 2] }),
+          }, ({ boxShadow: `0 0 10px 9999px ${DIM}` } as any)]}
+        />
+        {/* El círculo: un trazo que se dibuja dando la vuelta (y se desdibuja al revés) */}
+        {WEB ? React.createElement('svg', {
+          width: r * 2 + RING_WIDTH * 2, height: r * 2 + RING_WIDTH * 2,
+          style: {
+            position: 'absolute', left: cx - r - RING_WIDTH, top: cy - r - RING_WIDTH,
+            pointerEvents: 'none', transform: 'rotate(-90deg)', overflow: 'visible',
+          },
+        }, React.createElement('circle', {
+          cx: r + RING_WIDTH, cy: r + RING_WIDTH, r, fill: 'none',
+          stroke: Colors.emerald, strokeWidth: RING_WIDTH, strokeLinecap: 'round',
+          strokeDasharray: length, strokeDashoffset: ringOn ? 0 : length,
+          style: { transition: `stroke-dashoffset ${RING_MS}ms cubic-bezier(0.33, 1, 0.68, 1)`, filter: `drop-shadow(0 0 6px ${Colors.emerald}90)` },
+        })) : (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute', left: cx - r, top: cy - r, width: r * 2, height: r * 2, borderRadius: r,
+              borderWidth: RING_WIDTH, borderColor: Colors.emerald, opacity: ringOn ? 1 : 0,
+            }}
+          />
+        )}
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute', left: place.box.left, right: place.box.right, maxWidth: place.box.maxWidth,
+            top: place.box.top !== undefined ? place.box.top : Math.max(8, (place.box.bottomY ?? 0) - boxHeight),
+          }}
+        >
+          {box}
+        </View>
+      </Animated.View>
+    );
+  }
 
   return (
     <Animated.View style={[styles.layer, { opacity: layer }]}>

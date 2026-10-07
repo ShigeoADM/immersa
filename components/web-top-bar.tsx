@@ -5,6 +5,7 @@ import { useRouter, type Href } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { tutorialZone } from '@/components/tutorial';
 import { useNotifications } from '@/context/NotificationsContext';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/config/firebase';
@@ -55,7 +56,7 @@ export function WebTopBar() {
           </TouchableOpacity>
           {user ? (
             <>
-              <TouchableOpacity style={styles.btn} activeOpacity={0.8} onPress={() => openWrite('books')}>
+              <TouchableOpacity style={styles.btn} activeOpacity={0.8} onPress={() => openWrite('books')} testID={tutorialZone('write')}>
                 <MaterialIcons name="edit" size={22} color={Colors.emerald} />
               </TouchableOpacity>
               <TouchableOpacity style={styles.avatarBtn} activeOpacity={0.8} onPress={() => setMenuOpen(v => !v)}>

@@ -65,6 +65,7 @@ export default function TabLayout() {
         options={{
           sceneStyle: isDesktop ? WEB_COLUMN : undefined,
           title: 'Escribir',
+          tabBarButtonTestID: 'tut-write', // el tutorial señala este botón (components/tutorial.tsx)
           tabBarIcon: ({ color }) => <IconSymbol size={24} name="pencil" color={color} />,
         }}
       />
