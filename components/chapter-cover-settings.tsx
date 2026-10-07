@@ -426,22 +426,25 @@ function IntroStyleEditor({ image, value, onChange, number, title }: {
       <Text style={styles.hint}>
         Así la verá el lector. Arrastra el rótulo en la imagen para colocarlo donde quieras.
       </Text>
-      <View
-        style={styles.introPreview}
-        onLayout={e => { boxRef.current = { width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height }; }}
-      >
-        <ChapterIntroView image={image} style={value} number={number} title={title || 'Título del capítulo'} accent={Colors.emerald} replayKey={replay} />
-        <View style={[StyleSheet.absoluteFill, Platform.OS === 'web' ? ({ cursor: 'move' } as any) : null]} {...pan.panHandlers} />
-      </View>
-      <View style={styles.row}>
-        <TouchableOpacity style={styles.btn} onPress={() => setReplay(n => n + 1)} activeOpacity={0.75}>
-          <MaterialIcons name="replay" size={16} color={Colors.emerald} />
-          <Text style={styles.btnText}>Ver las animaciones</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.btn} onPress={() => onChange({})} activeOpacity={0.75}>
-          <MaterialIcons name="restart-alt" size={16} color={Colors.textSecondary} />
-          <Text style={[styles.btnText, { color: Colors.textSecondary }]}>Restablecer</Text>
-        </TouchableOpacity>
+      {/* La vista previa se queda a la vista mientras se baja por los ajustes (navegador) */}
+      <View style={[styles.introSticky, Platform.OS === 'web' ? ({ position: 'sticky', top: 0 } as any) : null]}>
+        <View
+          style={styles.introPreview}
+          onLayout={e => { boxRef.current = { width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height }; }}
+        >
+          <ChapterIntroView image={image} style={value} number={number} title={title || 'Título del capítulo'} accent={Colors.emerald} replayKey={replay} />
+          <View style={[StyleSheet.absoluteFill, Platform.OS === 'web' ? ({ cursor: 'move' } as any) : null]} {...pan.panHandlers} />
+        </View>
+        <View style={styles.row}>
+          <TouchableOpacity style={styles.btn} onPress={() => setReplay(n => n + 1)} activeOpacity={0.75}>
+            <MaterialIcons name="replay" size={16} color={Colors.emerald} />
+            <Text style={styles.btnText}>Ver las animaciones</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btn} onPress={() => onChange({})} activeOpacity={0.75}>
+            <MaterialIcons name="restart-alt" size={16} color={Colors.textSecondary} />
+            <Text style={[styles.btnText, { color: Colors.textSecondary }]}>Restablecer</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <LineEditor
@@ -472,7 +475,9 @@ function IntroStyleEditor({ image, value, onChange, number, title }: {
           <Chips
             options={[{ key: 'left', label: 'Izquierda' }, { key: 'center', label: 'Centrado' }, { key: 'right', label: 'Derecha' }] as const}
             value={c.align}
-            onPick={align => set({ align })}
+            // Además de alinear el texto, lleva el rótulo a ese lado de la pantalla (si solo
+            // cambiara la alineación, el rótulo saltaría de sitio y podría salirse)
+            onPick={align => set({ align, x: align === 'left' ? 6 : align === 'center' ? 50 : 94 })}
           />
           <Text style={styles.hint}>Horizontal {c.x}% · vertical {c.y}%</Text>
         </View>
@@ -519,9 +524,10 @@ function IntroStyleEditor({ image, value, onChange, number, title }: {
 
 const styles = StyleSheet.create({
   introPreview: {
-    width: '100%', maxWidth: 620, aspectRatio: 844 / 390, borderRadius: 6, overflow: 'hidden',
+    width: '100%', maxWidth: 540, aspectRatio: 844 / 390, borderRadius: 6, overflow: 'hidden',
     backgroundColor: '#000', borderWidth: 1, borderColor: Colors.border,
   },
+  introSticky: { zIndex: 5, gap: 8, paddingVertical: 8, backgroundColor: Colors.surface },
   sublabel: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
   swatch: { width: 26, height: 26, borderRadius: 13, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
   swatchActive: { borderWidth: 3, borderColor: Colors.emerald },
