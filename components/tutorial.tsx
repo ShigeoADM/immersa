@@ -101,23 +101,35 @@ const run = (value: Animated.Value, toValue: number, duration: number, native = 
 // Dónde van la luz y el cuadro cuando el paso señala una zona de la página
 type Placement = {
   light: { x: number; y: number; w: number; h: number };
-  box: { left: number; centerY: number; maxWidth: number };
+  // El cuadro va en la línea del título, a su derecha (centerY). Si ahí no cabe (pantallas
+  // estrechas), va justo encima de la zona, a todo lo ancho (bottomY).
+  box: { left: number; maxWidth: number; centerY?: number; bottomY?: number };
 };
 
-function measureTarget(target: string, winWidth: number): Placement | null {
+// El elemento de la página con ese identificador QUE SE ESTÁ VIENDO. Puede haber varios:
+// si la pantalla de inicio está abierta dos veces (una, tapada por otra pantalla), la
+// tapada sigue en la página pero sin tamaño, y no es la que hay que señalar.
+function visibleElement(id: string): any {
   if (!WEB) return null;
-  const doc = (globalThis as any).document;
-  const zone = doc.getElementById(tutorialZone(target))?.getBoundingClientRect();
+  const all = [...(globalThis as any).document.querySelectorAll(`[id="${id}"]`)];
+  return all.find((el: any) => el.getClientRects().length > 0 && el.getBoundingClientRect().width > 0) ?? null;
+}
+
+function measureTarget(target: string, winWidth: number): Placement | null {
+  const zone = visibleElement(tutorialZone(target))?.getBoundingClientRect();
   if (!zone) return null;
   const x = Math.max(ZONE_MARGIN, zone.left + ZONE_MARGIN);
   const right = Math.min(winWidth - ZONE_MARGIN, zone.right - ZONE_MARGIN);
   const light = { x, y: zone.top - ZONE_PAD, w: right - x, h: zone.height + ZONE_PAD * 2 };
   // El cuadro va a lo largo, en la línea del título y a su derecha: así no tapa las
   // novelas de esa zona ni las de las zonas vecinas
-  const title = doc.getElementById(tutorialTitle(target))?.getBoundingClientRect();
-  const left = title ? title.right + 18 : x + 12;
-  const centerY = title ? title.top + title.height / 2 : light.y + 22;
-  return { light, box: { left, centerY, maxWidth: Math.min(620, right - left - 12) } };
+  const title = visibleElement(tutorialTitle(target))?.getBoundingClientRect();
+  if (title) {
+    const left = title.right + 18;
+    const room = right - left - 12;
+    if (room >= 280) return { light, box: { left, maxWidth: Math.min(620, room), centerY: title.top + title.height / 2 } };
+  }
+  return { light, box: { left: x, maxWidth: light.w, bottomY: light.y - 8 } };
 }
 
 export function TutorialOverlay() {
@@ -175,7 +187,7 @@ export function TutorialOverlay() {
       setTyping(false);
       setBoxHeight(0);
       if (s.target && WEB) {
-        const el = (globalThis as any).document.getElementById(tutorialZone(s.target));
+        const el = visibleElement(tutorialZone(s.target));
         if (!el) {
           // Esa zona no está en la página (por ejemplo, aún no hay novelas populares): se salta
           if (stepIndex + 1 < STEPS.length) setState({ step: stepIndex + 1 }); else stopTutorial();
@@ -325,9 +337,12 @@ export function TutorialOverlay() {
             />
             <View
               style={{
-                position: 'absolute', left: place.box.left, maxWidth: Math.max(160, place.box.maxWidth),
-                // Hasta saber cuánto mide el cuadro no se puede centrar en la línea del título
-                top: place.box.centerY - boxHeight / 2,
+                position: 'absolute', left: place.box.left, maxWidth: place.box.maxWidth,
+                // Hasta saber cuánto mide el cuadro no se puede colocar del todo
+                top: place.box.centerY !== undefined
+                  // (si el texto ocupa dos líneas, el cuadro crece hacia arriba, no sobre las novelas)
+                  ? Math.min(place.box.centerY - boxHeight / 2, place.box.centerY + 22 - boxHeight)
+                  : Math.max(8, (place.box.bottomY ?? 0) - boxHeight),
               }}
             >
               {box}

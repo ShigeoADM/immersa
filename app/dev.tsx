@@ -24,7 +24,12 @@ const EXPERIMENTS: Experiment[] = [
     title: 'Pruebas Tutorial',
     description: 'El recorrido guiado para nuevos usuarios. Empieza en la página de inicio.',
     icon: 'school',
-    run: router => { router.navigate('/(tabs)' as Href); startTutorial(); },
+    run: router => {
+      // Se vuelve al inicio que ya está abierto debajo, en vez de abrir otro encima
+      if (router.canDismiss()) router.dismissAll();
+      router.navigate('/(tabs)' as Href);
+      startTutorial();
+    },
   },
 ];
 
