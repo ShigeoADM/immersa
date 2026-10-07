@@ -20,6 +20,7 @@ import { Colors } from '@/constants/theme';
 import { useNotifications } from '@/context/NotificationsContext';
 import { useAuth } from '@/context/AuthContext';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
+import { tutorialTitle, tutorialZone } from '@/components/tutorial';
 
 interface StoryCard {
   id: string;
@@ -121,11 +122,12 @@ function HorizontalCard({ story, onPress, single }: {
 }
 
 // ── Cabecera de sección ───────────────────────────────────────────────────────
-function SectionHeader({ title, color }: { title: string; color?: string }) {
+// `zone`: nombre de la sección para el tutorial, que señala su título (components/tutorial.tsx)
+function SectionHeader({ title, color, zone }: { title: string; color?: string; zone?: string }) {
   return (
     <View style={styles.sectionHeader}>
       <View style={[styles.sectionAccent, { backgroundColor: color ?? Colors.emerald }]} />
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.sectionTitle} nativeID={zone ? tutorialTitle(zone) : undefined}>{title}</Text>
     </View>
   );
 }
@@ -281,29 +283,29 @@ export default function DiscoverScreen() {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
 
         {popular.length > 0 && (
-          <View style={styles.section}>
-            <SectionHeader title="Más populares" color="#FF69B4" />
+          <View style={styles.section} nativeID={tutorialZone('popular')}>
+            <SectionHeader zone="popular" title="Más populares" color="#FF69B4" />
             <StoryRow stories={popular} loading={false} onPress={handleStoryPress} />
           </View>
         )}
 
-        <View style={styles.section}>
-          <SectionHeader title="Novelas Modernas" color={Colors.formatColors.Moderno} />
+        <View style={styles.section} nativeID={tutorialZone('moderno')}>
+          <SectionHeader zone="moderno" title="Novelas Modernas" color={Colors.formatColors.Moderno} />
           <StoryRow stories={modernoAll} loading={loadingFeed} onPress={handleStoryPress} />
         </View>
 
-        <View style={styles.section}>
-          <SectionHeader title="Webnovels" color={Colors.formatColors.Webnovel} />
+        <View style={styles.section} nativeID={tutorialZone('webnovel')}>
+          <SectionHeader zone="webnovel" title="Webnovels" color={Colors.formatColors.Webnovel} />
           <StoryRow stories={webnovelAll} loading={loadingFeed} onPress={handleStoryPress} />
         </View>
 
-        <View style={styles.section}>
-          <SectionHeader title="Nuevas Novelas Modernas" color={Colors.formatColors.Moderno} />
+        <View style={styles.section} nativeID={tutorialZone('modernoNew')}>
+          <SectionHeader zone="modernoNew" title="Nuevas Novelas Modernas" color={Colors.formatColors.Moderno} />
           <StoryRow stories={modernoNew} loading={loadingFeed} onPress={handleStoryPress} />
         </View>
 
-        <View style={[styles.section, { marginBottom: 32 }]}>
-          <SectionHeader title="Nuevos Webnovels" color={Colors.formatColors.Webnovel} />
+        <View style={[styles.section, { marginBottom: 32 }]} nativeID={tutorialZone('webnovelNew')}>
+          <SectionHeader zone="webnovelNew" title="Nuevos Webnovels" color={Colors.formatColors.Webnovel} />
           <StoryRow stories={webnovelNew} loading={loadingFeed} onPress={handleStoryPress} />
         </View>
 
