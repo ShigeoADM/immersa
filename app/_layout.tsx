@@ -16,6 +16,7 @@ import { AppDialogHost } from '@/components/app-dialog';
 import { WebTopBar } from '@/components/web-top-bar';
 import { WelcomeSplash } from '@/components/welcome-splash';
 import { DevSiteOverlay } from '@/components/dev-site';
+import { TutorialOverlay } from '@/components/tutorial';
 import { IS_DEV_SITE } from '@/constants/site';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 
@@ -175,6 +176,8 @@ function RootNavigator() {
     {/* Web: bienvenida animada al abrir la página (en la app no pinta nada) */}
     <WelcomeSplash />
     {/* Web de desarrollo: etiqueta y cierre del paso a quien no tiene el permiso */}
+    {/* Tutorial guiado (en pruebas: se abre desde Desarrollo) */}
+    <TutorialOverlay />
     <DevSiteOverlay />
     </NotificationsProvider>
   );

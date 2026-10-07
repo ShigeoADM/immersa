@@ -1,12 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, type Href } from 'expo-router';
+import { useRouter, type Href, type Router } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { DesktopColumn } from '@/components/desktop-column';
 import { BUILD_LABEL } from '@/constants/site';
+import { startTutorial } from '@/components/tutorial';
 
 // Desarrollo: pantalla privada, solo para cuentas con el permiso 'developer'.
 //
@@ -14,11 +15,18 @@ import { BUILD_LABEL } from '@/constants/site';
 // medias se abre desde un botón de esta lista y no aparece en ningún otro sitio de la
 // app; cuando está terminado, se incrusta donde toque y se quita de aquí.
 //
-// Para añadir una prueba: una entrada en EXPERIMENTS con la ruta que abre.
+// Para añadir una prueba: una entrada en EXPERIMENTS con lo que hace al pulsarla.
 
-type Experiment = { title: string; description: string; icon: keyof typeof MaterialIcons.glyphMap; href: Href };
+type Experiment = { title: string; description: string; icon: keyof typeof MaterialIcons.glyphMap; run: (router: Router) => void };
 
-const EXPERIMENTS: Experiment[] = [];
+const EXPERIMENTS: Experiment[] = [
+  {
+    title: 'Pruebas Tutorial',
+    description: 'El recorrido guiado para nuevos usuarios. Empieza en la página de inicio.',
+    icon: 'school',
+    run: router => { router.navigate('/(tabs)' as Href); startTutorial(); },
+  },
+];
 
 export default function DevScreen() {
   const router = useRouter();
@@ -56,7 +64,7 @@ export default function DevScreen() {
               </View>
             ) : (
               EXPERIMENTS.map(e => (
-                <TouchableOpacity key={e.title} style={styles.card} onPress={() => router.push(e.href)} activeOpacity={0.8}>
+                <TouchableOpacity key={e.title} style={styles.card} onPress={() => e.run(router)} activeOpacity={0.8}>
                   <MaterialIcons name={e.icon} size={24} color={Colors.emerald} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardTitle}>{e.title}</Text>
