@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Audio } from 'expo-av';
 import { Colors } from '@/constants/theme';
 import { TEXT_BOX } from '@/constants/reader-layout';
 
@@ -157,6 +158,31 @@ export function TutorialOverlay() {
   const active = !!step;
   useEffect(() => { if (active) ensureFont(); }, [active]);
 
+  // Sonidos al avanzar: los mismos del lector (uno al pasar de texto, otro al pasar de cuadro)
+  const sfxTextRef = useRef<Audio.Sound | null>(null);
+  const sfxBoxRef = useRef<Audio.Sound | null>(null);
+  useEffect(() => {
+    if (!active) return;
+    let gone = false;
+    (async () => {
+      try {
+        const [{ sound: text }, { sound: box }] = await Promise.all([
+          Audio.Sound.createAsync(require('@/assets/sounds/sfx_para.wav'), { volume: 0.55 }),
+          Audio.Sound.createAsync(require('@/assets/sounds/sfx_page.wav'), { volume: 0.5 }),
+        ]);
+        if (gone) { text.unloadAsync().catch(() => {}); box.unloadAsync().catch(() => {}); return; }
+        sfxTextRef.current = text; sfxBoxRef.current = box;
+      } catch { /* sin sonido: el tutorial funciona igual */ }
+    })();
+    return () => {
+      gone = true;
+      sfxTextRef.current?.unloadAsync().catch(() => {});
+      sfxBoxRef.current?.unloadAsync().catch(() => {});
+      sfxTextRef.current = null; sfxBoxRef.current = null;
+    };
+  }, [active]);
+  const play = (ref: { current: Audio.Sound | null }) => { ref.current?.replayAsync().catch(() => {}); };
+
   // Al empezar: esperar a que se vea la pantalla y oscurecerla
   useEffect(() => {
     if (!active) { setShown(false); setPlace(null); return; }
@@ -241,9 +267,10 @@ export function TutorialOverlay() {
   // está entero, pasa al cuadro siguiente (o termina).
   const advance = async () => {
     if (!current || !shown || !typing || busyRef.current) return;
-    if (!done) { setTyped(total); return; }
+    if (!done) { play(sfxTextRef); setTyped(total); return; }
     const next = current.step + 1;
-    if (next < STEPS.length && STEPS[next].sameBox) { setState({ step: next }); return; }
+    if (next < STEPS.length && STEPS[next].sameBox) { play(sfxTextRef); setState({ step: next }); return; }
+    play(sfxBoxRef);
     // El cuadro se cierra como se abrió, al revés, y la luz de la zona se retira
     busyRef.current = true;
     await run(open, 0, CLOSE_MS);
