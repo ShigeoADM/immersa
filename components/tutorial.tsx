@@ -43,7 +43,11 @@ const OPEN_MS = 420;
 const LETTER_MS = 22;
 
 const BOX_MAX_WIDTH = 440;
-const RING = 2.5; // grosor del contorno con degradado
+// Alrededor del cuadro queda una franja sin oscurecer: se ve la página con su luz normal,
+// y la oscuridad empieza poco a poco a partir de ahí. Es lo que hace destacar el cuadro.
+const GLOW = 16;        // anchura de la franja iluminada
+const GLOW_FADE = 22;   // cuánto tarda la oscuridad en llegar a su tope, hacia fuera
+const DIM = 'rgba(0,0,0,0.74)';
 
 // Tipografía del tutorial. En la web se pide a Google Fonts; en la app, la del sistema.
 const FONT = Platform.OS === 'web' ? 'Outfit, "Segoe UI", system-ui, sans-serif' : undefined;
@@ -58,26 +62,12 @@ function ensureFont() {
   doc.head.appendChild(link);
 }
 
-// Contorno con degradado alrededor del cuadro. En la web es un anillo de verdad (el
-// interior queda hueco, así el cuadro sigue siendo semitransparente); en la app, un borde liso.
-const ringStyle: any = Platform.OS === 'web'
-  ? {
-      padding: RING,
-      backgroundImage: `linear-gradient(120deg, ${Colors.emerald}, ${Colors.aqua} 45%, ${Colors.formatColors.Webnovel})`,
-      WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
-      WebkitMaskComposite: 'xor',
-      mask: 'linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0)',
-    }
-  : { borderWidth: RING, borderColor: Colors.emerald };
-
 export function TutorialOverlay() {
   const current = useSyncExternalStore(subscribe, () => state, () => state);
   const pieces = current ? STEPS[current.step] : undefined;
   const total = pieces ? pieces.reduce((n, p) => n + p.t.length, 0) : 0;
   const win = useWindowDimensions();
   const boxWidth = Math.min(BOX_MAX_WIDTH, win.width - 32);
-  // La flecha va a la derecha del cuadro, como en el lector; si no cabe, debajo
-  const arrowBeside = win.width >= boxWidth + 2 * 64;
 
   const dim = useRef(new Animated.Value(0)).current;
   const open = useRef(new Animated.Value(0)).current;   // 0 = cerrado, 1 = abierto del todo
@@ -85,6 +75,7 @@ export function TutorialOverlay() {
   const layer = useRef(new Animated.Value(1)).current;  // toda la capa (para desvanecerla al salir)
   const [shown, setShown] = useState(false);            // ya se llegó a la pantalla
   const [typed, setTyped] = useState(0);                // letras escritas
+  const [boxHeight, setBoxHeight] = useState(0);        // altura del cuadro abierto
   const typingRef = useRef<any>(null);
   const done = typed >= total;
 
@@ -112,7 +103,7 @@ export function TutorialOverlay() {
       if (cancelled) return;
       typingRef.current = setInterval(() => setTyped(n => n + 1), LETTER_MS);
     };
-    // (la anchura no se puede animar con el motor nativo)
+    // (la altura no se puede animar con el motor nativo)
     Animated.timing(open, {
       toValue: 1, duration: OPEN_MS, delay: current.step === 0 ? DIM_MS - 100 : 0,
       easing: Easing.out(Easing.cubic), useNativeDriver: false,
@@ -120,11 +111,19 @@ export function TutorialOverlay() {
     return () => { cancelled = true; clearInterval(typingRef.current); };
   }, [current?.step, shown]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Texto completo: se deja de escribir y aparece la flecha de continuar
+  // Texto completo: se deja de escribir y aparece, parpadeando, el icono de continuar
+  // (el mismo ↵ que marca en el lector que se puede pasar al párrafo siguiente)
   useEffect(() => {
     if (!active || !done || total === 0) return;
     clearInterval(typingRef.current);
-    Animated.timing(arrow, { toValue: 1, duration: 250, useNativeDriver: Platform.OS !== 'web' }).start();
+    const native = Platform.OS !== 'web';
+    arrow.setValue(1);
+    const pulse = Animated.loop(Animated.sequence([
+      Animated.timing(arrow, { toValue: 0.15, duration: 550, useNativeDriver: native }),
+      Animated.timing(arrow, { toValue: 1, duration: 550, useNativeDriver: native }),
+    ]));
+    pulse.start();
+    return () => pulse.stop();
   }, [done, active, total]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Avanzar, como en el lector: si el texto aún se está escribiendo, lo completa; si ya
@@ -166,41 +165,49 @@ export function TutorialOverlay() {
     });
   };
 
-  const arrowButton = (
-    <Animated.View style={[arrowBeside ? styles.arrowBeside : styles.arrowBelow, { opacity: arrow }]}>
-      <TouchableOpacity style={styles.arrowBtn} activeOpacity={0.7} onPress={advance}>
-        <MaterialIcons name="chevron-right" size={32} color="rgba(255,255,255,0.6)" />
-      </TouchableOpacity>
-    </Animated.View>
-  );
-
   return (
     <Animated.View style={[styles.layer, { opacity: layer }]}>
-      <Animated.View style={[StyleSheet.absoluteFill, styles.dim, { opacity: dim }]} />
+      {/* App: oscuridad lisa. En la web la oscuridad la pinta el halo de más abajo. */}
+      {Platform.OS !== 'web' && <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: DIM, opacity: dim }]} />}
       <TouchableOpacity
         style={[styles.center, Platform.OS === 'web' ? ({ outlineStyle: 'none', cursor: 'default' } as any) : null]}
         activeOpacity={1}
         onPress={advance}
       >
         <View style={{ width: boxWidth }}>
-          {/* El cuadro se abre desde el centro hacia los dos lados: una ventana que se
-              ensancha sobre un contenido de anchura fija */}
+          {/* Web: la oscuridad es la sombra enorme de este recuadro invisible, algo mayor que
+              el cuadro. Dentro de él no hay sombra: esa es la franja iluminada. */}
+          {Platform.OS === 'web' && (
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.glow, { opacity: dim }, ({ boxShadow: `0 0 ${GLOW_FADE}px 9999px ${DIM}` } as any)]}
+            />
+          )}
+          {/* El cuadro se abre desde el centro hacia arriba y hacia abajo: una ventana que
+              crece sobre un contenido de altura fija */}
           <Animated.View
             style={{
-              alignSelf: 'center', alignItems: 'center', overflow: 'hidden', borderRadius: TEXT_BOX.radius,
-              width: open.interpolate({ inputRange: [0, 1], outputRange: [0, boxWidth] }),
+              justifyContent: 'center', overflow: 'hidden', borderRadius: TEXT_BOX.radius,
+              height: boxHeight ? open.interpolate({ inputRange: [0, 1], outputRange: [0, boxHeight] }) : undefined,
+              opacity: boxHeight ? 1 : 0,
             }}
           >
-            <View style={[styles.box, { width: boxWidth }]}>
-              <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: TEXT_BOX.radius }, ringStyle]} />
+            <View
+              style={[styles.box, { width: boxWidth }]}
+              onLayout={e => setBoxHeight(e.nativeEvent.layout.height)}
+            >
               {/* El texto entero, invisible, reserva el sitio: el cuadro no crece al escribirse */}
               <View>
                 <Text style={[styles.text, { opacity: 0 }]}>{renderPieces(total)}</Text>
                 <Text style={[styles.text, StyleSheet.absoluteFill]}>{renderPieces(typed)}</Text>
               </View>
+              {done && (
+                <Animated.View style={[styles.hint, { opacity: arrow }]}>
+                  <MaterialIcons name="keyboard-return" size={16} color={Colors.emerald} />
+                </Animated.View>
+              )}
             </View>
           </Animated.View>
-          {arrowButton}
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -208,21 +215,21 @@ export function TutorialOverlay() {
 }
 
 const styles = StyleSheet.create({
-  layer: { ...StyleSheet.absoluteFillObject, zIndex: 900 },
-  dim: { backgroundColor: 'rgba(0,0,0,0.72)' },
+  layer: { ...StyleSheet.absoluteFillObject, zIndex: 900, overflow: 'hidden' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
+  glow: {
+    position: 'absolute', left: -GLOW, right: -GLOW, top: -GLOW, bottom: -GLOW,
+    borderRadius: TEXT_BOX.radius + GLOW,
+    // Un velo muy leve de luz: así la franja se nota también donde la página es negra
+    backgroundColor: 'rgba(255,255,255,0.07)',
+  },
   // Como el cuadro de texto del lector Moderno: oscuro y algo transparente
   box: {
     backgroundColor: 'rgba(22,24,30,0.82)', borderRadius: TEXT_BOX.radius,
-    paddingHorizontal: 26, paddingVertical: 22,
+    paddingHorizontal: 26, paddingTop: 22, paddingBottom: 26,
   },
   text: { fontFamily: FONT, fontSize: 16, lineHeight: 25, letterSpacing: 0.2, color: Colors.textPrimary },
   italic: { fontStyle: 'italic' },
-  // La flecha de continuar, igual que la del lector
-  arrowBtn: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.4)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  arrowBeside: { position: 'absolute', right: -56, top: '50%', marginTop: -20 },
-  arrowBelow: { alignSelf: 'flex-end', marginTop: 10 },
+  // Icono de continuar, en la esquina del cuadro como en el lector
+  hint: { position: 'absolute', bottom: 10, right: 14 },
 });
