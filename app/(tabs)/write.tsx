@@ -22,6 +22,7 @@ import { AppAlert } from '@/components/app-dialog';
 import * as DocumentPicker from 'expo-document-picker';
 import { deleteStoryWithCascade, importStory } from '@/services/stories';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
+import { tutorialZone } from '@/components/tutorial';
 
 const FORMATS = [
   {
@@ -208,7 +209,7 @@ export default function WriteScreen() {
           <Text style={styles.sectionTitle}>Nueva historia</Text>
           <Text style={styles.sectionSubtitle}>Elige el formato</Text>
         </Animated.View>
-        <View style={styles.formatList}>
+        <View style={styles.formatList} nativeID={tutorialZone('formats')}>
           {FORMATS.map((f, i) => (
             <Animated.View key={f.key} style={{ opacity: anims[i].opacity, transform: [{ translateY: anims[i].translateY }] }}>
               <TouchableOpacity
@@ -240,7 +241,7 @@ export default function WriteScreen() {
           <Text style={[styles.tabText, activeTab === 'books' && styles.tabTextActive]}>Mis libros</Text>
           {activeTab === 'books' && <View style={styles.tabUnderline} />}
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tabBtn} activeOpacity={0.7} onPress={() => setActiveTab('new')}>
+        <TouchableOpacity style={styles.tabBtn} activeOpacity={0.7} onPress={() => setActiveTab('new')} testID={tutorialZone('newBook')}>
           <Text style={[styles.tabText, activeTab === 'new' && styles.tabTextActive]}>Nuevo Libro</Text>
           {activeTab === 'new' && <View style={styles.tabUnderline} />}
         </TouchableOpacity>
@@ -248,7 +249,7 @@ export default function WriteScreen() {
       <View style={styles.tabSeparator} />
 
       {activeTab === 'books' ? (
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} nativeID={tutorialZone('myBooks')}>
           {stories.map((story) => {
             const fmtColor = Colors.formatColors[story.format as keyof typeof Colors.formatColors] ?? Colors.emerald;
             return (
@@ -284,7 +285,7 @@ export default function WriteScreen() {
             <Text style={styles.sectionTitle}>Nueva historia</Text>
             <Text style={styles.sectionSubtitle}>Elige el formato</Text>
           </Animated.View>
-          <View style={styles.formatList}>
+          <View style={styles.formatList} nativeID={tutorialZone('formats')}>
             {FORMATS.map((f, i) => (
               <Animated.View key={f.key} style={{ opacity: anims[i].opacity, transform: [{ translateY: anims[i].translateY }] }}>
                 <TouchableOpacity

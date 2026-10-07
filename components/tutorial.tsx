@@ -39,7 +39,13 @@ export const tutorialTitle = (id: string) => `tut-title-${id}`;
 type Piece = { t: string; italic?: boolean };
 //   · action: el target es un botón que hay que pulsar. Se rodea con un círculo y el
 //     tutorial no sigue hasta que se pulsa (el botón hace lo suyo de verdad).
-type Step = { pieces: Piece[]; target?: string; sameBox?: boolean; action?: boolean };
+//   · arrives: el target está en una pantalla a la que se acaba de llegar; se le da un
+//     momento para aparecer antes de darlo por ausente.
+//   · unless: si esa otra zona está a la vista, el paso no procede y se salta sin esperar
+//     (por ejemplo: quien no tiene libros no ve "Mis libros", ve ya los formatos).
+type Step = {
+  pieces: Piece[]; target?: string; sameBox?: boolean; action?: boolean; arrives?: boolean; unless?: string;
+};
 const STEPS: Step[] = [
   {
     pieces: [
@@ -55,6 +61,11 @@ const STEPS: Step[] = [
   { target: 'webnovelNew', pieces: [{ t: 'Aquí podrás encontrar los últimos Webnovels publicados.' }] },
   { target: 'popular',     pieces: [{ t: 'Aquí encontrarás las novelas más populares, independientemente de su estilo.' }] },
   { target: 'write', action: true, pieces: [{ t: 'Aquí podrás crear las novelas. Selecciónalo, por favor.' }] },
+  {
+    target: 'myBooks', arrives: true, unless: 'formats',
+    pieces: [{ t: 'Si es tu primera vez en Immersa, es muy posible que este apartado esté vacío.' }],
+  },
+  { target: 'newBook', action: true, unless: 'formats', pieces: [{ t: 'Aquí podrás crear un nuevo libro.' }] },
 ];
 // Los pasos encadenados con sameBox comparten cuadro: este es el primero de su cadena
 const groupOf = (i: number) => { let g = i; while (g > 0 && STEPS[g].sameBox) g--; return g; };
@@ -71,6 +82,8 @@ const LETTER_MS = 22;
 const RING_MS = 650;      // el círculo alrededor de un botón se dibuja (y se desdibuja)
 const RING_WIDTH = 4;
 const RING_GAP = 9;       // aire entre el botón y el círculo
+const RING_MAX = 64;      // radio máximo del círculo
+const ARRIVE_WAIT_MS = 2500; // lo que se espera a que aparezca una zona al llegar a una pantalla
 
 const BOX_MAX_WIDTH = 440;
 // Alrededor del cuadro del centro queda una franja sin oscurecer: se ve la página con su
@@ -110,6 +123,8 @@ type Placement = {
   light: { x: number; y: number; w: number; h: number };
   // Botón que hay que pulsar: la luz es un círculo a su alrededor
   circle?: { cx: number; cy: number; r: number };
+  // Parte de la pantalla que se deja libre para pulsar el botón (el botón, dentro del círculo)
+  hole?: { left: number; top: number; right: number; bottom: number };
   // El cuadro va en la línea del título, a su derecha (centerY). Si ahí no cabe (pantallas
   // estrechas), va justo encima de la zona, a todo lo ancho (bottomY). Con un botón, va
   // debajo o encima de él (top / bottomY), pegado a su mismo lado de la pantalla.
@@ -132,17 +147,31 @@ function measureTarget(target: string, winWidth: number, action?: boolean): Plac
   if (action) {
     const winHeight = (globalThis as any).innerHeight as number;
     const cx = zone.left + zone.width / 2, cy = zone.top + zone.height / 2;
-    // (un botón muy alargado, como los de la barra de pestañas, se rodea por su centro:
-    // el círculo no puede ser tan grande como su lado largo)
+    // El círculo rodea lo que el botón enseña (su icono o su texto), no todo su tamaño:
+    // una pestaña puede ser mucho más ancha que su rótulo.
     const short = Math.min(zone.width, zone.height);
-    const r = Math.min(Math.max(zone.width, zone.height), short * 1.3) / 2 + RING_GAP;
+    let content = zone;
+    try {
+      const range = (globalThis as any).document.createRange();
+      range.selectNodeContents(visibleElement(tutorialZone(target)));
+      const c = range.getBoundingClientRect();
+      if (c.width > 0) content = c;
+    } catch { /* se usa el tamaño del botón */ }
+    const focusW = Math.min(zone.width, Math.max(content.width, short));
+    const focusH = Math.min(zone.height, Math.max(content.height, short));
+    const r = Math.min(RING_MAX, Math.max(focusW, focusH) / 2 + RING_GAP);
     const light = { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
+    // Solo se puede pulsar el botón: del círculo, la parte que cae sobre él
+    const hole = {
+      left: Math.max(cx - r, zone.left), top: Math.max(cy - r, zone.top),
+      right: Math.min(cx + r, zone.right), bottom: Math.min(cy + r, zone.bottom),
+    };
     const maxWidth = Math.min(360, winWidth - 24);
     const side = cx > winWidth / 2
       ? { right: Math.max(12, winWidth - (cx + r)) }
       : { left: Math.max(12, cx - r) };
     const vertical = cy > winHeight / 2 ? { bottomY: cy - r - 14 } : { top: cy + r + 14 };
-    return { light, circle: { cx, cy, r }, box: { ...side, ...vertical, maxWidth } };
+    return { light, circle: { cx, cy, r }, hole, box: { ...side, ...vertical, maxWidth } };
   }
   const x = Math.max(ZONE_MARGIN, zone.left + ZONE_MARGIN);
   const right = Math.min(winWidth - ZONE_MARGIN, zone.right - ZONE_MARGIN);
@@ -154,6 +183,14 @@ function measureTarget(target: string, winWidth: number, action?: boolean): Plac
     const left = title.right + 18;
     const room = right - left - 12;
     if (room >= 280) return { light, box: { left, maxWidth: Math.min(620, room), centerY: title.top + title.height / 2 } };
+  } else if (light.w >= 600) {
+    // Zona sin título (una lista, por ejemplo): el cuadro va dentro, a un lado
+    return {
+      light,
+      box: { left: light.x + light.w * 0.5, maxWidth: Math.min(440, light.w * 0.5 - 24), centerY: light.y + Math.min(light.h / 2, 150) },
+    };
+  } else {
+    return { light, box: { left: light.x + 12, maxWidth: light.w - 24, centerY: light.y + light.h * 0.6 } };
   }
   return { light, box: { left: x, maxWidth: light.w, bottomY: light.y - 8 } };
 }
@@ -239,10 +276,17 @@ export function TutorialOverlay() {
       setTyping(false);
       setBoxHeight(0);
       if (s.target && WEB) {
-        const el = visibleElement(tutorialZone(s.target));
+        const skips = () => !!s.unless && !!visibleElement(tutorialZone(s.unless));
+        let el = skips() ? null : visibleElement(tutorialZone(s.target));
+        // Recién llegados a la pantalla: puede tardar un momento en pintarse
+        for (let waited = 0; !el && s.arrives && !skips() && waited < ARRIVE_WAIT_MS && !cancelled; waited += 100) {
+          await wait(100);
+          el = skips() ? null : visibleElement(tutorialZone(s.target));
+        }
+        if (cancelled) return;
         if (!el) {
           // Esa zona no está en la página (por ejemplo, aún no hay novelas populares): se salta
-          if (stepIndex + 1 < STEPS.length) setState({ step: stepIndex + 1 }); else stopTutorial();
+          if (stepIndex + 1 < STEPS.length) setState({ step: stepIndex + 1 }); else closeRef.current();
           return;
         }
         sweep.setValue(0);
@@ -407,7 +451,7 @@ export function TutorialOverlay() {
   // el resto sigue tapado (tocar fuera solo completa el texto).
   if (place?.circle) {
     const { cx, cy, r } = place.circle;
-    const hole = { left: cx - r, top: cy - r, right: cx + r, bottom: cy + r };
+    const hole = place.hole ?? { left: cx - r, top: cy - r, right: cx + r, bottom: cy + r };
     const blocker = (style: any) => (
       <TouchableOpacity
         activeOpacity={1} onPress={advance}
@@ -420,8 +464,8 @@ export function TutorialOverlay() {
         {!WEB && <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM, opacity: dim }]} />}
         {blocker({ left: 0, right: 0, top: 0, height: Math.max(0, hole.top) })}
         {blocker({ left: 0, right: 0, top: hole.bottom, bottom: 0 })}
-        {blocker({ left: 0, width: Math.max(0, hole.left), top: hole.top, height: r * 2 })}
-        {blocker({ left: hole.right, right: 0, top: hole.top, height: r * 2 })}
+        {blocker({ left: 0, width: Math.max(0, hole.left), top: hole.top, height: hole.bottom - hole.top })}
+        {blocker({ left: hole.right, right: 0, top: hole.top, height: hole.bottom - hole.top })}
         {/* Interior iluminado: crece desde el centro del botón. Su sombra es la oscuridad. */}
         <Animated.View
           pointerEvents="none"
