@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, useSyncExternalStore } from 'react';
-import { Animated, Easing, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Animated, Easing, Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors } from '@/constants/theme';
+import { TEXT_BOX } from '@/constants/reader-layout';
 
 // Tutorial de Immersa: un recorrido guiado, como el de un juego. La pantalla se oscurece
 // y van apareciendo cuadros de texto que explican cada cosa mientras se hace.
@@ -22,81 +24,205 @@ export const stopTutorial = () => setState(null);
 // Solo en el servidor local de desarrollo: poder arrancarlo desde la consola del navegador
 if (__DEV__) (globalThis as any).__startTutorial = startTutorial;
 
-// Pasos del tutorial, en orden. Cada uno es un cuadro de texto.
-const STEPS: { body: React.ReactNode; next: string }[] = [
-  {
-    body: (
-      <>
-        Bienvenid@ al tutorial de Immersa. En este pequeño recorrido aprenderás las nociones básicas de la
-        creación de <Text style={{ fontStyle: 'italic' }}>Novela Moderna</Text>.
-      </>
-    ),
-    next: 'Empezar',
-  },
+// Pasos del tutorial, en orden. Cada uno es un cuadro de texto; el texto va en trozos
+// para poder poner alguno en cursiva.
+type Piece = { t: string; italic?: boolean };
+const STEPS: Piece[][] = [
+  [
+    { t: 'Bienvenid@ al tutorial de Immersa. En este pequeño recorrido aprenderás las nociones básicas de la creación de ' },
+    { t: 'Novela Moderna', italic: true },
+    { t: '.' },
+  ],
 ];
+
+// Ritmo de la entrada: se llega a la pantalla, un momento después se oscurece, el cuadro
+// se abre desde el centro y entonces el texto se escribe letra a letra.
+const ARRIVE_MS = 900;
+const DIM_MS = 450;
+const OPEN_MS = 420;
+const LETTER_MS = 22;
+
+const BOX_MAX_WIDTH = 440;
+const RING = 2.5; // grosor del contorno con degradado
+
+// Tipografía del tutorial. En la web se pide a Google Fonts; en la app, la del sistema.
+const FONT = Platform.OS === 'web' ? 'Outfit, "Segoe UI", system-ui, sans-serif' : undefined;
+let fontRequested = false;
+function ensureFont() {
+  if (Platform.OS !== 'web' || fontRequested) return;
+  fontRequested = true;
+  const doc = (globalThis as any).document;
+  const link = doc.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500&display=swap';
+  doc.head.appendChild(link);
+}
+
+// Contorno con degradado alrededor del cuadro. En la web es un anillo de verdad (el
+// interior queda hueco, así el cuadro sigue siendo semitransparente); en la app, un borde liso.
+const ringStyle: any = Platform.OS === 'web'
+  ? {
+      padding: RING,
+      backgroundImage: `linear-gradient(120deg, ${Colors.emerald}, ${Colors.aqua} 45%, ${Colors.formatColors.Webnovel})`,
+      WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+      WebkitMaskComposite: 'xor',
+      mask: 'linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0)',
+    }
+  : { borderWidth: RING, borderColor: Colors.emerald };
 
 export function TutorialOverlay() {
   const current = useSyncExternalStore(subscribe, () => state, () => state);
-  const step = current ? STEPS[current.step] : undefined;
+  const pieces = current ? STEPS[current.step] : undefined;
+  const total = pieces ? pieces.reduce((n, p) => n + p.t.length, 0) : 0;
+  const win = useWindowDimensions();
+  const boxWidth = Math.min(BOX_MAX_WIDTH, win.width - 32);
+  // La flecha va a la derecha del cuadro, como en el lector; si no cabe, debajo
+  const arrowBeside = win.width >= boxWidth + 2 * 64;
 
-  // Entrada: la pantalla se oscurece y el cuadro aparece creciendo un poco
   const dim = useRef(new Animated.Value(0)).current;
-  const box = useRef(new Animated.Value(0)).current;
-  const active = !!step;
+  const open = useRef(new Animated.Value(0)).current;   // 0 = cerrado, 1 = abierto del todo
+  const arrow = useRef(new Animated.Value(0)).current;
+  const layer = useRef(new Animated.Value(1)).current;  // toda la capa (para desvanecerla al salir)
+  const [shown, setShown] = useState(false);            // ya se llegó a la pantalla
+  const [typed, setTyped] = useState(0);                // letras escritas
+  const typingRef = useRef<any>(null);
+  const done = typed >= total;
+
+  const active = !!pieces;
+  useEffect(() => { if (active) ensureFont(); }, [active]);
+
+  // Al empezar: esperar a que se vea la pantalla y oscurecerla
   useEffect(() => {
-    if (!active) return;
-    const native = Platform.OS !== 'web';
-    dim.setValue(0);
-    Animated.timing(dim, { toValue: 1, duration: 350, useNativeDriver: native }).start();
+    if (!active) { setShown(false); return; }
+    dim.setValue(0); layer.setValue(1);
+    const t = setTimeout(() => {
+      setShown(true);
+      Animated.timing(dim, { toValue: 1, duration: DIM_MS, useNativeDriver: Platform.OS !== 'web' }).start();
+    }, ARRIVE_MS);
+    return () => clearTimeout(t);
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cada paso: el cuadro se abre desde el centro y después se escribe el texto
   useEffect(() => {
-    if (!current) return;
-    const native = Platform.OS !== 'web';
-    box.setValue(0);
-    Animated.timing(box, { toValue: 1, duration: 320, delay: 150, easing: Easing.out(Easing.cubic), useNativeDriver: native }).start();
-  }, [current?.step]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!current || !shown) return;
+    open.setValue(0); arrow.setValue(0);
+    setTyped(0);
+    let cancelled = false;
+    const startTyping = () => {
+      if (cancelled) return;
+      typingRef.current = setInterval(() => setTyped(n => n + 1), LETTER_MS);
+    };
+    // (la anchura no se puede animar con el motor nativo)
+    Animated.timing(open, {
+      toValue: 1, duration: OPEN_MS, delay: current.step === 0 ? DIM_MS - 100 : 0,
+      easing: Easing.out(Easing.cubic), useNativeDriver: false,
+    }).start(startTyping);
+    return () => { cancelled = true; clearInterval(typingRef.current); };
+  }, [current?.step, shown]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!current || !step) return null;
+  // Texto completo: se deja de escribir y aparece la flecha de continuar
+  useEffect(() => {
+    if (!active || !done || total === 0) return;
+    clearInterval(typingRef.current);
+    Animated.timing(arrow, { toValue: 1, duration: 250, useNativeDriver: Platform.OS !== 'web' }).start();
+  }, [done, active, total]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const goNext = () => {
+  // Avanzar, como en el lector: si el texto aún se está escribiendo, lo completa; si ya
+  // está entero, pasa al siguiente cuadro (o termina).
+  const advance = () => {
+    if (!current || !shown) return;
+    if (!done) { setTyped(total); return; }
     if (current.step + 1 < STEPS.length) setState({ step: current.step + 1 });
-    else stopTutorial();
+    else close();
+  };
+  // Final (o salida): todo se desvanece antes de quitarse
+  const close = () => {
+    Animated.timing(layer, { toValue: 0, duration: 300, useNativeDriver: Platform.OS !== 'web' }).start(() => stopTutorial());
+  };
+  const advanceRef = useRef(advance);
+  advanceRef.current = advance;
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  useEffect(() => {
+    if (!active || Platform.OS !== 'web') return;
+    const win = globalThis as any;
+    const onKey = (e: any) => {
+      if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') { e.preventDefault(); advanceRef.current(); }
+      else if (e.key === 'Escape') closeRef.current();
+    };
+    win.addEventListener('keydown', onKey);
+    return () => win.removeEventListener('keydown', onKey);
+  }, [active]);
+
+  if (!current || !pieces || !shown) return null;
+
+  // Los trozos del texto hasta la letra `count`
+  const renderPieces = (count: number) => {
+    let left = count;
+    return pieces.map((p, i) => {
+      const part = p.t.slice(0, Math.max(0, left));
+      left -= p.t.length;
+      return part ? <Text key={i} style={p.italic ? styles.italic : undefined}>{part}</Text> : null;
+    });
   };
 
+  const arrowButton = (
+    <Animated.View style={[arrowBeside ? styles.arrowBeside : styles.arrowBelow, { opacity: arrow }]}>
+      <TouchableOpacity style={styles.arrowBtn} activeOpacity={0.7} onPress={advance}>
+        <MaterialIcons name="chevron-right" size={32} color="rgba(255,255,255,0.6)" />
+      </TouchableOpacity>
+    </Animated.View>
+  );
+
   return (
-    <Animated.View style={[styles.dim, { opacity: dim }]}>
-      <Animated.View
-        style={[styles.box, {
-          opacity: box,
-          transform: [{ scale: box.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }],
-        }]}
+    <Animated.View style={[styles.layer, { opacity: layer }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.dim, { opacity: dim }]} />
+      <TouchableOpacity
+        style={[styles.center, Platform.OS === 'web' ? ({ outlineStyle: 'none', cursor: 'default' } as any) : null]}
+        activeOpacity={1}
+        onPress={advance}
       >
-        <Text style={styles.text}>{step.body}</Text>
-        <View style={styles.actions}>
-          <TouchableOpacity onPress={stopTutorial} activeOpacity={0.7} hitSlop={8}>
-            <Text style={styles.skip}>Salir del tutorial</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.next} onPress={goNext} activeOpacity={0.85}>
-            <Text style={styles.nextText}>{step.next}</Text>
-          </TouchableOpacity>
+        <View style={{ width: boxWidth }}>
+          {/* El cuadro se abre desde el centro hacia los dos lados: una ventana que se
+              ensancha sobre un contenido de anchura fija */}
+          <Animated.View
+            style={{
+              alignSelf: 'center', alignItems: 'center', overflow: 'hidden', borderRadius: TEXT_BOX.radius,
+              width: open.interpolate({ inputRange: [0, 1], outputRange: [0, boxWidth] }),
+            }}
+          >
+            <View style={[styles.box, { width: boxWidth }]}>
+              <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: TEXT_BOX.radius }, ringStyle]} />
+              {/* El texto entero, invisible, reserva el sitio: el cuadro no crece al escribirse */}
+              <View>
+                <Text style={[styles.text, { opacity: 0 }]}>{renderPieces(total)}</Text>
+                <Text style={[styles.text, StyleSheet.absoluteFill]}>{renderPieces(typed)}</Text>
+              </View>
+            </View>
+          </Animated.View>
+          {arrowButton}
         </View>
-      </Animated.View>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  dim: {
-    ...StyleSheet.absoluteFillObject, zIndex: 900, backgroundColor: 'rgba(0,0,0,0.78)',
-    alignItems: 'center', justifyContent: 'center', padding: 24,
-  },
+  layer: { ...StyleSheet.absoluteFillObject, zIndex: 900 },
+  dim: { backgroundColor: 'rgba(0,0,0,0.72)' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
+  // Como el cuadro de texto del lector Moderno: oscuro y algo transparente
   box: {
-    width: '100%', maxWidth: 420, padding: 22, gap: 18, borderRadius: 12,
-    backgroundColor: '#141414', borderWidth: 1, borderColor: Colors.emerald + '70',
+    backgroundColor: 'rgba(22,24,30,0.82)', borderRadius: TEXT_BOX.radius,
+    paddingHorizontal: 26, paddingVertical: 22,
   },
-  text: { fontSize: 15, lineHeight: 23, color: Colors.textPrimary, textAlign: 'center' },
-  actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
-  skip: { fontSize: 12, color: Colors.textMuted, textDecorationLine: 'underline' },
-  next: { paddingVertical: 10, paddingHorizontal: 22, borderRadius: 8, backgroundColor: Colors.emerald },
-  nextText: { fontSize: 14, fontWeight: '700', color: '#000' },
+  text: { fontFamily: FONT, fontSize: 16, lineHeight: 25, letterSpacing: 0.2, color: Colors.textPrimary },
+  italic: { fontStyle: 'italic' },
+  // La flecha de continuar, igual que la del lector
+  arrowBtn: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  arrowBeside: { position: 'absolute', right: -56, top: '50%', marginTop: -20 },
+  arrowBelow: { alignSelf: 'flex-end', marginTop: 10 },
 });
