@@ -110,11 +110,18 @@ export function pageMediaUrls(page: any): string[] {
   return urls.filter((u): u is string => typeof u === 'string' && !!u);
 }
 
+// Archivos propios de un capítulo: su ilustración y la música de su transición
+export function chapterMediaUrls(chapter: any): string[] {
+  if (!chapter) return [];
+  return [chapter.coverUrl, chapter.introMusicUrl].filter((u): u is string => typeof u === 'string' && !!u);
+}
+
 // Todos los archivos que usan las páginas de la historia (menos las indicadas)
 async function mediaInUse(storyId: string, exceptPageIds: string[] = []): Promise<Set<string>> {
   const used = new Set<string>();
   const chapters = await getDocs(collection(db, 'stories', storyId, 'chapters'));
   for (const ch of chapters.docs) {
+    chapterMediaUrls(ch.data()).forEach(u => used.add(u));
     const pages = await getDocs(collection(db, 'stories', storyId, 'chapters', ch.id, 'pages'));
     pages.docs.forEach(p => {
       if (!exceptPageIds.includes(p.id)) pageMediaUrls(p.data()).forEach(u => used.add(u));
@@ -164,6 +171,11 @@ export async function duplicatePage(storyId: string, chapterId: string, pageId: 
 export async function deleteChapterWithCascade(storyId: string, chapterId: string, cleanMedia = true) {
   const pagesSnap = await getDocs(collection(db, 'stories', storyId, 'chapters', chapterId, 'pages'));
   const media = pagesSnap.docs.flatMap(pg => pageMediaUrls(pg.data()));
+  if (cleanMedia) {
+    try {
+      media.push(...chapterMediaUrls((await getDoc(doc(db, 'stories', storyId, 'chapters', chapterId))).data()));
+    } catch { /* sin su ilustración: se quedará en el almacenamiento */ }
+  }
   for (const pg of pagesSnap.docs) {
     await deleteDoc(doc(db, 'stories', storyId, 'chapters', chapterId, 'pages', pg.id));
   }
@@ -200,6 +212,7 @@ export async function deleteStoryWithCascade(storyId: string, deletedBy: Deleted
   const media: string[] = [];
   const chaptersSnap = await getDocs(collection(db, 'stories', storyId, 'chapters'));
   for (const ch of chaptersSnap.docs) {
+    media.push(...chapterMediaUrls(ch.data()));
     const pagesSnap = await getDocs(collection(db, 'stories', storyId, 'chapters', ch.id, 'pages'));
     pagesSnap.docs.forEach(pg => media.push(...pageMediaUrls(pg.data())));
   }

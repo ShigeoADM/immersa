@@ -72,6 +72,8 @@ export default function MediaManagerScreen() {
       rememberMediaNames(savedNames);
       const chapters = sortChapters(chaptersSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
       await Promise.all(chapters.map(async (ch, ci) => {
+        add(ch.coverUrl, 'image', `Cap. ${ci + 1} · ilustración`);
+        add(ch.introMusicUrl, 'music', `Cap. ${ci + 1} · transición`);
         const pages = await getDocs(query(
           collection(db, 'stories', storyId, 'chapters', ch.id, 'pages'), orderBy('order', 'asc'),
         ));

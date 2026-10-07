@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppAlert } from '@/components/app-dialog';
+import { UPLOAD_NOTICE } from '@/constants/legal';
 
 // Aviso sobre derechos de autor: sale una sola vez, la primera vez que alguien va a subir
 // una imagen o un audio desde este dispositivo.
@@ -14,10 +15,7 @@ export function withUploadNotice(upload: () => void) {
   if (seen) { upload(); return; }
   AppAlert.alert(
     'Antes de subir archivos',
-    'Puedes subir las imágenes, la música y los sonidos que quieras, siempre que no sean ilegales.\n\n'
-    + 'Si usas material de otra persona y quien tiene sus derechos nos pide retirarlo, tendremos que '
-    + 'quitarlo de tu historia. Te avisaremos antes para que puedas cambiarlo.\n\n'
-    + 'Lo más seguro es usar material propio o con licencia libre, y nombrar a sus autores en los créditos.',
+    UPLOAD_NOTICE.join('\n\n'),
     [
       { text: 'Cancelar', style: 'cancel' },
       {

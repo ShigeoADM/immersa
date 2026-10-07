@@ -356,6 +356,11 @@ export default function SettingsScreen() {
             <Text style={styles.legalLink}>Política de privacidad</Text>
           </TouchableOpacity>
         </View>
+        <View style={[styles.legalRow, { marginTop: 10 }]}>
+          <TouchableOpacity onPress={() => router.push('/auth/legal?doc=uploads' as Href)} hitSlop={8}>
+            <Text style={styles.legalLink}>Imágenes, música y derechos de autor</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* ── Eliminar cuenta ── */}
         <TouchableOpacity

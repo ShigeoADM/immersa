@@ -26,6 +26,7 @@ import {
   countWords, duplicatePage, formatReadingStats, deleteUnusedMedia, pageMediaUrls, migrateChapterRefsToIds, saveOrder,
 } from '@/services/stories';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
+import { ChapterCoverSettings } from '@/components/chapter-cover-settings';
 
 function confirmAction(title: string, message: string, confirmText: string, onConfirm: () => void) {
   if (Platform.OS === 'web') {
@@ -330,6 +331,9 @@ export default function ChapterEditorModernoScreen() {
         </View>
       </View>
       <View style={styles.divider} />
+
+      {/* Ilustración del capítulo y transición al empezarlo */}
+      <ChapterCoverSettings storyId={storyId as string} chapterId={chapterId as string} />
 
       {/* Contador + modo ordenar */}
       {pages.length > 0 && (

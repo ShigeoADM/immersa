@@ -11,7 +11,7 @@ import { LEGAL_DOCS, LEGAL_UPDATED_AT, type LegalDoc } from '@/constants/legal';
 export default function LegalScreen() {
   const router = useRouter();
   const { doc } = useLocalSearchParams<{ doc?: string }>();
-  const key: LegalDoc = doc === 'privacy' ? 'privacy' : 'terms';
+  const key: LegalDoc = doc === 'privacy' || doc === 'uploads' ? doc : 'terms';
   const { title, sections } = LEGAL_DOCS[key];
 
   return (

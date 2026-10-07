@@ -21,7 +21,15 @@ const CONTACT = LEGAL_CONTACT_EMAIL
   ? `escribiendo a ${LEGAL_CONTACT_EMAIL}`
   : 'a través de los datos de contacto que figuran en la ficha de la app en la tienda';
 
-export type LegalDoc = 'terms' | 'privacy';
+export type LegalDoc = 'terms' | 'privacy' | 'uploads';
+
+// Aviso sobre los archivos que se suben. Sale la primera vez que alguien va a subir una
+// imagen o un audio (components/upload-notice.ts) y se puede releer desde Ajustes.
+export const UPLOAD_NOTICE = [
+  'Puedes subir las imágenes, la música y los sonidos que quieras, siempre que no sean ilegales.',
+  'Si usas material de otra persona y quien tiene sus derechos nos pide retirarlo, tendremos que quitarlo de tu historia. Te avisaremos antes para que puedas cambiarlo.',
+  'Lo más seguro es usar material propio o con licencia libre, y nombrar a sus autores en los créditos.',
+];
 export type LegalSection = { title: string; body: string };
 
 export const LEGAL_DOCS: Record<LegalDoc, { title: string; sections: LegalSection[] }> = {
@@ -62,6 +70,14 @@ Esto se refiere al texto de la historia. Las imágenes (portadas, fondos y fotos
         title: '8. Cambios en estos términos',
         body: `Podemos actualizar estos términos. Si el cambio es importante, se avisará dentro de la app. Seguir usando la app después del cambio supone aceptarlo. Para cualquier duda puedes contactar ${CONTACT}.`,
       },
+    ],
+  },
+  uploads: {
+    title: 'Imágenes, música y derechos de autor',
+    sections: [
+      { title: 'Qué puedes subir', body: UPLOAD_NOTICE[0] },
+      { title: 'Si alguien reclama', body: `${UPLOAD_NOTICE[1]} Si eres titular de los derechos de algo publicado en Immersa y quieres que se retire, puedes pedirlo ${CONTACT} o con el botón de denunciar de la historia.` },
+      { title: 'Nuestra recomendación', body: `${UPLOAD_NOTICE[2]} Cada historia tiene un apartado de créditos para ello, en sus detalles.` },
     ],
   },
   privacy: {

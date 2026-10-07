@@ -64,6 +64,7 @@ interface Chapter {
   createdAt: string;
   wordCount?: number;
   likeCount?: number;
+  coverUrl?: string;  // ilustración del capítulo
   pageIds?: string[]; // ids de sus páginas en orden (lo mantiene el editor de capítulo)
 }
 
@@ -107,6 +108,8 @@ export default function StoryDetailScreen() {
     return () => { doc.title = 'Immersa — Lee y escribe novelas interactivas'; };
   }, [story?.title]);
   const [chapters, setChapters]       = useState<Chapter[]>([]);
+  // Ilustración de capítulo abierta a pantalla completa
+  const [viewImage, setViewImage]     = useState<string | null>(null);
   const [loading, setLoading]         = useState(true);
   const [isInterested, setIsInterested]   = useState(false);
   const [bookmarkLoading, setBookmarkLoading] = useState(false);
@@ -552,9 +555,19 @@ export default function StoryDetailScreen() {
                   activeOpacity={0.8}
                   onPress={() => router.push(readerUrl({ chapterId: ch.id }))}
                 >
-                  <View style={[styles.chapterNum, { borderColor: fmtColor + '50', backgroundColor: fmtColor + '15' }]}>
-                    <Text style={[styles.chapterNumText, { color: fmtColor }]}>{i + 1}</Text>
-                  </View>
+                  {ch.coverUrl ? (
+                    // Ilustración del capítulo: tocándola se ve entera
+                    <TouchableOpacity onPress={() => setViewImage(ch.coverUrl!)} activeOpacity={0.8}>
+                      <Image source={{ uri: ch.coverUrl }} style={[styles.chapterThumb, { borderColor: fmtColor + '50' }]} contentFit="cover" />
+                      <View style={[styles.chapterThumbNum, { backgroundColor: fmtColor }]}>
+                        <Text style={styles.chapterThumbNumText}>{i + 1}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={[styles.chapterNum, { borderColor: fmtColor + '50', backgroundColor: fmtColor + '15' }]}>
+                      <Text style={[styles.chapterNumText, { color: fmtColor }]}>{i + 1}</Text>
+                    </View>
+                  )}
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.chapterTitle, themed.text]} numberOfLines={1}>{ch.title}</Text>
                     {ch.wordCount || ch.likeCount ? (
@@ -659,6 +672,15 @@ export default function StoryDetailScreen() {
           </TouchableOpacity>
         </SafeAreaView>
       )}
+      {/* Ilustración de un capítulo, a pantalla completa (se cierra tocando) */}
+      <Modal visible={!!viewImage} transparent animationType="fade" onRequestClose={() => setViewImage(null)}>
+        <TouchableOpacity style={styles.imageViewer} activeOpacity={1} onPress={() => setViewImage(null)}>
+          {viewImage && <Image source={{ uri: viewImage }} style={styles.imageViewerImg} contentFit="contain" />}
+          <View style={styles.imageViewerClose}>
+            <MaterialIcons name="close" size={20} color="#fff" />
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -732,6 +754,18 @@ const styles = StyleSheet.create({
   chapterRow:     { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.border },
   chapterNum:     { width: 30, height: 30, borderRadius: 4, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   chapterNumText: { fontSize: 12, fontWeight: '700' },
+  chapterThumb:   { width: 72, height: 46, borderRadius: 5, borderWidth: 1, backgroundColor: '#000' },
+  chapterThumbNum: {
+    position: 'absolute', left: -5, top: -5, minWidth: 18, height: 18, borderRadius: 9,
+    paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center',
+  },
+  chapterThumbNumText: { fontSize: 10, fontWeight: '800', color: '#000' },
+  imageViewer:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)', alignItems: 'center', justifyContent: 'center' },
+  imageViewerImg: { width: '100%', height: '100%' },
+  imageViewerClose: {
+    position: 'absolute', top: 18, right: 18, width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center',
+  },
   chapterTitle:   { flex: 1, fontSize: 15, color: Colors.textPrimary, fontWeight: '500' },
 
   // Footer

@@ -659,7 +659,17 @@ export default function PageModernoReaderScreen() {
   // Sparkle: posición y datos del enlace pulsado
   const [sparkle, setSparkle] = useState<{ x: number; y: number; color: string; link: PageLink } | null>(null);
   // Siguiente capítulo (null si no existe o no está publicado — excepto para el autor)
-  const [nextChapter, setNextChapter] = useState<{ id: string; title: string } | null>(null);
+  const [nextChapter, setNextChapter] = useState<{ id: string; title: string; introImage?: string } | null>(null);
+  // Transición de capítulo: su ilustración a pantalla completa antes de la primera página.
+  // Mientras se ve no suena la música de las páginas ni corren sus efectos.
+  const [intro, setIntro] = useState<{
+    image: string; title: string; number: number; musicUrl?: string; volume: number;
+  } | null>(null);
+  const introOpacity = useRef(new Animated.Value(0)).current;
+  const afterIntroVeil = useRef(new Animated.Value(0)).current; // negro que se retira al entrar en la página
+  const introSoundRef = useRef<Audio.Sound | null>(null);
+  const introLeavingRef = useRef(false);
+  const introDismissRef = useRef<(() => void) | null>(null);
   const [isAuthor, setIsAuthor] = useState(false);
   // Me gusta del capítulo
   const [chapterLiked, setChapterLiked]         = useState(false);
@@ -849,6 +859,23 @@ export default function PageModernoReaderScreen() {
           .catch(e => console.error('Error cargando comentarios:', e));
         getStaffRoles().then(setStaffRoles)
           .catch(e => console.error('Error cargando el equipo:', e));
+        // Capítulo con transición (su ilustración a pantalla completa): empieza de cero,
+        // sin heredar la música de capítulos anteriores. La que viniera sonando se apaga.
+        const chapterData = sortedChapters[currentIdx];
+        if (chapterData?.coverUrl && chapterData?.coverIntro === true) {
+          baseResolvedRef.current = true;
+          setBaseMusic(null);
+          // La ilustración se enseña al empezar el capítulo por el principio
+          if (!pageIdParam && Number(pageIndexParam ?? 0) === 0) {
+            setIntro({
+              image: chapterData.coverUrl,
+              title: chapterData.title ?? '',
+              number: Math.max(0, publishedIdx !== -1 ? publishedIdx : currentIdx) + 1,
+              musicUrl: chapterData.introMusicUrl || undefined,
+              volume: musicPlaybackVolume(chapterData.introMusicVolume),
+            });
+          }
+        }
         // Música heredada de capítulos anteriores. Si se llegó desde otro capítulo dentro
         // del lector ya se sabe (la traía sonando). Si no (se abrió este capítulo desde
         // la ficha), se busca la última música definida en los capítulos anteriores.
@@ -886,7 +913,12 @@ export default function PageModernoReaderScreen() {
         }
         if (currentIdx !== -1) {
           const next = sortedChapters.slice(currentIdx + 1).find(c => isStoryAuthor || c.published === true);
-          if (next) setNextChapter({ id: next.id, title: next.title ?? 'Siguiente capítulo' });
+          if (next) {
+            setNextChapter({
+              id: next.id, title: next.title ?? 'Siguiente capítulo',
+              introImage: next.coverUrl && next.coverIntro === true ? next.coverUrl : undefined,
+            });
+          }
         }
       } catch (e) {
         console.error('Error cargando páginas:', e);
@@ -1198,6 +1230,7 @@ export default function PageModernoReaderScreen() {
   // define música. Si la página actual pone una pista que empieza en un párrafo
   // posterior, hasta llegar a él vale lo de antes (la música anterior) o el silencio.
   const effectiveMusic = useMemo(() => {
+    if (intro) return null; // transición de capítulo: la música de las páginas espera
     const here = pages[current];
     let chain = inheritChain;
     if (here && typeof here.musicUrl === 'string' && here.musicUrl
@@ -1212,7 +1245,7 @@ export default function PageModernoReaderScreen() {
     return source.musicUrl
       ? { url: source.musicUrl, volume: musicPlaybackVolume(source.musicVolume) }
       : null;
-  }, [pages, current, inheritChain, paraIndex, baseMusic]);
+  }, [pages, current, inheritChain, paraIndex, baseMusic, intro]);
 
   // ── Silencio momentáneo ───────────────────────────────────────────────────
   // Entre los párrafos que indique la página, la música baja hasta callarse sin
@@ -1280,6 +1313,7 @@ export default function PageModernoReaderScreen() {
     };
   }, [current, pages]);
   useEffect(() => {
+    if (intro) return; // transición de capítulo: los efectos suenan al entrar en la página
     const cues = pageSfxCues(pages[current]).filter(c => c.paragraph - 1 === paraIndex);
     if (cues.length === 0) return;
     let cancelled = false;
@@ -1295,7 +1329,45 @@ export default function PageModernoReaderScreen() {
         .catch(e => console.error('Error reproduciendo efecto de sonido:', e));
     });
     return () => { cancelled = true; };
-  }, [current, pages, paraIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [current, pages, paraIndex, !!intro]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Transición de capítulo ────────────────────────────────────────────────
+  // Aparece con un fundido; si tiene pista, suena una vez. Al tocar, se funde a negro
+  // y entra la primera página, con la pista apagándose.
+  useEffect(() => {
+    if (!intro) return;
+    introLeavingRef.current = false;
+    introOpacity.setValue(0);
+    Animated.timing(introOpacity, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+    let cancelled = false;
+    if (intro.musicUrl) {
+      createSound(intro.musicUrl, false).then(sound => {
+        if (cancelled || introLeavingRef.current) { sound.unloadAsync().catch(() => {}); return; }
+        introSoundRef.current = sound;
+        if (!isMutedRef.current) sound.setStatusAsync({ shouldPlay: true, positionMillis: 0, volume: intro.volume }).catch(() => {});
+      }).catch(e => console.error('Error con la música de la transición:', e));
+    }
+    return () => {
+      cancelled = true;
+      // Si se sale del lector con la transición a medias
+      const s = introSoundRef.current;
+      introSoundRef.current = null;
+      s?.unloadAsync().catch(() => {});
+    };
+  }, [intro?.image]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dismissIntro = () => {
+    if (!intro || introLeavingRef.current) return;
+    introLeavingRef.current = true;
+    const sound = introSoundRef.current;
+    introSoundRef.current = null;
+    if (sound) fadeVolume(sound, isMutedRef.current ? 0 : intro.volume, 0, 700, () => { sound.unloadAsync().catch(() => {}); });
+    Animated.timing(introOpacity, { toValue: 0, duration: 450, useNativeDriver: true }).start(() => {
+      afterIntroVeil.setValue(1);
+      setIntro(null);
+      Animated.timing(afterIntroVeil, { toValue: 0, duration: 500, useNativeDriver: true }).start();
+    });
+  };
+  introDismissRef.current = intro ? dismissIntro : null;
 
   // ── Precarga de audio: página actual y siguiente; se libera el resto ─────
   useEffect(() => {
@@ -1339,6 +1411,7 @@ export default function PageModernoReaderScreen() {
     if (pages.length === 0 || current < pages.length - 2) return;
     nextChapterWarmedRef.current = true;
     const nextId = nextChapter.id;
+    if (nextChapter.introImage) Image.prefetch(nextChapter.introImage).catch(() => {});
     getDocs(query(
       collection(db, 'stories', storyId as string, 'chapters', nextId, 'pages'),
       orderBy('order', 'asc'), limit(1),
@@ -1346,7 +1419,8 @@ export default function PageModernoReaderScreen() {
       const first = snap.docs[0]?.data() as Omit<Page, 'id'> | undefined;
       if (!first) return;
       if (first.backgroundUrl) Image.prefetch(first.backgroundUrl).catch(() => {});
-      if (first.musicUrl) {
+      // Si el capítulo abre con su ilustración, su música no empieza hasta pasarla
+      if (first.musicUrl && !nextChapter.introImage) {
         chapterStartHint = { chapterId: nextId, musicUrl: first.musicUrl, musicVolume: first.musicVolume };
         downloadAudio(first.musicUrl).catch(() => {});
       }
@@ -1870,6 +1944,11 @@ export default function PageModernoReaderScreen() {
     const win = globalThis as any;
     const onKey = (e: any) => {
       const tag = e.target?.tagName;
+      // Transición de capítulo: cualquier tecla de avanzar la pasa; las demás no hacen nada
+      if (introDismissRef.current) {
+        if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') { e.preventDefault(); introDismissRef.current(); }
+        return;
+      }
       if (tag === 'INPUT' || tag === 'TEXTAREA' || keyActionsRef.current.blocked) return;
       if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') {
         e.preventDefault();
@@ -1887,7 +1966,7 @@ export default function PageModernoReaderScreen() {
     // Rueda del ratón: un paso por gesto (las ruedas mandan muchos eventos seguidos)
     let lastWheel = 0;
     const onWheel = (e: any) => {
-      if (keyActionsRef.current.blocked || Math.abs(e.deltaY) < 4) return;
+      if (introDismissRef.current || keyActionsRef.current.blocked || Math.abs(e.deltaY) < 4) return;
       const now = Date.now();
       if (now - lastWheel < 220) return;
       lastWheel = now;
@@ -2097,6 +2176,36 @@ export default function PageModernoReaderScreen() {
       <View style={styles.container}>
         <StatusBar hidden />
         <ActivityIndicator color={accentColor} size="large" />
+      </View>
+    );
+  }
+
+  // Transición de capítulo: la ilustración a pantalla completa, con el título
+  if (intro) {
+    return (
+      <View style={styles.container}>
+        <StatusBar hidden />
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: introOpacity }]}>
+          <TouchableOpacity
+            style={[StyleSheet.absoluteFill, Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : null]}
+            activeOpacity={1}
+            onPress={dismissIntro}
+          >
+            {/* La misma imagen, desenfocada, rellena lo que la ilustración no cubra */}
+            <Image source={{ uri: intro.image }} style={{ ...StyleSheet.absoluteFillObject, opacity: 0.4 }} resizeMode="cover" blurRadius={30} />
+            <Image source={{ uri: intro.image }} style={{ ...StyleSheet.absoluteFillObject }} resizeMode="contain" />
+            <View style={styles.introCaption}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.introNumber, { color: accentColor }]}>CAPÍTULO {intro.number}</Text>
+                <Text style={styles.introTitle} numberOfLines={2}>{intro.title}</Text>
+              </View>
+              <Text style={styles.introHint}>Toca para empezar</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.introClose} onPress={() => router.back()} activeOpacity={0.75}>
+            <MaterialIcons name="close" size={18} color="rgba(255,255,255,0.85)" />
+          </TouchableOpacity>
+        </Animated.View>
       </View>
     );
   }
@@ -2452,6 +2561,12 @@ export default function PageModernoReaderScreen() {
         </TouchableOpacity>
       )}
 
+      {/* Tras la transición de capítulo: la primera página entra desde negro */}
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: afterIntroVeil, zIndex: 50 }]}
+      />
+
       {/* ── Comentarios de la página ── */}
       <Modal
         visible={showComments}
@@ -2553,6 +2668,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  introCaption: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'flex-end', gap: 16,
+    paddingHorizontal: 28, paddingTop: 22, paddingBottom: 22, backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  introNumber: { fontSize: 11, fontWeight: '800', letterSpacing: 2 },
+  introTitle: { fontSize: 22, fontWeight: '700', color: '#fff', marginTop: 4 },
+  introHint: { fontSize: 12, color: 'rgba(255,255,255,0.65)', marginBottom: 4 },
+  introClose: {
+    position: 'absolute', top: 16, left: 16, width: 34, height: 34, borderRadius: 17,
+    backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center',
   },
   mainArea: {
     flex: 1,
