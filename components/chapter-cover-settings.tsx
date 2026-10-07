@@ -407,6 +407,7 @@ function IntroStyleEditor({ image, value, onChange, number, title }: {
   const pan = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
+    onPanResponderTerminationRequest: () => false, // que la lista no se lleve el arrastre
     onPanResponderGrant: () => { startRef.current = { x: liveRef.current.x, y: liveRef.current.y }; },
     onPanResponderMove: (_, g) => {
       const box = boxRef.current;

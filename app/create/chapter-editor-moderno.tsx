@@ -332,9 +332,6 @@ export default function ChapterEditorModernoScreen() {
       </View>
       <View style={styles.divider} />
 
-      {/* Ilustración del capítulo y transición al empezarlo */}
-      <ChapterCoverSettings storyId={storyId as string} chapterId={chapterId as string} />
-
       {/* Contador + modo ordenar */}
       {pages.length > 0 && (
         <View style={styles.listToolbar}>
@@ -357,6 +354,10 @@ export default function ChapterEditorModernoScreen() {
       )}
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        {/* Ilustración del capítulo y transición al empezarlo (se desplaza con la lista) */}
+        <View style={{ marginHorizontal: -20 }}>
+          <ChapterCoverSettings storyId={storyId as string} chapterId={chapterId as string} />
+        </View>
         {loadingPages ? (
           <View style={styles.emptyState}>
             <ActivityIndicator color={Colors.emerald} />
