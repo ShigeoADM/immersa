@@ -23,6 +23,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { deleteStoryWithCascade, importStory } from '@/services/stories';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { tutorialZone } from '@/components/tutorial';
+import { BACKUP_EXTENSION, decodeBackup } from '@/services/backup-file';
 
 const FORMATS = [
   {
@@ -68,20 +69,25 @@ export default function WriteScreen() {
     router.push(`/create/moderno-details?format=${format}`);
   };
 
-  // Importar una copia de seguridad (el .json de "Exportar"): crea una historia nueva
+  // Importar una copia de seguridad (el .immersa de "Exportar", o un .json antiguo): crea
+  // una historia nueva
   const [importing, setImporting] = useState(false);
   const handleImport = async () => {
     if (importing || !user) return;
     if (suspended) { startStory(''); return; }
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: 'application/json', copyToCacheDirectory: true });
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [`.${BACKUP_EXTENSION}`, 'application/json'], copyToCacheDirectory: true,
+      });
       if (result.canceled || !result.assets[0]) return;
       setImporting(true);
       let data: any;
       try {
-        data = JSON.parse(await (await fetch(result.assets[0].uri)).text());
-      } catch {
-        throw new Error('Ese archivo no se puede leer. Tiene que ser el .json que descarga "Exportar".');
+        data = await decodeBackup(await (await fetch(result.assets[0].uri)).arrayBuffer());
+      } catch (e: any) {
+        // Los avisos propios (navegador antiguo, copia más nueva) se enseñan tal cual
+        if (e instanceof Error && /navegador|versión/.test(e.message)) throw e;
+        throw new Error('Ese archivo no se puede leer. Tiene que ser el .immersa que descarga "Exportar".');
       }
       const created = await importStory(data, user.uid);
       router.push(`/create/editor-moderno?storyId=${created.id}&title=${encodeURIComponent(created.title)}&format=${created.format}`);
@@ -97,7 +103,7 @@ export default function WriteScreen() {
         ? <ActivityIndicator size="small" color={Colors.textMuted} />
         : <MaterialIcons name="file-upload" size={16} color={Colors.textMuted} />}
       <Text style={styles.importLinkText}>
-        {importing ? 'Importando…' : 'Importar una copia de seguridad (.json)'}
+        {importing ? 'Importando…' : 'Importar una copia de seguridad (.immersa)'}
       </Text>
     </TouchableOpacity>
   );

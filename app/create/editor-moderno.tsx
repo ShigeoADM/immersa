@@ -42,6 +42,7 @@ import {
 } from '@/services/stories';
 import { type StoryStats, getStoryStats } from '@/services/social';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
+import { BACKUP_EXTENSION, encodeBackup } from '@/services/backup-file';
 
 interface Chapter {
   id: string;
@@ -133,7 +134,7 @@ export default function EditorModernoScreen() {
   };
 
   // ── Exportar (copia de seguridad) ─────────────────────────────────────────
-  // Descarga un archivo .json con todo el texto y la configuración de la historia:
+  // Descarga un archivo .immersa con todo el texto y la configuración de la historia:
   // sus datos, capítulos y páginas. Las imágenes y audios van como enlaces.
   const [exporting, setExporting] = useState(false);
   const handleExport = async () => {
@@ -155,10 +156,10 @@ export default function EditorModernoScreen() {
         chapters: exported,
       };
       const g = globalThis as any;
-      const href = g.URL.createObjectURL(new g.Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const href = g.URL.createObjectURL(new g.Blob([await encodeBackup(data)], { type: 'application/octet-stream' }));
       const a = g.document.createElement('a');
       a.href = href;
-      a.download = `${storyTitle.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'historia'} - Immersa ${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `${storyTitle.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'historia'} - Immersa ${new Date().toISOString().slice(0, 10)}.${BACKUP_EXTENSION}`;
       g.document.body.appendChild(a);
       a.click();
       a.remove();
