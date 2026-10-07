@@ -21,6 +21,7 @@ import { Colors } from '@/constants/theme';
 import { RoleBadge } from '@/components/role-badge';
 import { getFollowerCount, getFollowingCount, getLikedCount } from '@/services/social';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
+import { DEV_SITE_URL, IS_DEV_SITE, PROD_SITE_URL } from '@/constants/site';
 
 interface UserProfile {
   displayName?: string;
@@ -82,7 +83,7 @@ function StoryCard({ story, onPress }: { story: StoryCard; onPress: () => void }
 // ── Pantalla principal ────────────────────────────────────────────────────────
 export default function ProfileScreen() {
   const isDesktop = useIsDesktop();
-  const { user, loading: authLoading, isStaff, staff } = useAuth();
+  const { user, loading: authLoading, isStaff, staff, can } = useAuth();
   const router = useRouter();
 
   const [profile,  setProfile]  = useState<UserProfile>({});
@@ -181,6 +182,16 @@ export default function ProfileScreen() {
           <SafeAreaView edges={['top']} style={isDesktop ? { alignSelf: 'stretch' } : undefined}>
             {/* Engranaje de ajustes */}
             <View style={styles.heroTopBar}>
+              {/* Web de desarrollo (solo con ese permiso, y solo en el navegador) */}
+              {Platform.OS === 'web' && can('developer') && (
+                <TouchableOpacity
+                  style={styles.settingsBtn}
+                  activeOpacity={0.7}
+                  onPress={() => { (globalThis as any).open(IS_DEV_SITE ? PROD_SITE_URL : DEV_SITE_URL, '_blank'); }}
+                >
+                  <MaterialIcons name={IS_DEV_SITE ? 'public' : 'science'} size={22} color={Colors.emerald} />
+                </TouchableOpacity>
+              )}
               {isStaff && (
                 <TouchableOpacity
                   style={styles.settingsBtn}

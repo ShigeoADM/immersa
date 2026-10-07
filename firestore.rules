@@ -11,7 +11,8 @@ service cloud.firestore {
     // ── Roles y permisos (misma lógica que constants/permissions.ts) ──────────
     //   users/{uid}.role: 'owner' (dueño, todos los permisos) | 'admin'
     //   users/{uid}.permissions: lista de permisos de un admin
-    //     'deleteStories' | 'announcements' | 'manageAdmins'
+    //     'deleteStories' | 'announcements' | 'manageAdmins' | 'developer'
+    //     ('developer' solo abre la web de desarrollo: no concede nada en estas reglas)
     // El dueño solo se asigna desde la consola de Firebase.
     function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
     // Rol propio; '' si no tiene (o si la cuenta no tiene documento de usuario)

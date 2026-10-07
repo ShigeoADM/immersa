@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "build:web": "expo export --platform web && node scripts/prerender-stories.mjs",
-    "deploy:web": "npm run build:web && npx firebase-tools deploy --only hosting"
+    "deploy:dev": "node scripts/deploy.mjs dev",
+    "deploy:prod": "node scripts/deploy.mjs prod"
   },
   "dependencies": {
     "@expo/ngrok": "^4.1.3",

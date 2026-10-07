@@ -15,6 +15,8 @@ import { NotificationsProvider } from '@/context/NotificationsContext';
 import { AppDialogHost } from '@/components/app-dialog';
 import { WebTopBar } from '@/components/web-top-bar';
 import { WelcomeSplash } from '@/components/welcome-splash';
+import { DevSiteOverlay } from '@/components/dev-site';
+import { IS_DEV_SITE } from '@/constants/site';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 
 const ImmersaTheme = {
@@ -44,7 +46,8 @@ const WEB_SCROLLBAR_CSS = `
 
 // En la web se puede entrar sin cuenta ("invitado"): explorar, buscar, ver fichas y leer.
 // La app de móvil sigue pidiendo iniciar sesión.
-const GUESTS_ALLOWED = Platform.OS === 'web';
+// (en la web de desarrollo no: ahí hay que entrar con una cuenta de desarrollador)
+const GUESTS_ALLOWED = Platform.OS === 'web' && !IS_DEV_SITE;
 function isPublicRoute(segments: string[]): boolean {
   const [first, second] = segments;
   if (first === undefined) return true;                              // raíz (redirige al inicio)
@@ -170,6 +173,8 @@ function RootNavigator() {
     {loading && <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0A0A0A' }]} />}
     {/* Web: bienvenida animada al abrir la página (en la app no pinta nada) */}
     <WelcomeSplash />
+    {/* Web de desarrollo: etiqueta y cierre del paso a quien no tiene el permiso */}
+    <DevSiteOverlay />
     </NotificationsProvider>
   );
 }

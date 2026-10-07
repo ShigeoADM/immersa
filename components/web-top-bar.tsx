@@ -5,6 +5,7 @@ import { useRouter, type Href } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { DEV_SITE_URL, IS_DEV_SITE, PROD_SITE_URL } from '@/constants/site';
 import { useNotifications } from '@/context/NotificationsContext';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/config/firebase';
@@ -16,7 +17,7 @@ type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
 
 export function WebTopBar() {
   const router = useRouter();
-  const { user, publicName, publicAvatar } = useAuth();
+  const { user, publicName, publicAvatar, can } = useAuth();
   const { unreadCount } = useNotifications();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -30,6 +31,12 @@ export function WebTopBar() {
     { icon: 'menu-book',     label: 'Biblioteca',     onPress: () => router.navigate('/(tabs)/explore' as Href) },
     { icon: 'edit',          label: 'Escribir',       onPress: () => openWrite('new') },
     { icon: 'library-books', label: 'Mis Libros',     onPress: () => openWrite('books') },
+    // Solo con el permiso de desarrollo: abre la web de pruebas en otra pestaña (o, desde
+    // ella, vuelve a la pública)
+    ...(can('developer') ? [IS_DEV_SITE
+      ? { icon: 'public' as IconName, label: 'Web pública', onPress: () => { (globalThis as any).open(PROD_SITE_URL, '_blank'); } }
+      : { icon: 'science' as IconName, label: 'Desarrollo', onPress: () => { (globalThis as any).open(DEV_SITE_URL, '_blank'); } },
+    ] : []),
   ];
 
   // Las dos cierran la sesión actual y llevan a la pantalla de inicio de sesión: la app

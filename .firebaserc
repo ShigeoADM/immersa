@@ -1,5 +1,17 @@
 {
   "projects": {
     "default": "immersa-94cc9"
+  },
+  "targets": {
+    "immersa-94cc9": {
+      "hosting": {
+        "prod": [
+          "immersa"
+        ],
+        "dev": [
+          "immersa-94cc9"
+        ]
+      }
+    }
   }
 }
