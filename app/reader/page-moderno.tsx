@@ -52,6 +52,7 @@ import {
 } from '@/constants/reader-layout';
 import { promptLogin } from '@/components/login-prompt';
 import { PageTransitionOverlay, transitionHalfMs } from '@/components/page-transition';
+import { ChapterIntroView, type IntroStyle } from '@/components/chapter-intro';
 
 // ─── Colores de acento del lector ────────────────────────────────────────────
 const UI_ACCENT_KEY = 'immersa_ui_color';
@@ -663,7 +664,7 @@ export default function PageModernoReaderScreen() {
   // Transición de capítulo: su ilustración a pantalla completa antes de la primera página.
   // Mientras se ve no suena la música de las páginas ni corren sus efectos.
   const [intro, setIntro] = useState<{
-    image: string; title: string; number: number; musicUrl?: string; volume: number;
+    image: string; title: string; number: number; musicUrl?: string; volume: number; style?: IntroStyle;
   } | null>(null);
   const introOpacity = useRef(new Animated.Value(0)).current;
   const afterIntroVeil = useRef(new Animated.Value(0)).current; // negro que se retira al entrar en la página
@@ -873,6 +874,7 @@ export default function PageModernoReaderScreen() {
               number: Math.max(0, publishedIdx !== -1 ? publishedIdx : currentIdx) + 1,
               musicUrl: chapterData.introMusicUrl || undefined,
               volume: musicPlaybackVolume(chapterData.introMusicVolume),
+              style: chapterData.introStyle ?? undefined,
             });
           }
         }
@@ -1337,8 +1339,7 @@ export default function PageModernoReaderScreen() {
   useEffect(() => {
     if (!intro) return;
     introLeavingRef.current = false;
-    introOpacity.setValue(0);
-    Animated.timing(introOpacity, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+    introOpacity.setValue(1);
     let cancelled = false;
     if (intro.musicUrl) {
       createSound(intro.musicUrl, false).then(sound => {
@@ -2191,16 +2192,10 @@ export default function PageModernoReaderScreen() {
             activeOpacity={1}
             onPress={dismissIntro}
           >
-            {/* La misma imagen, desenfocada, rellena lo que la ilustración no cubra */}
-            <Image source={{ uri: intro.image }} style={{ ...StyleSheet.absoluteFillObject, opacity: 0.4 }} resizeMode="cover" blurRadius={30} />
-            <Image source={{ uri: intro.image }} style={{ ...StyleSheet.absoluteFillObject }} resizeMode="contain" />
-            <View style={styles.introCaption}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.introNumber, { color: accentColor }]}>CAPÍTULO {intro.number}</Text>
-                <Text style={styles.introTitle} numberOfLines={2}>{intro.title}</Text>
-              </View>
-              <Text style={styles.introHint}>Toca para empezar</Text>
-            </View>
+            <ChapterIntroView
+              image={intro.image} style={intro.style} number={intro.number} title={intro.title}
+              accent={accentColor} hint="Toca para empezar"
+            />
           </TouchableOpacity>
           <TouchableOpacity style={styles.introClose} onPress={() => router.back()} activeOpacity={0.75}>
             <MaterialIcons name="close" size={18} color="rgba(255,255,255,0.85)" />
@@ -2669,13 +2664,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  introCaption: {
-    position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'flex-end', gap: 16,
-    paddingHorizontal: 28, paddingTop: 22, paddingBottom: 22, backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  introNumber: { fontSize: 11, fontWeight: '800', letterSpacing: 2 },
-  introTitle: { fontSize: 22, fontWeight: '700', color: '#fff', marginTop: 4 },
-  introHint: { fontSize: 12, color: 'rgba(255,255,255,0.65)', marginBottom: 4 },
   introClose: {
     position: 'absolute', top: 16, left: 16, width: 34, height: 34, borderRadius: 17,
     backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center',
