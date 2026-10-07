@@ -15,7 +15,7 @@ import { AppAlert } from '@/components/app-dialog';
 import { DesktopColumn } from '@/components/desktop-column';
 import { pageMediaUrls, sortChapters } from '@/services/stories';
 import {
-  deleteStoredFile, isStoredFile, mediaKey, plainFileName, rememberMediaNames,
+  belongsToStory, deleteStoredFile, mediaKey, plainFileName, rememberMediaNames,
 } from '@/services/media';
 import { pageSfxCues } from '@/constants/reader-layout';
 
@@ -31,7 +31,7 @@ type MediaFile = {
   url: string;
   kind: Kind;
   uses: string[];     // dónde se usa: "Cap. 1 · pág. 3"…
-  stored: boolean;    // subido a nuestro almacenamiento (los enlaces externos no se borran)
+  stored: boolean;    // subido a las carpetas de esta historia (lo demás no se borra desde aquí)
 };
 
 const KIND_LABEL: Record<Kind, string> = { image: 'Imágenes', music: 'Música', sfx: 'Efectos de sonido' };
@@ -57,7 +57,7 @@ export default function MediaManagerScreen() {
       const add = (url: string | undefined | null, kind: Kind, where: string) => {
         if (!url) return;
         const key = mediaKey(url);
-        const f = byKey.get(key) ?? { key, url, kind, uses: [], stored: isStoredFile(url) };
+        const f = byKey.get(key) ?? { key, url, kind, uses: [], stored: belongsToStory(url, storyId) };
         if (!f.uses.includes(where)) f.uses.push(where);
         byKey.set(key, f);
       };

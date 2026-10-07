@@ -99,6 +99,13 @@ export default function StoryDetailScreen() {
   useFocusEffect(useCallback(() => { getWebnovelTheme().then(setWnTheme); }, []));
 
   const [story, setStory]             = useState<Story | null>(null);
+  // Web: el título de la pestaña es el de la novela mientras se está en su ficha
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !story?.title) return;
+    const doc = (globalThis as any).document;
+    doc.title = `${story.title} · Immersa`;
+    return () => { doc.title = 'Immersa — Lee y escribe novelas interactivas'; };
+  }, [story?.title]);
   const [chapters, setChapters]       = useState<Chapter[]>([]);
   const [loading, setLoading]         = useState(true);
   const [isInterested, setIsInterested]   = useState(false);

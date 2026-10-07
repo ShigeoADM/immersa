@@ -26,6 +26,7 @@ import { DesktopColumn } from '@/components/desktop-column';
 import { useSaveShortcut } from '@/hooks/use-save-shortcut';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
+import { useLeaveWarning } from '@/hooks/use-leave-warning';
 
 const TITLE_MAX = 80;
 
@@ -59,6 +60,7 @@ export default function ChapterEditorWebnovelScreen() {
   const isDirty = savedSnapshotRef.current !== null && snapshot !== savedSnapshotRef.current;
   const isDirtyRef = useRef(false);
   isDirtyRef.current = isDirty;
+  useLeaveWarning(isDirtyRef); // navegador: avisa al cerrar la pestaña con cambios
   const allowLeaveRef = useRef(false);
   const draftResolvedRef = useRef(false);
   const clearDraft = () => { AsyncStorage.removeItem(draftKey).catch(() => {}); };

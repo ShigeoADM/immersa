@@ -19,7 +19,8 @@ import { db } from '@/config/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { AppAlert } from '@/components/app-dialog';
-import { deleteStoryWithCascade } from '@/services/stories';
+import * as DocumentPicker from 'expo-document-picker';
+import { deleteStoryWithCascade, importStory } from '@/services/stories';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 
 const FORMATS = [
@@ -65,6 +66,40 @@ export default function WriteScreen() {
     }
     router.push(`/create/moderno-details?format=${format}`);
   };
+
+  // Importar una copia de seguridad (el .json de "Exportar"): crea una historia nueva
+  const [importing, setImporting] = useState(false);
+  const handleImport = async () => {
+    if (importing || !user) return;
+    if (suspended) { startStory(''); return; }
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: 'application/json', copyToCacheDirectory: true });
+      if (result.canceled || !result.assets[0]) return;
+      setImporting(true);
+      let data: any;
+      try {
+        data = JSON.parse(await (await fetch(result.assets[0].uri)).text());
+      } catch {
+        throw new Error('Ese archivo no se puede leer. Tiene que ser el .json que descarga "Exportar".');
+      }
+      const created = await importStory(data, user.uid);
+      router.push(`/create/editor-moderno?storyId=${created.id}&title=${encodeURIComponent(created.title)}&format=${created.format}`);
+    } catch (e: any) {
+      AppAlert.alert('No se pudo importar', e?.message ?? 'Inténtalo de nuevo.');
+    } finally {
+      setImporting(false);
+    }
+  };
+  const ImportLink = () => Platform.OS !== 'web' ? null : (
+    <TouchableOpacity style={styles.importLink} onPress={handleImport} disabled={importing} activeOpacity={0.7}>
+      {importing
+        ? <ActivityIndicator size="small" color={Colors.textMuted} />
+        : <MaterialIcons name="file-upload" size={16} color={Colors.textMuted} />}
+      <Text style={styles.importLinkText}>
+        {importing ? 'Importando…' : 'Importar una copia de seguridad (.json)'}
+      </Text>
+    </TouchableOpacity>
+  );
 
   const [stories, setStories]               = useState<Story[]>([]);
   const [loadingStories, setLoadingStories] = useState(true);
@@ -190,6 +225,7 @@ export default function WriteScreen() {
             </Animated.View>
           ))}
         </View>
+        <ImportLink />
       </View>
     );
   }
@@ -265,6 +301,7 @@ export default function WriteScreen() {
               </Animated.View>
             ))}
           </View>
+          <ImportLink />
         </ScrollView>
       )}
     </View>
@@ -272,6 +309,8 @@ export default function WriteScreen() {
 }
 
 const styles = StyleSheet.create({
+  importLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 18 },
+  importLinkText: { fontSize: 13, color: Colors.textMuted, textDecorationLine: 'underline' },
   container:    { flex: 1, backgroundColor: Colors.bg },
   centered:     { flex: 1, alignItems: 'center', justifyContent: 'center' },
   headerWrap: {

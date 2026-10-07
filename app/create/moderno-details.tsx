@@ -23,6 +23,8 @@ import { ADULT_AUDIENCES, ADULT_CONTENT, AUDIENCES, GENRES } from '@/constants/s
 import { useAuth } from '@/context/AuthContext';
 import { DesktopColumn } from '@/components/desktop-column';
 import { uploadImage, deleteStoredFile } from '@/services/media';
+import { coverUsedByAnotherStory } from '@/services/stories';
+import { withUploadNotice } from '@/components/upload-notice';
 
 const LANGUAGES = ['Español', 'English', 'Português', 'Français', 'Deutsch', 'Otro'];
 
@@ -123,7 +125,8 @@ export default function ModernoDetailsScreen() {
   const toggleAdultContent = (key: string) =>
     setAdultContent(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key]);
 
-  const handlePickCover = async () => {
+  const handlePickCover = () => withUploadNotice(pickCover);
+  const pickCover = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       AppAlert.alert('Permiso denegado', 'Necesitamos acceso a tu galería para añadir la portada.');
@@ -178,8 +181,11 @@ export default function ModernoDetailsScreen() {
           updatedAt: new Date().toISOString(),
         });
         // La portada anterior ya no se usa: se borra su archivo
-        if (originalCoverRef.current && originalCoverRef.current !== coverUrl) {
-          deleteStoredFile(originalCoverRef.current);
+        // (salvo que la comparta con otra historia tuya, como una copia importada)
+        const oldCover = originalCoverRef.current;
+        if (oldCover && oldCover !== coverUrl) {
+          coverUsedByAnotherStory(auth.currentUser?.uid, oldCover, storyId as string)
+            .then(shared => { if (!shared) deleteStoredFile(oldCover); });
         }
         router.back();
       } else {

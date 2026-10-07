@@ -109,6 +109,13 @@ export function storagePathOf(urlOrPath: string): string {
   } catch { return urlOrPath; }
 }
 
+// ¿El archivo está en las carpetas de esta historia? Una historia importada desde una
+// copia de seguridad usa archivos que son de la historia original: esos no los puede
+// borrar ella.
+export function belongsToStory(url: string, storyId: string): boolean {
+  return isStoredFile(url) && storagePathOf(url).split('/')[1] === storyId;
+}
+
 // Identificador corto y estable de un archivo: sirve de clave para guardar su nombre en
 // la historia. Sale de la ruta, no de la dirección entera (que lleva un token que puede
 // cambiar), así que vale igual para la dirección de descarga que para la ruta.

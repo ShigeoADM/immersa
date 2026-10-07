@@ -1,9 +1,10 @@
 import {
   collection, deleteDoc, deleteField, doc, getDoc, getDocs, orderBy, query, setDoc, writeBatch,
+  addDoc, where,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
-import { deleteStoredFile, isStoredFile } from '@/services/media';
+import { belongsToStory, deleteStoredFile, isStoredFile } from '@/services/media';
 
 export type DeletedBy = 'author' | 'admin';
 
@@ -126,7 +127,8 @@ async function mediaInUse(storyId: string, exceptPageIds: string[] = []): Promis
 // `exceptPageIds`: páginas que no cuentan (la que se está borrando, por ejemplo).
 // Nunca lanza: si algo falla, el archivo se queda y ya está.
 export async function deleteUnusedMedia(storyId: string, urls: Iterable<string>, exceptPageIds: string[] = []) {
-  const candidates = [...new Set(urls)].filter(isStoredFile);
+  // Solo los de esta historia: los de una copia importada pertenecen a la original
+  const candidates = [...new Set(urls)].filter(u => belongsToStory(u, storyId));
   if (candidates.length === 0) return;
   try {
     const used = await mediaInUse(storyId, exceptPageIds);
@@ -194,14 +196,17 @@ export async function deleteStoryWithCascade(storyId: string, deletedBy: Deleted
   // borrar nada y se eliminan mientras la historia aún existe: las reglas del
   // almacenamiento comprueban quién es su autor. Si la borra moderación no hay permiso
   // sobre los archivos y se quedan.
+  // Los de una copia importada (que son de la historia original) no se tocan.
   const media: string[] = [];
-  if (storySnap.data()?.coverUrl) media.push(storySnap.data()!.coverUrl);
   const chaptersSnap = await getDocs(collection(db, 'stories', storyId, 'chapters'));
   for (const ch of chaptersSnap.docs) {
     const pagesSnap = await getDocs(collection(db, 'stories', storyId, 'chapters', ch.id, 'pages'));
     pagesSnap.docs.forEach(pg => media.push(...pageMediaUrls(pg.data())));
   }
-  await Promise.all([...new Set(media)].filter(isStoredFile).map(deleteStoredFile));
+  const files = [...new Set(media)].filter(u => belongsToStory(u, storyId));
+  const cover = storySnap.data()?.coverUrl;
+  if (isStoredFile(cover) && !(await coverUsedByAnotherStory(storySnap.data()?.uid, cover, storyId))) files.push(cover);
+  await Promise.all(files.map(deleteStoredFile));
 
   for (const ch of chaptersSnap.docs) {
     await deleteChapterWithCascade(storyId, ch.id, false);
@@ -213,4 +218,65 @@ export async function deleteStoryWithCascade(storyId: string, deletedBy: Deleted
     }
   }
   await deleteDoc(doc(db, 'stories', storyId));
+}
+
+// ¿Usa esa portada otra historia del mismo autor? (Pasa con las copias importadas.)
+// Ante la duda responde que sí: es preferible dejar un archivo de más a borrar uno en uso.
+export async function coverUsedByAnotherStory(uid: string | undefined | null, coverUrl: string, exceptStoryId?: string) {
+  if (!uid) return true;
+  try {
+    const snap = await getDocs(query(collection(db, 'stories'), where('uid', '==', uid), where('coverUrl', '==', coverUrl)));
+    return snap.docs.some(d => d.id !== exceptStoryId);
+  } catch {
+    return true;
+  }
+}
+
+// ── Importar una copia de seguridad ──────────────────────────────────────────
+// Crea una historia NUEVA (sin publicar) a partir del archivo que descarga "Exportar".
+// No toca la original. Capítulos y páginas conservan sus identificadores, así que los
+// enlaces entre páginas siguen funcionando. Las imágenes y audios no se copian: la
+// historia nueva apunta a los mismos archivos.
+export async function importStory(data: any, uid: string): Promise<{ id: string; title: string; format: string }> {
+  if (!data || data.app !== 'Immersa' || typeof data.story !== 'object' || !Array.isArray(data.chapters)) {
+    throw new Error('Ese archivo no es una copia de seguridad de Immersa.');
+  }
+  const now = new Date().toISOString();
+  const {
+    id: originalId, likeCount: _l, lastLikedChapter: _c, publishedAt: _p, lastChapterAt: _a, lastChapterTitle: _t,
+    ...story
+  } = data.story;
+  // Si la original sigue existiendo, la copia se distingue por el título
+  let title = String(story.title ?? 'Sin título');
+  try {
+    if (originalId && (await getDoc(doc(db, 'stories', String(originalId)))).exists()) title = `${title} (copia)`;
+  } catch { /* no es nuestra o no se puede leer: se deja el título */ }
+  const format = story.format === 'Webnovel' ? 'Webnovel' : 'Moderno';
+
+  const storyRef = await addDoc(collection(db, 'stories'), {
+    ...story, title, format, uid, published: false, createdAt: story.createdAt ?? now, updatedAt: now,
+  });
+
+  // Primero los capítulos y después sus páginas, en tandas (Firestore admite 500 por tanda)
+  const writes: { path: string[]; data: any }[] = [];
+  const pageWrites: { path: string[]; data: any }[] = [];
+  data.chapters.forEach((ch: any, ci: number) => {
+    if (!ch || typeof ch !== 'object') return;
+    const { id, pages, likeCount: _cl, publishedAt: _cp, ...chapter } = ch;
+    const chapterId = String(id ?? `cap${ci + 1}`);
+    writes.push({ path: ['chapters', chapterId], data: { ...chapter, published: false } });
+    (Array.isArray(pages) ? pages : []).forEach((pg: any, pi: number) => {
+      if (!pg || typeof pg !== 'object') return;
+      const { id: pageId, ...page } = pg;
+      pageWrites.push({ path: ['chapters', chapterId, 'pages', String(pageId ?? `pag${pi + 1}`)], data: page });
+    });
+  });
+  for (const list of [writes, pageWrites]) {
+    for (let i = 0; i < list.length; i += 400) {
+      const batch = writeBatch(db);
+      list.slice(i, i + 400).forEach(w => batch.set(doc(db, 'stories', storyRef.id, ...w.path), w.data));
+      await batch.commit();
+    }
+  }
+  return { id: storyRef.id, title, format };
 }

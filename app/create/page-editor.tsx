@@ -44,6 +44,8 @@ import {
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { deleteUnusedMedia } from '@/services/stories';
 import { useSaveShortcut } from '@/hooks/use-save-shortcut';
+import { useLeaveWarning } from '@/hooks/use-leave-warning';
+import { withUploadNotice } from '@/components/upload-notice';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 type ImageAnchor   = 'top' | 'center' | 'bottom';
@@ -974,7 +976,8 @@ export default function PageEditorScreen() {
     setBgUri(url); setBgUrl(url); setImageUrlInput('');
   };
 
-  const handlePickImage = async () => {
+  const handlePickImage = () => withUploadNotice(pickImage);
+  const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') { AppAlert.alert('Permiso denegado', 'Necesitamos acceso a tu galería.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -1002,7 +1005,8 @@ export default function PageEditorScreen() {
     setMusicMode('play'); setMusicUrlInput('');
   };
 
-  const handlePickAudio = async () => {
+  const handlePickAudio = () => withUploadNotice(pickAudio);
+  const pickAudio = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: 'audio/*', copyToCacheDirectory: true });
       if (!result.canceled && result.assets[0]) {
@@ -1161,7 +1165,8 @@ export default function PageEditorScreen() {
     setSfxUrlInput('');
   };
 
-  const handlePickSfx = async () => {
+  const handlePickSfx = () => withUploadNotice(pickSfx);
+  const pickSfx = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: 'audio/*', copyToCacheDirectory: true });
       if (result.canceled || !result.assets[0]) return;
@@ -1192,6 +1197,7 @@ export default function PageEditorScreen() {
   const isDirty = initialSnapshotRef.current !== null && snapshot !== initialSnapshotRef.current;
   const isDirtyRef = useRef(false);
   isDirtyRef.current = isDirty;
+  useLeaveWarning(isDirtyRef); // navegador: avisa al cerrar la pestaña con cambios
 
   // ── Archivos que dejan de usarse ──────────────────────────────────────────
   // Se apuntan todos los archivos que pasan por esta página mientras se edita (los que
