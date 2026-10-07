@@ -19,6 +19,7 @@ import { Colors } from '@/constants/theme';
 import { AppAlert } from '@/components/app-dialog';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { PasswordInput } from '@/components/password-input';
+import { IS_DEV_SITE } from '@/constants/site';
 
 export default function LoginScreen() {
   const isDesktop = useIsDesktop();
@@ -126,7 +127,7 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
           {/* Web: también se puede explorar y leer sin cuenta */}
-          {Platform.OS === 'web' && (
+          {Platform.OS === 'web' && !IS_DEV_SITE && (
             <TouchableOpacity style={{ alignSelf: 'center', paddingVertical: 6 }} onPress={() => router.replace('/(tabs)')}>
               <Text style={[styles.footerText, { textDecorationLine: 'underline' }]}>Explorar sin cuenta</Text>
             </TouchableOpacity>
