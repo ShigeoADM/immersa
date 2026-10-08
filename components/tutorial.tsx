@@ -322,8 +322,10 @@ function measureTarget(step: Step, winWidth: number): Placement | null {
     }
   }
   if (step.boxAt) {
-    const maxWidth = Math.min(560, light.w);
-    const left = light.x + Math.max(0, (light.w - maxWidth) / 2);
+    // El cuadro tiene su ancho normal aunque la zona sea pequeña (un botón, por ejemplo):
+    // se centra respecto a ella sin salirse de la pantalla
+    const maxWidth = Math.min(light.w >= 560 ? 560 : 440, winWidth - 24);
+    const left = Math.max(12, Math.min(light.x + light.w / 2 - maxWidth / 2, winWidth - 12 - maxWidth));
     return {
       light,
       box: step.boxAt === 'below' ? { left, maxWidth, top: light.y + light.h + 12 } : { left, maxWidth, bottomY: light.y - 12 },
