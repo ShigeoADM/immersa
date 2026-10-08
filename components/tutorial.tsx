@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Audio } from 'expo-av';
 import { Colors } from '@/constants/theme';
 import { TEXT_BOX } from '@/constants/reader-layout';
+import { ts, useLang } from '@/i18n';
 import { router } from 'expo-router';
 import { deleteStoryWithCascade } from '@/services/stories';
 
@@ -354,7 +355,10 @@ export function TutorialOverlay() {
   const current = useSyncExternalStore(subscribe, () => state, () => state);
   const step = current ? STEPS[current.step] : undefined;
   const nagging = !!step?.free && !!current?.nag;
-  const pieces = step?.free ? (nagging ? step.nag : []) : step?.pieces;
+  // Los textos de los pasos estan escritos en español; aqui se pasan al idioma actual
+  const lang = useLang();
+  const rawPieces = step?.free ? (nagging ? step.nag : []) : step?.pieces;
+  const pieces = useMemo(() => rawPieces?.map(piece => ({ ...piece, t: ts(piece.t) })), [rawPieces, lang]);
   const total = pieces ? pieces.reduce((n, p) => n + p.t.length, 0) : 0;
   const win = useWindowDimensions();
 
@@ -684,10 +688,10 @@ export function TutorialOverlay() {
           // (siempre ocupan su sitio, para que el cuadro se abra ya con su altura final)
           <View style={[styles.choices, { opacity: done ? 1 : 0 }]} pointerEvents={done ? 'auto' : 'none'}>
             <TouchableOpacity style={styles.choiceDelete} onPress={deleteStory} disabled={deleting} activeOpacity={0.8}>
-              <Text style={styles.choiceDeleteText}>{deleting ? 'Borrando…' : 'Borrarla'}</Text>
+              <Text style={styles.choiceDeleteText}>{deleting ? ts('Borrando…') : ts('Borrarla')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.choiceKeep} onPress={keepStory} disabled={deleting} activeOpacity={0.85}>
-              <Text style={styles.choiceKeepText}>Continuar con ella</Text>
+              <Text style={styles.choiceKeepText}>{ts('Continuar con ella')}</Text>
             </TouchableOpacity>
           </View>
         )}
