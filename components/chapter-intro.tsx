@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { t } from '@/i18n';
 
 // Transición de capítulo: la ilustración del capítulo a pantalla completa con su rótulo
 // ("Capítulo 3" y el título). El autor decide cómo es todo: qué dice el rótulo, dónde va,
@@ -111,7 +112,7 @@ export function ChapterIntroView({
   const [block, setBlock] = useState({ width: 0, height: 0 });
   const scale = size.width ? Math.min(size.width / 844, size.height / 390) : 0;
 
-  const line1 = c.hide1 ? '' : (c.line1?.trim() || `Capítulo ${number}`);
+  const line1 = c.hide1 ? '' : (c.line1?.trim() || t('reader.chapterN', { n: number }));
   const line2 = c.hide2 ? '' : (c.line2?.trim() || title);
 
   useEffect(ensureIntroFonts, []);

@@ -44,3 +44,6 @@ app-example
 
 # Firebase Hosting
 .firebase/
+
+# Pruebas de música para el tutorial (no forman parte de la web)
+musica-pruebas/

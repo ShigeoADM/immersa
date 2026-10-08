@@ -30,6 +30,7 @@ import { ReportModal } from '@/components/report-modal';
 import type { ReportTarget } from '@/services/reports';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { promptLogin } from '@/components/login-prompt';
+import { useT } from '@/i18n';
 
 type ChapterRef = { id: string; title: string };
 
@@ -37,6 +38,7 @@ type ChapterRef = { id: string; title: string };
 // El tema (oscuro / sepia / claro) lo elige el lector en sus ajustes; el tamaño de
 // letra se cambia aquí mismo. Se recuerda por dónde iba para "Continuar leyendo".
 export default function WebnovelReaderScreen() {
+  const t = useT();
   const isDesktop = useIsDesktop();
   const router = useRouter();
   const { storyId, chapterId, preview } = useLocalSearchParams<{
@@ -134,8 +136,8 @@ export default function WebnovelReaderScreen() {
         if (idx !== -1) {
           setChapterNumber(idx + 1);
           const p = visible[idx - 1], n = visible[idx + 1];
-          setPrevChapter(p ? { id: p.id, title: p.title ?? 'Capítulo anterior' } : null);
-          setNextChapter(n ? { id: n.id, title: n.title ?? 'Siguiente capítulo' } : null);
+          setPrevChapter(p ? { id: p.id, title: p.title ?? t('reader.prevChapter') } : null);
+          setNextChapter(n ? { id: n.id, title: n.title ?? t('reader.nextChapter') } : null);
         }
 
         // Si se vuelve al capítulo donde se dejó la lectura, restaurar la posición
@@ -227,13 +229,13 @@ export default function WebnovelReaderScreen() {
   // ── Comentarios ───────────────────────────────────────────────────────────
   // Invitado: al intentar comentar se le pregunta si quiere iniciar sesión
   const askLoginToComment = () =>
-    promptLogin(() => router.push('/auth/login'), 'Necesitas una cuenta para comentar.');
+    promptLogin(() => router.push('/auth/login'), t('reader.needAccountComment'));
 
   // Me gusta al capítulo (los invitados tienen que iniciar sesión)
   const toggleLike = async () => {
     const me = auth.currentUser;
     if (!me) {
-      promptLogin(() => router.push('/auth/login'), 'Necesitas una cuenta para dar me gusta.');
+      promptLogin(() => router.push('/auth/login'), t('reader.needAccountLike'));
       return;
     }
     if (!storyId || !chapterId || liking) return;
@@ -243,13 +245,13 @@ export default function WebnovelReaderScreen() {
     setLikeCount(c => Math.max(0, c + (next ? 1 : -1)));
     try {
       const s = storyRef.current;
-      await setChapterLike(storyId, chapterId, next, { uid: me.uid, name: publicName || 'Alguien' }, {
+      await setChapterLike(storyId, chapterId, next, { uid: me.uid, name: publicName || t('reader.someone') }, {
         authorUid: s?.uid, title: s?.title, coverUrl: s?.coverUrl ?? null, format: s?.format,
       });
     } catch (e: any) {
       setLiked(!next);
       setLikeCount(c => Math.max(0, c + (next ? -1 : 1)));
-      AppAlert.alert('Error', e?.message ?? 'No se pudo guardar el me gusta.');
+      AppAlert.alert(t('common.error'), e?.message ?? t('reader.likeFailed'));
     } finally {
       setLiking(false);
     }
@@ -261,7 +263,7 @@ export default function WebnovelReaderScreen() {
     if (!me) { askLoginToComment(); return; } // invitado
     if (!text || !storyId || !chapterId || sending) return;
     if (suspended) {
-      AppAlert.alert('Cuenta suspendida', 'Tu cuenta está suspendida: no puedes comentar.');
+      AppAlert.alert(t('write.suspendedTitle'), t('reader.suspendedComment'));
       return;
     }
     setSending(true);
@@ -269,7 +271,7 @@ export default function WebnovelReaderScreen() {
       const created = await addComment(
         storyId,
         {
-          uid: me.uid, userName: publicName || 'Sin nombre', userAvatar: publicAvatar, text,
+          uid: me.uid, userName: publicName || t('reader.noName'), userAvatar: publicAvatar, text,
           chapterId, pageId: '', chapterNumber, pageNumber: 0, // sin página: es del capítulo
         },
         { authorUid: storyRef.current?.uid, title: storyRef.current?.title },
@@ -277,22 +279,22 @@ export default function WebnovelReaderScreen() {
       setComments(prev => [created, ...prev]);
       setCommentText('');
     } catch (e: any) {
-      AppAlert.alert('Error', e?.message ?? 'No se pudo publicar el comentario.');
+      AppAlert.alert(t('common.error'), e?.message ?? t('reader.commentFailed'));
     } finally {
       setSending(false);
     }
   };
 
   const handleDeleteComment = (c: StoryComment) => {
-    AppAlert.alert('Borrar comentario', '¿Seguro que quieres borrar este comentario?', [
-      { text: 'Cancelar', style: 'cancel' },
+    AppAlert.alert(t('story.deleteComment'), t('story.deleteCommentBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Borrar', style: 'destructive',
+        text: t('common.delete'), style: 'destructive',
         onPress: async () => {
           try {
             await deleteComment(storyId, c.id);
             setComments(prev => prev.filter(x => x.id !== c.id));
-          } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo borrar el comentario.'); }
+          } catch (e: any) { AppAlert.alert(t('common.error'), e?.message ?? t('story.deleteCommentFailed')); }
         },
       },
     ]);
@@ -318,7 +320,7 @@ export default function WebnovelReaderScreen() {
           <MaterialIcons name="arrow-back" size={22} color={theme.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.muted }]} numberOfLines={1}>
-          {loading ? '' : `Capítulo ${chapterNumber}`}
+          {loading ? '' : t('reader.chapterN', { n: chapterNumber })}
         </Text>
         <View style={styles.fontControls}>
           <TouchableOpacity
@@ -362,7 +364,7 @@ export default function WebnovelReaderScreen() {
               style={{ fontFamily: WEBNOVEL_FONT, fontSize, lineHeight, color: theme.text }}
             />
           ) : (
-            <Text style={[styles.empty, { color: theme.muted }]}>Este capítulo todavía no tiene texto.</Text>
+            <Text style={[styles.empty, { color: theme.muted }]}>{t('reader.noText')}</Text>
           )}
 
           {/* ── Navegación entre capítulos ── */}
@@ -374,13 +376,13 @@ export default function WebnovelReaderScreen() {
                 activeOpacity={0.8}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.navLabel, { color: theme.muted }]}>Siguiente capítulo</Text>
+                  <Text style={[styles.navLabel, { color: theme.muted }]}>{t('reader.nextChapter')}</Text>
                   <Text style={[styles.navTitle, { color: theme.text }]} numberOfLines={1}>{nextChapter.title}</Text>
                 </View>
                 <MaterialIcons name="chevron-right" size={22} color={theme.text} />
               </TouchableOpacity>
             ) : (
-              <Text style={[styles.endText, { color: theme.muted }]}>— Has llegado al último capítulo publicado —</Text>
+              <Text style={[styles.endText, { color: theme.muted }]}>{t('reader.lastChapter')}</Text>
             )}
             {prevChapter && (
               <TouchableOpacity style={styles.prevBtn} onPress={() => goToChapter(prevChapter.id)} activeOpacity={0.7}>
@@ -400,7 +402,7 @@ export default function WebnovelReaderScreen() {
             >
               <MaterialIcons name={liked ? 'favorite' : 'favorite-border'} size={18} color={liked ? '#FF69B4' : theme.muted} />
               <Text style={[styles.likeBtnText, { color: liked ? '#FF69B4' : theme.text }]}>
-                {liked ? 'Te gusta este capítulo' : 'Me gusta este capítulo'}{likeCount > 0 ? `  ·  ${likeCount}` : ''}
+                {liked ? t('reader.liked') : t('reader.like')}{likeCount > 0 ? `  ·  ${likeCount}` : ''}
               </Text>
             </TouchableOpacity>
           )}
@@ -409,14 +411,14 @@ export default function WebnovelReaderScreen() {
           {!isPreview && (
             <View style={[styles.commentsBlock, { borderTopColor: theme.border }]}>
               <Text style={[styles.commentsTitle, { color: theme.text }]}>
-                Comentarios{visibleComments.length > 0 ? ` · ${visibleComments.length}` : ''}
+                {t('story.comments')}{visibleComments.length > 0 ? ` · ${visibleComments.length}` : ''}
               </Text>
               <View style={styles.commentInputRow}>
                 <TextInput
                   style={[styles.commentInput, { color: theme.text, backgroundColor: theme.bar, borderColor: theme.border }]}
                   value={commentText}
                   onChangeText={setCommentText}
-                  placeholder="Escribe un comentario…"
+                  placeholder={t('reader.commentPlaceholder')}
                   placeholderTextColor={theme.muted}
                   maxLength={COMMENT_MAX_LENGTH}
                   multiline
@@ -440,7 +442,7 @@ export default function WebnovelReaderScreen() {
               </View>
               {visibleComments.length === 0 ? (
                 <Text style={[styles.commentsEmpty, { color: theme.muted }]}>
-                  Nadie ha comentado este capítulo todavía.
+                  {t('reader.noCommentsChapter')}
                 </Text>
               ) : visibleComments.map(c => (
                 <CommentItem

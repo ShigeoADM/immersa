@@ -55,6 +55,7 @@ import {
 import { promptLogin } from '@/components/login-prompt';
 import { PageTransitionOverlay, transitionHalfMs } from '@/components/page-transition';
 import { ChapterIntroView, type IntroStyle } from '@/components/chapter-intro';
+import { t as translate, useT, type TKey } from '@/i18n';
 
 // ─── Colores de acento del lector ────────────────────────────────────────────
 const UI_ACCENT_KEY = 'immersa_ui_color';
@@ -278,7 +279,8 @@ function SparkleOverlay({ x, y, color, onDone }: {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RETRO_FONT = STORY_FONT;
-const END_CHAPTER_SEGMENTS: OutlineSegment[] = [{ text: '— FIN DEL CAPÍTULO —' }];
+// (el texto se pide en cada uso, para que salga en el idioma actual)
+const endChapterSegments = (): OutlineSegment[] => [{ text: translate('reader.endOfChapter') }];
 
 // Lectores montados: al cambiar de capítulo se monta uno nuevo antes de desmontar el anterior
 let mountedReaders = 0;
@@ -673,6 +675,7 @@ export default function PageModernoReaderScreen() {
   const introSoundRef = useRef<Audio.Sound | null>(null);
   const introLeavingRef = useRef(false);
   const introDismissRef = useRef<(() => void) | null>(null);
+  const t = useT();
 
   // ── Web en el móvil: las novelas Moderno se leen en horizontal ────────────
   // La app gira la pantalla sola; una página web no puede (salvo a pantalla completa, y
@@ -936,7 +939,7 @@ export default function PageModernoReaderScreen() {
           const next = sortedChapters.slice(currentIdx + 1).find(c => isStoryAuthor || c.published === true);
           if (next) {
             setNextChapter({
-              id: next.id, title: next.title ?? 'Siguiente capítulo',
+              id: next.id, title: next.title ?? translate('reader.nextChapter'),
               introImage: next.coverUrl && next.coverIntro === true ? next.coverUrl : undefined,
             });
           }
@@ -1722,13 +1725,13 @@ export default function PageModernoReaderScreen() {
     try {
       await setChapterLike(
         storyId as string, chapterId as string, next,
-        { uid: me.uid, name: publicName || 'Alguien' },
+        { uid: me.uid, name: publicName || t('reader.someone') },
         { authorUid: storyMeta.authorUid, title: storyMeta.title },
       );
     } catch (e: any) {
       setChapterLiked(!next);
       setChapterLikeCount(c => Math.max(0, c + (next ? -1 : 1)));
-      AppAlert.alert('Error', e?.message ?? 'No se pudo guardar el me gusta.');
+      AppAlert.alert(t('common.error'), e?.message ?? t('reader.likeFailed'));
     } finally {
       setLikingChapter(false);
     }
@@ -1740,7 +1743,7 @@ export default function PageModernoReaderScreen() {
   const askLoginToComment = () =>
     promptLogin(
       () => { setShowComments(false); router.push('/auth/login'); },
-      'Necesitas una cuenta para comentar.',
+      t('reader.needAccountComment'),
     );
 
   const handleSendComment = async () => {
@@ -1750,7 +1753,7 @@ export default function PageModernoReaderScreen() {
     if (!me) { askLoginToComment(); return; } // invitado
     if (!text || !pg || sendingComment) return;
     if (suspended) {
-      AppAlert.alert('Cuenta suspendida', 'Tu cuenta está suspendida: no puedes comentar.');
+      AppAlert.alert(t('write.suspendedTitle'), t('reader.suspendedComment'));
       return;
     }
     setSendingComment(true);
@@ -1758,7 +1761,7 @@ export default function PageModernoReaderScreen() {
       const created = await addComment(
         storyId as string,
         {
-          uid: me.uid, userName: publicName || 'Sin nombre', userAvatar: publicAvatar, text,
+          uid: me.uid, userName: publicName || t('reader.noName'), userAvatar: publicAvatar, text,
           chapterId: chapterId as string, pageId: pg.id,
           chapterNumber, pageNumber: current + 1,
         },
@@ -1767,22 +1770,22 @@ export default function PageModernoReaderScreen() {
       setChapterComments(prev => [created, ...prev]);
       setCommentText('');
     } catch (e: any) {
-      AppAlert.alert('Error', e?.message ?? 'No se pudo publicar el comentario.');
+      AppAlert.alert(t('common.error'), e?.message ?? t('reader.commentFailed'));
     } finally {
       setSendingComment(false);
     }
   };
 
   const handleDeleteComment = (c: StoryComment) => {
-    AppAlert.alert('Borrar comentario', '¿Seguro que quieres borrar este comentario?', [
-      { text: 'Cancelar', style: 'cancel' },
+    AppAlert.alert(t('story.deleteComment'), t('story.deleteCommentBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Borrar', style: 'destructive',
+        text: t('common.delete'), style: 'destructive',
         onPress: async () => {
           try {
             await deleteComment(storyId as string, c.id);
             setChapterComments(prev => prev.filter(x => x.id !== c.id));
-          } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo borrar el comentario.'); }
+          } catch (e: any) { AppAlert.alert(t('common.error'), e?.message ?? t('story.deleteCommentFailed')); }
         },
       },
     ]);
@@ -2227,11 +2230,11 @@ export default function PageModernoReaderScreen() {
       <View style={[styles.container, styles.rotateScreen]}>
         <StatusBar hidden />
         <MaterialIcons name="screen-rotation" size={44} color={accentColor} />
-        <Text style={styles.rotateTitle}>Gira el móvil</Text>
-        <Text style={styles.rotateText}>Las novelas Moderno se leen en horizontal.</Text>
+        <Text style={styles.rotateTitle}>{t('reader.rotateTitle')}</Text>
+        <Text style={styles.rotateText}>{t('reader.rotateBody')}</Text>
         <TouchableOpacity style={[styles.rotateBtn, { borderColor: accentColor }]} onPress={forceLandscape} activeOpacity={0.8}>
           <MaterialIcons name="fullscreen" size={18} color={accentColor} />
-          <Text style={[styles.rotateBtnText, { color: accentColor }]}>Ponerlo en horizontal</Text>
+          <Text style={[styles.rotateBtnText, { color: accentColor }]}>{t('reader.rotateButton')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.introClose} onPress={() => router.back()} activeOpacity={0.75}>
           <MaterialIcons name="close" size={18} color="rgba(255,255,255,0.85)" />
@@ -2253,7 +2256,7 @@ export default function PageModernoReaderScreen() {
           >
             <ChapterIntroView
               image={intro.image} style={intro.style} number={intro.number} title={intro.title}
-              accent={accentColor} hint="Toca para empezar"
+              accent={accentColor} hint={t('reader.tapToStart')}
             />
           </TouchableOpacity>
           <TouchableOpacity style={styles.introClose} onPress={() => router.back()} activeOpacity={0.75}>
@@ -2306,7 +2309,7 @@ export default function PageModernoReaderScreen() {
         {/* ── Badge "Fin del capítulo" — arriba de la pantalla ── */}
         {isLastPage && (
           <View style={[styles.endChapterBadge, { borderColor: accentColor }]}>
-            <OutlineText inline segments={END_CHAPTER_SEGMENTS} style={endChapterStyle} />
+            <OutlineText inline segments={endChapterSegments()} style={endChapterStyle} />
           </View>
         )}
 
@@ -2346,7 +2349,7 @@ export default function PageModernoReaderScreen() {
                 onComplete={onParagraphComplete}
               />
             ) : (
-              <Text style={styles.emptyText}>No hay texto en esta página.</Text>
+              <Text style={styles.emptyText}>{t('reader.emptyPage')}</Text>
             )}
 
             {/* Flecha retroceder — esquina inferior izquierda del recuadro */}
@@ -2467,7 +2470,7 @@ export default function PageModernoReaderScreen() {
         {/* Panel de ajustes */}
         {showSettings && (
           <View style={styles.settingsPanel}>
-            <Text style={styles.settingsLabel}>Color</Text>
+            <Text style={styles.settingsLabel}>{t('reader.color')}</Text>
             <View style={styles.settingsRow}>
               {UI_COLORS.map(c => (
                 <TouchableOpacity
@@ -2482,7 +2485,7 @@ export default function PageModernoReaderScreen() {
                 />
               ))}
             </View>
-            <Text style={styles.settingsLabel}>Velocidad del texto</Text>
+            <Text style={styles.settingsLabel}>{t('reader.textSpeed')}</Text>
             <View style={styles.settingsRow}>
               {TEXT_SPEED_OPTIONS.map(o => (
                 <TouchableOpacity
@@ -2491,11 +2494,11 @@ export default function PageModernoReaderScreen() {
                   onPress={() => handlePickTextSpeed(o.value)}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.settingsChipText, textSpeed === o.value && { color: accentColor }]}>{o.label}</Text>
+                  <Text style={[styles.settingsChipText, textSpeed === o.value && { color: accentColor }]}>{t(`reader.speed.${o.value}` as TKey)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={styles.settingsLabel}>Tamaño de letra</Text>
+            <Text style={styles.settingsLabel}>{t('reader.textSize')}</Text>
             <View style={styles.settingsRow}>
               {TEXT_SCALE_OPTIONS.map(o => (
                 <TouchableOpacity
@@ -2504,7 +2507,7 @@ export default function PageModernoReaderScreen() {
                   onPress={() => handlePickTextScale(o.value)}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.settingsChipText, textScale === o.value && { color: accentColor }]}>{o.label}</Text>
+                  <Text style={[styles.settingsChipText, textScale === o.value && { color: accentColor }]}>{t(`reader.size.${o.value}` as TKey)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -2641,7 +2644,7 @@ export default function PageModernoReaderScreen() {
           >
             <View style={styles.commentsHeader}>
               <Text style={styles.commentsTitle}>
-                Comentarios · Cap. {chapterNumber} · Pág. {current + 1}
+                {t('reader.commentsAt', { c: chapterNumber, p: current + 1 })}
               </Text>
               <TouchableOpacity onPress={() => setShowComments(false)} hitSlop={8}>
                 <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.8)" />
@@ -2653,7 +2656,7 @@ export default function PageModernoReaderScreen() {
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ paddingHorizontal: 14, flexGrow: 1 }}
               ListEmptyComponent={
-                <Text style={styles.commentsEmpty}>Nadie ha comentado esta página todavía.</Text>
+                <Text style={styles.commentsEmpty}>{t('reader.noCommentsPage')}</Text>
               }
               renderItem={({ item }) => (
                 <CommentItem
@@ -2676,7 +2679,7 @@ export default function PageModernoReaderScreen() {
                 style={styles.commentInput}
                 value={commentText}
                 onChangeText={setCommentText}
-                placeholder="Escribe un comentario…"
+                placeholder={t('reader.commentPlaceholder')}
                 placeholderTextColor="rgba(255,255,255,0.35)"
                 maxLength={COMMENT_MAX_LENGTH}
                 multiline
