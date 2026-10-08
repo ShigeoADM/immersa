@@ -27,6 +27,7 @@ import {
 } from '@/services/stories';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { ChapterCoverSettings } from '@/components/chapter-cover-settings';
+import { tutorialZone } from '@/components/tutorial';
 
 function confirmAction(title: string, message: string, confirmText: string, onConfirm: () => void) {
   if (Platform.OS === 'web') {
@@ -355,7 +356,7 @@ export default function ChapterEditorModernoScreen() {
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         {/* Ilustración del capítulo y transición al empezarlo (se desplaza con la lista) */}
-        <View style={{ marginHorizontal: -20 }}>
+        <View style={{ marginHorizontal: -20 }} nativeID={tutorialZone('chapterCover')}>
           <ChapterCoverSettings storyId={storyId as string} chapterId={chapterId as string} />
         </View>
         {loadingPages ? (
@@ -472,7 +473,7 @@ export default function ChapterEditorModernoScreen() {
             <Text style={styles.publishedNoticeText}>Capítulo publicado — solo puedes editar o borrar páginas existentes</Text>
           </View>
         ) : (
-          <TouchableOpacity style={styles.addPageBtn} activeOpacity={0.85} onPress={openNewPage}>
+          <TouchableOpacity style={styles.addPageBtn} activeOpacity={0.85} onPress={openNewPage} testID={tutorialZone('addPage')}>
             <MaterialIcons name="add" size={20} color="#000" />
             <Text style={styles.addPageText}>Añadir página</Text>
           </TouchableOpacity>

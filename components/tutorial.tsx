@@ -4,6 +4,8 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Audio } from 'expo-av';
 import { Colors } from '@/constants/theme';
 import { TEXT_BOX } from '@/constants/reader-layout';
+import { router } from 'expo-router';
+import { deleteStoryWithCascade } from '@/services/stories';
 
 // Tutorial de Immersa: un recorrido guiado, como el de un juego. La pantalla se oscurece
 // y van apareciendo cuadros de texto que explican cada cosa; la parte de la página de la
@@ -22,7 +24,10 @@ const listeners = new Set<() => void>();
 const setState = (next: TutorialState) => { state = next; listeners.forEach(l => l()); };
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 
-export const startTutorial = () => setState({ step: 0 });
+// La historia de práctica que se crea durante el tutorial (para poder borrarla al final)
+let practiceStoryId: string | null = null;
+
+export const startTutorial = () => { practiceStoryId = null; setState({ step: 0 }); };
 export const stopTutorial = () => setState(null);
 // Solo en el servidor local de desarrollo: poder arrancarlo desde la consola del navegador
 if (__DEV__) (globalThis as any).__startTutorial = (step = 0) => setState({ step });
@@ -33,8 +38,9 @@ if (__DEV__) (globalThis as any).__startTutorial = (step = 0) => setState({ step
 
 // La pantalla avisa de que ha pasado algo ('storyCreated'…). Si el paso libre actual
 // esperaba justo eso, el tutorial sigue.
-export function tutorialEvent(name: string) {
+export function tutorialEvent(name: string, data?: { storyId?: string }) {
   if (!state) return;
+  if (data?.storyId) practiceStoryId = data.storyId;
   const step = STEPS[state.step];
   if (!step?.free || step.until !== name) return;
   if (state.step + 1 < STEPS.length) setState({ step: state.step + 1 });
@@ -68,15 +74,18 @@ type Piece = { t: string; italic?: boolean };
 //     (por ejemplo: quien no tiene libros no ve "Mis libros", ve ya los formatos).
 //   · free: paso libre. No hay cuadro ni oscuridad: se deja usar la pantalla hasta que
 //     esta avise con tutorialEvent(until). Si se intenta salir antes, sale el aviso `nag`.
-//   · boxAt: en zonas sin título, dónde va el cuadro: encima o debajo de la zona.
+//   · boxAt: en zonas sin título, dónde va el cuadro: encima, debajo o al lado de la zona.
 //   · shape 'rect': el botón que hay que pulsar es grande (una tarjeta): se ilumina su
 //     rectángulo en vez de rodearlo con un círculo.
 //   · morph: la luz no se apaga y se vuelve a encender; se encoge desde la zona anterior.
 type Step = {
   pieces: Piece[]; target?: string; sameBox?: boolean; action?: boolean; arrives?: boolean; unless?: string;
-  boxAt?: 'above' | 'below'; shape?: 'rect'; morph?: boolean;
+  boxAt?: 'above' | 'below' | 'side'; shape?: 'rect'; morph?: boolean;
   free?: boolean; until?: string; nag?: Piece[];
+  // Último cuadro: en vez de continuar, se elige entre quedarse la historia de práctica o borrarla
+  choice?: boolean;
 };
+const T = (t: string): Piece[] => [{ t }];
 const STEPS: Step[] = [
   {
     pieces: [
@@ -132,6 +141,50 @@ const STEPS: Step[] = [
     free: true, until: 'storyCreated', pieces: [],
     nag: [{ t: 'Rellena lo básico de la ficha, por favor. No tiene por qué ir en serio: esto es solo una prueba. Si quieres salir del tutorial, pulsa la tecla Escape.' }],
   },
+
+  // ── Pantalla de la historia (lista de capítulos) ──
+  { arrives: true, pieces: T('¡Historia creada! Esta es su pantalla principal: desde aquí gestionas sus capítulos.') },
+  {
+    target: 'storyTools', boxAt: 'below',
+    pieces: T('Aquí arriba están las herramientas de la historia: sus archivos (imágenes y audios), exportar una copia de seguridad, editar la ficha, borrarla y publicarla.'),
+  },
+  {
+    target: 'addChapter', action: true, shape: 'rect',
+    pieces: T('Una novela se divide en capítulos. Crea el primero y ponle el título que quieras.'),
+  },
+  {
+    free: true, until: 'chapterCreated', pieces: [],
+    nag: T('Crea un capítulo para seguir, por favor. Si quieres salir del tutorial, pulsa la tecla Escape.'),
+  },
+
+  // ── Pantalla del capítulo (lista de páginas) ──
+  { arrives: true, pieces: T('Este es tu capítulo. Se compone de páginas: cada página es una escena, con su texto, su fondo y su música.') },
+  {
+    target: 'chapterCover', boxAt: 'below',
+    pieces: T('Aquí puedes ponerle una ilustración al capítulo. Sale en la ficha de la novela y, si quieres, a pantalla completa al empezar el capítulo.'),
+  },
+  { target: 'addPage', action: true, shape: 'rect', pieces: T('Vamos a ver cómo es una página. Añade la primera.') },
+
+  // ── Editor de páginas: solo se explica, no hay que rellenar nada ──
+  { arrives: true, pieces: T('Este es el editor de páginas. No hace falta que rellenes nada ahora: te enseño para qué sirve cada cosa.') },
+  {
+    target: 'pePreview', arrives: true, boxAt: 'below',
+    pieces: T('Esta es la vista previa: así verá la página el lector. El texto se escribe directamente en el cuadro. Cada línea en blanco separa un párrafo, y el lector los va pasando de uno en uno. El cuadro se puede mover y cambiar de tamaño arrastrándolo.'),
+  },
+  { target: 'peType', boxAt: 'side', pieces: T('Tipo de página: con texto, o solo ilustración, que enseña una imagen a pantalla completa sin cuadro de texto.') },
+  { target: 'peTextBox', boxAt: 'side', pieces: T('La forma y la posición del cuadro de texto se pueden copiar de una página y pegar en otra.') },
+  { target: 'peTransition', boxAt: 'side', pieces: T('La animación con la que se pasa de esta página a la siguiente: fundido, barridos, cuadrados…') },
+  { target: 'peTextSize', boxAt: 'side', pieces: T('El tamaño del texto. Si no lo cambias, la página usa el mismo que la anterior.') },
+  { target: 'peBackground', boxAt: 'side', pieces: T('La imagen de fondo. Una página sin imagen propia sigue con la de la página anterior; también puedes dejar el fondo en negro.') },
+  { target: 'peMusic', boxAt: 'side', pieces: T('La música. Sigue sonando en las páginas siguientes hasta que otra la cambie o la silencie. Puedes elegir su volumen y en qué párrafo empieza.') },
+  { target: 'peQuiet', boxAt: 'side', pieces: T('Silencio momentáneo: calla la música durante algunos párrafos y después vuelve sola.') },
+  { target: 'peSfx', boxAt: 'side', pieces: T('Efectos de sonido: suenan una vez, al aparecer el párrafo que elijas. Puedes poner varios.') },
+  { target: 'peExtra', boxAt: 'side', pieces: T('Cuadros de texto extra: carteles, pensamientos o notas que colocas donde quieras, con su giro y su animación.') },
+  { target: 'peCharacters', boxAt: 'side', pieces: T('Personajes: las etiquetas con el nombre de quién habla en esta página.') },
+  { target: 'peLinks', boxAt: 'side', pieces: T('Palabras enlazadas: una palabra del texto puede llevar a otra página. Sirve para que el lector elija.') },
+  { target: 'peNext', boxAt: 'side', pieces: T('Al pasar la página se va a la siguiente, pero puedes mandarla a cualquier otra para crear caminos distintos.') },
+  { target: 'peSave', boxAt: 'below', pieces: T('Cuando termines una página, guárdala aquí. Una vez guardada, el botón de reproducir te deja probarla en el lector.') },
+  { choice: true, pieces: T('Eso sería todo. ¿Vas a querer continuar con esta historia o vas a borrarla?') },
 ];
 // Los pasos encadenados con sameBox comparten cuadro: este es el primero de su cadena
 const groupOf = (i: number) => { let g = i; while (g > 0 && STEPS[g].sameBox) g--; return g; };
@@ -252,15 +305,28 @@ function measureTarget(step: Step, winWidth: number): Placement | null {
     const vertical = cy > winHeight / 2 ? { bottomY: cy - r - 14 } : { top: cy + r + 14 };
     return { light, circle: { cx, cy, r }, hole, box: { ...side, ...vertical, maxWidth } };
   }
-  const x = Math.max(ZONE_MARGIN, zone.left + ZONE_MARGIN);
-  const right = Math.min(winWidth - ZONE_MARGIN, zone.right - ZONE_MARGIN);
+  // Una zona que va de lado a lado deja un pequeño margen con los bordes de la pantalla;
+  // una más pequeña (un grupo de botones, una columna) se ilumina con algo de aire alrededor
+  const wide = zone.width > winWidth * 0.8;
+  const x = wide ? Math.max(ZONE_MARGIN, zone.left + ZONE_MARGIN) : Math.max(4, zone.left - ZONE_PAD);
+  const right = wide ? Math.min(winWidth - ZONE_MARGIN, zone.right - ZONE_MARGIN) : Math.min(winWidth - 4, zone.right + ZONE_PAD);
   const light = { x, y: zone.top - ZONE_PAD, w: right - x, h: zone.height + ZONE_PAD * 2 };
+  if (step.boxAt === 'side') {
+    // A la derecha de la zona (en escritorio las opciones van en una columna a la izquierda)
+    const left = light.x + light.w + 18;
+    const room = winWidth - left - 16;
+    const winHeight = (globalThis as any).innerHeight as number;
+    if (room >= 280) {
+      const centerY = Math.min(winHeight - 90, Math.max(110, light.y + Math.min(light.h / 2, 110)));
+      return { light, box: { left, maxWidth: Math.min(440, room), centerY } };
+    }
+  }
   if (step.boxAt) {
     const maxWidth = Math.min(560, light.w);
     const left = light.x + Math.max(0, (light.w - maxWidth) / 2);
     return {
       light,
-      box: step.boxAt === 'above' ? { left, maxWidth, bottomY: light.y - 12 } : { left, maxWidth, top: light.y + light.h + 12 },
+      box: step.boxAt === 'below' ? { left, maxWidth, top: light.y + light.h + 12 } : { left, maxWidth, bottomY: light.y - 12 },
     };
   }
   // El cuadro va a lo largo, en la línea del título y a su derecha: así no tapa las
@@ -488,7 +554,7 @@ export function TutorialOverlay() {
   const advance = async () => {
     if (!current || !shown || !typing || busyRef.current) return;
     if (!done) { play(sfxTextRef); setTyped(total); return; }
-    if (step?.action) return; // aquí no se avanza tocando: hay que pulsar el botón señalado
+    if (step?.action || step?.choice) return; // aquí no se avanza tocando: hay que pulsar el botón
     if (step?.free) {
       // Aviso leído: el cuadro se cierra y se vuelve al formulario
       play(sfxBoxRef);
@@ -535,6 +601,27 @@ export function TutorialOverlay() {
     doc.addEventListener('click', onClick, true);
     return () => doc.removeEventListener('click', onClick, true);
   }, [actionTarget, stepIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Final: quedarse la historia de práctica o borrarla
+  const [deleting, setDeleting] = useState(false);
+  const keepStory = () => { play(sfxBoxRef); closeRef.current(); };
+  const deleteStory = async () => {
+    if (deleting) return;
+    play(sfxBoxRef);
+    setDeleting(true);
+    try {
+      if (practiceStoryId) await deleteStoryWithCascade(practiceStoryId);
+      // Fuera de sus pantallas (ya no existen) y de vuelta a Escribir
+      if (router.canDismiss()) router.dismissAll();
+      router.replace('/(tabs)/write' as any);
+    } catch (e) {
+      console.error('Error borrando la historia de práctica:', e);
+    } finally {
+      setDeleting(false);
+      practiceStoryId = null;
+      closeRef.current();
+    }
+  };
 
   const advanceRef = useRef(advance);
   advanceRef.current = advance;
@@ -591,7 +678,18 @@ export function TutorialOverlay() {
           <Text style={[styles.text, compact && styles.textCompact, { opacity: 0 }]}>{renderPieces(total)}</Text>
           <Text style={[styles.text, compact && styles.textCompact, StyleSheet.absoluteFill]}>{renderPieces(typed)}</Text>
         </View>
-        {done && !step.action && (
+        {step.choice && (
+          // (siempre ocupan su sitio, para que el cuadro se abra ya con su altura final)
+          <View style={[styles.choices, { opacity: done ? 1 : 0 }]} pointerEvents={done ? 'auto' : 'none'}>
+            <TouchableOpacity style={styles.choiceDelete} onPress={deleteStory} disabled={deleting} activeOpacity={0.8}>
+              <Text style={styles.choiceDeleteText}>{deleting ? 'Borrando…' : 'Borrarla'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.choiceKeep} onPress={keepStory} disabled={deleting} activeOpacity={0.85}>
+              <Text style={styles.choiceKeepText}>Continuar con ella</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {done && !step.action && !step.choice && (
           <Animated.View style={[compact ? styles.hintCompact : styles.hint, { opacity: pulse }]}>
             <MaterialIcons name="keyboard-return" size={16} color={Colors.emerald} />
           </Animated.View>
@@ -689,7 +787,9 @@ export function TutorialOverlay() {
           top: place.box.centerY !== undefined
             // (si el texto ocupa dos líneas, el cuadro crece hacia arriba, no sobre las novelas)
             ? Math.min(place.box.centerY - boxHeight / 2, place.box.centerY + 22 - boxHeight)
-            : place.box.top !== undefined ? place.box.top : Math.max(8, (place.box.bottomY ?? 0) - boxHeight),
+            : place.box.top !== undefined
+              ? Math.max(8, Math.min(place.box.top, win.height - boxHeight - 12))
+              : Math.max(8, (place.box.bottomY ?? 0) - boxHeight),
         }}
       >
         {box}
@@ -763,6 +863,11 @@ const styles = StyleSheet.create({
   text: { fontFamily: FONT, fontSize: 16, lineHeight: 25, letterSpacing: 0.2, color: Colors.textPrimary },
   textCompact: { fontSize: 14.5, lineHeight: 21 },
   italic: { fontStyle: 'italic' },
+  choices: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 18 },
+  choiceDelete: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: '#FF6B6B66' },
+  choiceDeleteText: { fontFamily: FONT, fontSize: 14, color: '#FF6B6B' },
+  choiceKeep: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: 8, backgroundColor: Colors.emerald },
+  choiceKeepText: { fontFamily: FONT, fontSize: 14, fontWeight: '600', color: '#000' },
   // Icono de continuar, en la esquina del cuadro como en el lector
   hint: { position: 'absolute', bottom: 10, right: 14 },
   hintCompact: { position: 'absolute', right: 14, top: '50%', marginTop: -8 },

@@ -42,6 +42,7 @@ import {
 } from '@/services/stories';
 import { type StoryStats, getStoryStats } from '@/services/social';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
+import { tutorialEvent, tutorialIntercept, tutorialZone } from '@/components/tutorial';
 import { BACKUP_EXTENSION, encodeBackup } from '@/services/backup-file';
 
 interface Chapter {
@@ -334,6 +335,7 @@ export default function EditorModernoScreen() {
       setChapters(prev => [...prev.map((c, k) => ({ ...c, order: k + 1 })), newChapter]);
       setChapterTitle('');
       setModalVisible(false);
+      tutorialEvent('chapterCreated'); // el tutorial esperaba esto para seguir
       openChapter(docRef.id, chapterTitle.trim());
     } catch (e) {
       console.error('Error creando capítulo:', e);
@@ -352,7 +354,7 @@ export default function EditorModernoScreen() {
           <TouchableOpacity onPress={() => router.navigate('/(tabs)')} style={styles.backBtn}>
             <Image source={require('@/assets/images/logo.png')} style={styles.logo} contentFit="contain" />
           </TouchableOpacity>
-          <View style={styles.headerActions}>
+          <View style={styles.headerActions} nativeID={tutorialZone('storyTools')}>
             {/* Archivos de la historia (imágenes y audios): solo las tiene el formato Moderno */}
             {format === 'Moderno' && (
               <TouchableOpacity
@@ -401,7 +403,7 @@ export default function EditorModernoScreen() {
       {/* Volver a la pantalla anterior (el logo lleva al inicio) */}
       <TouchableOpacity
         style={{ alignSelf: 'flex-start', marginLeft: 12, marginTop: 8, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}
-        onPress={() => router.back()}
+        onPress={() => { if (!tutorialIntercept()) router.back(); }}
         activeOpacity={0.7}
         hitSlop={6}
       >
@@ -528,7 +530,7 @@ export default function EditorModernoScreen() {
       </ScrollView>
 
       <SafeAreaView edges={['bottom']} style={styles.footer}>
-        <TouchableOpacity style={styles.addChapterBtn} activeOpacity={0.85} onPress={() => setModalVisible(true)}>
+        <TouchableOpacity style={styles.addChapterBtn} activeOpacity={0.85} onPress={() => setModalVisible(true)} testID={tutorialZone('addChapter')}>
           <MaterialIcons name="add" size={20} color="#000" />
           <Text style={styles.addChapterText}>Añadir capítulo</Text>
         </TouchableOpacity>

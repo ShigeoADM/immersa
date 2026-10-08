@@ -46,6 +46,7 @@ import { deleteUnusedMedia } from '@/services/stories';
 import { useSaveShortcut } from '@/hooks/use-save-shortcut';
 import { useLeaveWarning } from '@/hooks/use-leave-warning';
 import { withUploadNotice } from '@/components/upload-notice';
+import { tutorialZone } from '@/components/tutorial';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 type ImageAnchor   = 'top' | 'center' | 'bottom';
@@ -1525,7 +1526,7 @@ export default function PageEditorScreen() {
           <MaterialIcons name="arrow-back" size={22} color="rgba(255,255,255,0.9)" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Página {pageNum}</Text>
-        <View style={styles.headerActions}>
+        <View style={styles.headerActions} nativeID={tutorialZone('peSave')}>
           {isEditing && (
             <TouchableOpacity style={styles.headerBack} onPress={handlePreview} activeOpacity={0.7}>
               <MaterialIcons name="play-arrow" size={22} color="rgba(0,0,0,0.85)" />
@@ -1551,6 +1552,7 @@ export default function PageEditorScreen() {
       <View style={isDesktop ? styles.previewPaneDesktop : undefined}>
       {/* ── Preview — proporción de un móvil medio en horizontal ── */}
       <View
+        nativeID={tutorialZone('pePreview')}
         style={[styles.preview, isDesktop && { maxWidth: 900 }]}
         onLayout={e => {
           pvW.value = e.nativeEvent.layout.width;
@@ -1724,7 +1726,7 @@ export default function PageEditorScreen() {
       >
 
         {/* Tipo de página */}
-        <View style={styles.section}>
+        <View style={styles.section} nativeID={tutorialZone('peType')}>
           <Text style={styles.sectionLabel}>Tipo de página</Text>
           <View style={styles.anchorRow}>
             {([
@@ -1752,7 +1754,7 @@ export default function PageEditorScreen() {
 
         {/* Copiar / pegar el cuadro de texto */}
         {!hideTextBox && (
-          <View style={styles.section}>
+          <View style={styles.section} nativeID={tutorialZone('peTextBox')}>
             <Text style={styles.sectionLabel}>Cuadro de texto</Text>
             <View style={styles.anchorRow}>
               <TouchableOpacity style={styles.anchorBtn} onPress={copyTextBox} activeOpacity={0.75}>
@@ -1778,7 +1780,7 @@ export default function PageEditorScreen() {
         )}
 
         {/* Animación al pasar la página */}
-        <View style={styles.section}>
+        <View style={styles.section} nativeID={tutorialZone('peTransition')}>
           {/* Plegable: cerrado muestra solo la opción elegida */}
           <TouchableOpacity
             style={styles.foldHeader}
@@ -1822,7 +1824,7 @@ export default function PageEditorScreen() {
         </View>
 
         {/* Tamaño de texto */}
-        <View style={styles.section}>
+        <View style={styles.section} nativeID={tutorialZone('peTextSize')}>
           <Text style={styles.sectionLabel}>Tamaño de texto</Text>
           <View style={styles.textSizeRow}>
             {TEXT_SIZE_OPTIONS.map(opt => {
@@ -1848,7 +1850,7 @@ export default function PageEditorScreen() {
         </View>
 
         {/* Imagen de fondo */}
-        <View style={styles.section}>
+        <View style={styles.section} nativeID={tutorialZone('peBackground')}>
           <Text style={styles.sectionLabel}>Imagen de fondo</Text>
 
           {bgUri ? (
@@ -2012,7 +2014,7 @@ export default function PageEditorScreen() {
         </View>
 
         {/* Música */}
-        <View style={styles.section}>
+        <View style={styles.section} nativeID={tutorialZone('peMusic')}>
           <Text style={styles.sectionLabel}>Música</Text>
           <View style={styles.musicModeRow}>
             {([
@@ -2191,7 +2193,7 @@ export default function PageEditorScreen() {
         </View>
 
         {/* Silencio momentáneo de la música */}
-        <View style={styles.section}>
+        <View style={styles.section} nativeID={tutorialZone('peQuiet')}>
           <Text style={styles.sectionLabel}>Silencio momentáneo</Text>
           <Text style={styles.sectionHint}>
             Calla la música durante algunos párrafos de esta página, sea la suya o la heredada.
@@ -2249,7 +2251,7 @@ export default function PageEditorScreen() {
         </View>
 
         {/* Efecto de sonido */}
-        <View style={styles.section}>
+        <View style={styles.section} nativeID={tutorialZone('peSfx')}>
           <Text style={styles.sectionLabel}>Efectos de sonido</Text>
           <Text style={styles.sectionHint}>
             Suenan una vez cuando aparece el párrafo que elijas (una puerta, un trueno…). Puedes
@@ -2368,7 +2370,7 @@ export default function PageEditorScreen() {
         </View>
 
         {/* ── Cuadros de texto extra ── */}
-        <View style={styles.section}>
+        <View style={styles.section} nativeID={tutorialZone('peExtra')}>
           <Text style={styles.sectionLabel}>Cuadros de texto extra</Text>
           <Text style={styles.sectionHint}>
             Texto suelto que aparece en el párrafo que elijas: voces de fondo, un rótulo, una
@@ -2522,7 +2524,7 @@ export default function PageEditorScreen() {
         </View>
 
         {/* ── Personajes ── */}
-        <View style={styles.section}>
+        <View style={styles.section} nativeID={tutorialZone('peCharacters')}>
           <Text style={styles.sectionLabel}>Personajes</Text>
           <Text style={styles.sectionHint}>
             Nombres que aparecen sobre el recuadro de texto. Se heredan de página en página.
@@ -2631,7 +2633,7 @@ export default function PageEditorScreen() {
         </View>
 
         {/* ── Palabras enlazadas ── */}
-        <View style={styles.section}>
+        <View style={styles.section} nativeID={tutorialZone('peLinks')}>
           <Text style={styles.sectionLabel}>Palabras enlazadas</Text>
           <Text style={styles.sectionHint}>
             El lector podrá tocar estas palabras para saltar a otra página.
@@ -2894,7 +2896,7 @@ export default function PageEditorScreen() {
         </View>
 
         {/* ── Redirección de página ── */}
-        <View style={styles.section}>
+        <View style={styles.section} nativeID={tutorialZone('peNext')}>
           <Text style={styles.sectionLabel}>Al pasar la página</Text>
           <Text style={styles.sectionHint}>
             Por defecto avanza a la siguiente. Puedes redirigir a cualquier otra.

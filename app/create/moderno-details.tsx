@@ -213,7 +213,7 @@ export default function ModernoDetailsScreen() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
-        tutorialEvent('storyCreated'); // el tutorial esperaba esto para seguir
+        tutorialEvent('storyCreated', { storyId: docRef.id }); // el tutorial esperaba esto para seguir
         router.replace(`/create/editor-moderno?storyId=${docRef.id}&title=${encodeURIComponent(title.trim())}&format=${format}`);
       }
     } catch (e) {
