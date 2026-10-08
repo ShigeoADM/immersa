@@ -47,6 +47,7 @@ import { useSaveShortcut } from '@/hooks/use-save-shortcut';
 import { useLeaveWarning } from '@/hooks/use-leave-warning';
 import { withUploadNotice } from '@/components/upload-notice';
 import { tutorialZone } from '@/components/tutorial';
+import { ts, useT } from '@/i18n';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 type ImageAnchor   = 'top' | 'center' | 'bottom';
@@ -111,7 +112,7 @@ function confirmAction(title: string, message: string, confirmText: string, onCo
     if ((window as any).confirm(`${title}\n\n${message}`)) onConfirm();
   } else {
     AppAlert.alert(title, message, [
-      { text: 'Cancelar', style: 'cancel' },
+      { text: ts('Cancelar'), style: 'cancel' },
       { text: confirmText, style: 'destructive', onPress: onConfirm },
     ]);
   }
@@ -218,7 +219,7 @@ function PreviewExtraBox({ box, pvWidth, pvHeight, pvScale, fontSize, onChange }
             fontFamily: STORY_FONT,
           }}
         >
-          {box.text || 'Texto…'}
+          {box.text || ts('Texto…')}
         </Text>
       </View>
       {/* Tirador para cambiar el tamaño */}
@@ -248,6 +249,7 @@ function MediaLibraryPicker({ kind, loading, urls, onPick }: {
   urls: string[];
   onPick: (url: string) => void;
 }) {
+  useT();
   if (loading) {
     return <ActivityIndicator color={Colors.emerald} style={{ marginVertical: 12 }} />;
   }
@@ -255,8 +257,8 @@ function MediaLibraryPicker({ kind, loading, urls, onPick }: {
     return (
       <Text style={styles.libraryEmpty}>
         {kind === 'image'
-          ? 'Todavía no hay imágenes en esta historia.'
-          : 'Todavía no hay audios de este tipo en esta historia.'}
+          ? ts('Todavía no hay imágenes en esta historia.')
+          : ts('Todavía no hay audios de este tipo en esta historia.')}
       </Text>
     );
   }
@@ -277,7 +279,7 @@ function MediaLibraryPicker({ kind, loading, urls, onPick }: {
         <TouchableOpacity key={url} style={styles.libraryRow} onPress={() => onPick(url)} activeOpacity={0.8}>
           <MaterialIcons name="audiotrack" size={14} color={Colors.aqua} />
           <Text style={styles.libraryRowText} numberOfLines={1}>{fileNameFromUrl(url, 'Audio')}</Text>
-          <Text style={styles.libraryRowUse}>Usar</Text>
+          <Text style={styles.libraryRowUse}>{ts('Usar')}</Text>
         </TouchableOpacity>
       ))}
     </View>
@@ -301,9 +303,10 @@ function VolumeRow({ value, min, max, onStep, playing, onTogglePlay }: {
   onStep: (delta: number) => void;
   playing: boolean; onTogglePlay: () => void;
 }) {
+  useT();
   return (
     <View style={styles.anchorRow}>
-      <Text style={styles.anchorLabel}>Volumen:</Text>
+      <Text style={styles.anchorLabel}>{ts('Volumen:')}</Text>
       <TouchableOpacity
         style={[styles.blurStepBtn, value <= min && { opacity: 0.35 }]}
         onPress={() => onStep(-MUSIC_VOLUME_STEP)}
@@ -328,7 +331,7 @@ function VolumeRow({ value, min, max, onStep, playing, onTogglePlay }: {
       >
         <MaterialIcons name={playing ? 'stop' : 'play-arrow'} size={14} color={playing ? '#000' : Colors.textSecondary} />
         <Text style={[styles.anchorBtnText, playing && styles.anchorBtnTextActive]}>
-          {playing ? 'Parar' : 'Escuchar'}
+          {playing ? ts('Parar') : ts('Escuchar')}
         </Text>
       </TouchableOpacity>
     </View>
@@ -337,6 +340,7 @@ function VolumeRow({ value, min, max, onStep, playing, onTogglePlay }: {
 
 // ─── Pantalla ─────────────────────────────────────────────────────────────────
 export default function PageEditorScreen() {
+  useT();
   const isDesktop = useIsDesktop();
   const router = useRouter();
   const { storyId, chapterId, pageId, pageOrder } = useLocalSearchParams<{
@@ -408,7 +412,7 @@ export default function PageEditorScreen() {
   const [transition, setTransition]     = useState<PageTransition | undefined>(undefined);
   const [transitionOpen, setTransitionOpen] = useState(false);
   const transitionOption = PAGE_TRANSITIONS.find(o => o.value === transition)
-    ?? { label: 'Heredar', icon: 'subdirectory-arrow-right' };
+    ?? { label: ts('Heredar'), icon: 'subdirectory-arrow-right' };
   const [nextPageInput, setNextPageInput] = useState('');
   // Ids de las páginas del capítulo en orden: traduce número de página ↔ id
   const [chapterPageIds, setChapterPageIds] = useState<string[]>([]);
@@ -888,7 +892,7 @@ export default function PageEditorScreen() {
       }))).map(c => c.doc);
       const perChapter = await Promise.all(
         chapterDocs.map(async chDoc => {
-          const chTitle = (chDoc.data().title as string) ?? 'Capítulo';
+          const chTitle = (chDoc.data().title as string) ?? ts('Capítulo');
           const pagesSnap = await getDocs(
             collection(db, 'stories', storyId as string, 'chapters', chDoc.id, 'pages')
           );
@@ -939,7 +943,7 @@ export default function PageEditorScreen() {
       let chapterTitle = pageOptions.find(p => p.chapterId === chapterId)?.chapterTitle;
       if (!chapterTitle) {
         const chSnap = await getDoc(doc(db, 'stories', storyId as string, 'chapters', chapterId as string));
-        chapterTitle = (chSnap.data()?.title as string) ?? 'Capítulo';
+        chapterTitle = (chSnap.data()?.title as string) ?? ts('Capítulo');
       }
       // Orden de la nueva página (al final del capítulo)
       const currentChapterPages = pageOptions.filter(p => p.chapterId === chapterId);
@@ -980,7 +984,7 @@ export default function PageEditorScreen() {
   const handlePickImage = () => withUploadNotice(pickImage);
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { AppAlert.alert('Permiso denegado', 'Necesitamos acceso a tu galería.'); return; }
+    if (status !== 'granted') { AppAlert.alert(ts('Permiso denegado'), ts('Necesitamos acceso a tu galería.')); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'], quality: 0.85,
     });
@@ -992,7 +996,7 @@ export default function PageEditorScreen() {
         const url = await uploadImage(localUri, `pages/${storyId}/${chapterId}/${Date.now()}`, 2560);
         setBgUrl(url); setBgUri(url);
       } catch (e: any) {
-        AppAlert.alert('Error al subir', e?.message ?? 'Inténtalo de nuevo.');
+        AppAlert.alert(ts('Error al subir'), e?.message ?? ts('Inténtalo de nuevo.'));
         setBgUri(null); setBgUrl('');
       } finally { setUploadingBg(false); }
     }
@@ -1016,10 +1020,10 @@ export default function PageEditorScreen() {
         try {
           const url = await uploadLocalFile(asset.uri, `music/${storyId}/${chapterId}/${storedFileName(asset.name, 'mp3')}`);
           setEditMusicUrl(url); setMusicFileName(asset.name); setMusicMode('play');
-        } catch (e: any) { AppAlert.alert('Error al subir música', e?.message ?? 'Inténtalo de nuevo.'); }
+        } catch (e: any) { AppAlert.alert(ts('Error al subir música'), e?.message ?? ts('Inténtalo de nuevo.')); }
         finally { setUploadingMusic(false); }
       }
-    } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo abrir el selector.'); }
+    } catch (e: any) { AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo abrir el selector.')); }
   };
 
   // ── Escuchar la pista en el editor (con el volumen elegido) ───────────────
@@ -1058,7 +1062,7 @@ export default function PageEditorScreen() {
     } catch (e: any) {
       if (turn !== musicPreviewTurn.current) return;
       setPreviewingMusic(false);
-      AppAlert.alert('No se pudo reproducir', e?.message ?? 'Comprueba el archivo o el enlace.');
+      AppAlert.alert(ts('No se pudo reproducir'), e?.message ?? ts('Comprueba el archivo o el enlace.'));
     }
   };
 
@@ -1124,7 +1128,7 @@ export default function PageEditorScreen() {
     } catch (e: any) {
       if (turn !== sfxPreviewTurn.current) return;
       setPreviewingSfxId(null);
-      AppAlert.alert('No se pudo reproducir', e?.message ?? 'Comprueba el archivo o el enlace.');
+      AppAlert.alert(ts('No se pudo reproducir'), e?.message ?? ts('Comprueba el archivo o el enlace.'));
     }
   };
 
@@ -1176,9 +1180,9 @@ export default function PageEditorScreen() {
       try {
         const url = await uploadLocalFile(asset.uri, `sfx/${storyId}/${chapterId}/${storedFileName(asset.name, 'mp3')}`);
         addSfxCue(url, asset.name);
-      } catch (e: any) { AppAlert.alert('Error al subir el sonido', e?.message ?? 'Inténtalo de nuevo.'); }
+      } catch (e: any) { AppAlert.alert(ts('Error al subir el sonido'), e?.message ?? ts('Inténtalo de nuevo.')); }
       finally { setUploadingSfx(false); }
-    } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo abrir el selector.'); }
+    } catch (e: any) { AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo abrir el selector.')); }
   };
 
   // ── Cambios sin guardar ───────────────────────────────────────────────────
@@ -1277,13 +1281,13 @@ export default function PageEditorScreen() {
         draftResolvedRef.current = true;
       };
       const discard = () => { clearDraft(); draftResolvedRef.current = true; };
-      const message = 'Hay cambios de esta página que no llegaste a guardar. ¿Quieres recuperarlos?';
+      const message = ts('Hay cambios de esta página que no llegaste a guardar. ¿Quieres recuperarlos?');
       if (Platform.OS === 'web') {
         if ((window as any).confirm(`Borrador sin guardar\n\n${message}`)) restore(); else discard();
       } else {
-        AppAlert.alert('Borrador sin guardar', message, [
-          { text: 'Descartar', style: 'destructive', onPress: discard },
-          { text: 'Recuperar', onPress: restore },
+        AppAlert.alert(ts('Borrador sin guardar'), message, [
+          { text: ts('Descartar'), style: 'destructive', onPress: discard },
+          { text: ts('Recuperar'), onPress: restore },
         ], { cancelable: false });
       }
     })();
@@ -1305,9 +1309,9 @@ export default function PageEditorScreen() {
       if (allowLeaveRef.current || !isDirtyRef.current) return;
       e.preventDefault();
       confirmAction(
-        'Cambios sin guardar',
-        'Si sales ahora perderás los cambios de esta página.',
-        'Salir sin guardar',
+        ts('Cambios sin guardar'),
+        ts('Si sales ahora perderás los cambios de esta página.'),
+        ts('Salir sin guardar'),
         () => {
           allowLeaveRef.current = true;
           clearDraft();
@@ -1326,9 +1330,9 @@ export default function PageEditorScreen() {
     );
     if (isDirty) {
       confirmAction(
-        'Cambios sin guardar',
-        'El lector mostrará la última versión guardada de esta página.',
-        'Probar igualmente',
+        ts('Cambios sin guardar'),
+        ts('El lector mostrará la última versión guardada de esta página.'),
+        ts('Probar igualmente'),
         open,
       );
     } else {
@@ -1346,7 +1350,7 @@ export default function PageEditorScreen() {
       const n = parseInt(nextPageInput, 10);
       nextPageId = chapterPageIds[n - 1] ?? null;
       if (!nextPageId) {
-        AppAlert.alert('Página no válida', `El capítulo no tiene una página ${nextPageInput || '(vacía)'}.`);
+        AppAlert.alert(ts('Página no válida'), ts('El capítulo no tiene una página {n}.', { n: nextPageInput || ts('(vacía)') }));
         return;
       }
     }
@@ -1477,7 +1481,7 @@ export default function PageEditorScreen() {
       router.back();
     } catch (e) {
       console.error('Error guardando página:', e);
-      AppAlert.alert('Error', 'No se pudo guardar la página. Inténtalo de nuevo.');
+      AppAlert.alert(ts('Error'), ts('No se pudo guardar la página. Inténtalo de nuevo.'));
     }
     finally     { setSaving(false); }
   };
@@ -1487,9 +1491,9 @@ export default function PageEditorScreen() {
   // Etiqueta del destino de un enlace (el número se calcula desde el id: sigue
   // siendo correcto aunque se reordenen las páginas)
   const linkTargetLabel = (link: PageLink) => {
-    if (link.targetChapterId) return `→ ${link.targetChapterTitle ?? 'Cap.'} p.${link.targetPageIndex + 1}`;
+    if (link.targetChapterId) return `→ ${link.targetChapterTitle ?? ts('Cap.')} p.${link.targetPageIndex + 1}`;
     const i = link.targetPageId ? chapterPageIds.indexOf(link.targetPageId) : link.targetPageIndex;
-    return i >= 0 ? `→ p.${i + 1}` : '→ página borrada';
+    return i >= 0 ? `→ p.${i + 1}` : ts('→ página borrada');
   };
 
   // ── Escala de la preview respecto al lector ───────────────────────────────
@@ -1525,7 +1529,7 @@ export default function PageEditorScreen() {
         <TouchableOpacity style={styles.headerBack} onPress={() => router.back()} activeOpacity={0.7}>
           <MaterialIcons name="arrow-back" size={22} color="rgba(255,255,255,0.9)" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Página {pageNum}</Text>
+        <Text style={styles.headerTitle}>{ts('Página {n}', { n: pageNum })}</Text>
         <View style={styles.headerActions} nativeID={tutorialZone('peSave')}>
           {isEditing && (
             <TouchableOpacity style={styles.headerBack} onPress={handlePreview} activeOpacity={0.7}>
@@ -1540,7 +1544,7 @@ export default function PageEditorScreen() {
           >
             {saving
               ? <ActivityIndicator size="small" color="#000" />
-              : <Text style={styles.saveBtnText}>Guardar</Text>
+              : <Text style={styles.saveBtnText}>{ts('Guardar')}</Text>
             }
           </TouchableOpacity>
         </View>
@@ -1606,7 +1610,7 @@ export default function PageEditorScreen() {
               const { start, end } = e.nativeEvent.selection;
               if (start !== end) setPendingWord(pageText.slice(start, end));
             }}
-            placeholder="Escribe el texto aquí…"
+            placeholder={ts('Escribe el texto aquí…')}
             placeholderTextColor="rgba(255,255,255,0.30)"
             multiline
             textAlignVertical="top"
@@ -1645,7 +1649,7 @@ export default function PageEditorScreen() {
                 style={[styles.previewCharLabelText, previewLabelTextStyle, !leftCharName.trim() && { opacity: 0.4 }]}
                 numberOfLines={1}
               >
-                {leftCharName.trim() || 'POV / Protagonista'}
+                {leftCharName.trim() || ts('POV / Protagonista')}
               </Text>
             </Animated.View>
           </GestureDetector>
@@ -1663,7 +1667,7 @@ export default function PageEditorScreen() {
                 style={[styles.previewCharLabelText, previewLabelTextStyle, !rightCharName.trim() && { opacity: 0.4 }]}
                 numberOfLines={1}
               >
-                {rightCharName.trim() || 'Otro personaje'}
+                {rightCharName.trim() || ts('Otro personaje')}
               </Text>
             </Animated.View>
           </GestureDetector>
@@ -1693,7 +1697,7 @@ export default function PageEditorScreen() {
         {uploadingBg && (
           <View style={styles.uploadingOverlay}>
             <ActivityIndicator color={Colors.emerald} />
-            <Text style={styles.uploadingText}>Subiendo imagen…</Text>
+            <Text style={styles.uploadingText}>{ts('Subiendo imagen…')}</Text>
           </View>
         )}
 
@@ -1727,20 +1731,20 @@ export default function PageEditorScreen() {
 
         {/* Tipo de página */}
         <View style={styles.section} nativeID={tutorialZone('peType')}>
-          <Text style={styles.sectionLabel}>Tipo de página</Text>
+          <Text style={styles.sectionLabel}>{ts('Tipo de página')}</Text>
           <View style={styles.anchorRow}>
             {([
-              { value: false, icon: 'notes', label: 'Con texto' },
-              { value: true,  icon: 'image', label: 'Solo ilustración' },
+              { value: false, icon: 'notes', label: ts('Con texto') },
+              { value: true,  icon: 'image', label: ts('Solo ilustración') },
             ] as const).map(opt => (
               <TouchableOpacity
-                key={opt.label}
+                key={ts(opt.label)}
                 style={[styles.anchorBtn, hideTextBox === opt.value && styles.anchorBtnActive]}
                 onPress={() => setHideTextBox(opt.value)}
                 activeOpacity={0.75}
               >
                 <MaterialIcons name={opt.icon} size={13} color={hideTextBox === opt.value ? '#000' : Colors.textSecondary} />
-                <Text style={[styles.anchorBtnText, hideTextBox === opt.value && styles.anchorBtnTextActive]}>{opt.label}</Text>
+                <Text style={[styles.anchorBtnText, hideTextBox === opt.value && styles.anchorBtnTextActive]}>{ts(opt.label)}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -1755,11 +1759,11 @@ export default function PageEditorScreen() {
         {/* Copiar / pegar el cuadro de texto */}
         {!hideTextBox && (
           <View style={styles.section} nativeID={tutorialZone('peTextBox')}>
-            <Text style={styles.sectionLabel}>Cuadro de texto</Text>
+            <Text style={styles.sectionLabel}>{ts('Cuadro de texto')}</Text>
             <View style={styles.anchorRow}>
               <TouchableOpacity style={styles.anchorBtn} onPress={copyTextBox} activeOpacity={0.75}>
                 <MaterialIcons name="content-copy" size={13} color={Colors.textSecondary} />
-                <Text style={styles.anchorBtnText}>Copiar posición y tamaño</Text>
+                <Text style={styles.anchorBtnText}>{ts('Copiar posición y tamaño')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.anchorBtn, !tbClipboard && { opacity: 0.4 }]}
@@ -1768,13 +1772,13 @@ export default function PageEditorScreen() {
                 activeOpacity={0.75}
               >
                 <MaterialIcons name="content-paste" size={13} color={Colors.textSecondary} />
-                <Text style={styles.anchorBtnText}>Pegar</Text>
+                <Text style={styles.anchorBtnText}>{ts('Pegar')}</Text>
               </TouchableOpacity>
             </View>
             <Text style={styles.sectionHint}>
               {tbClipboard
-                ? 'Hay un cuadro copiado. «Pegar» coloca el de esta página exactamente igual; sirve también en otros capítulos e historias.'
-                : 'Copia el cuadro de esta página para ponerlo idéntico en otra, aunque sea de otro capítulo.'}
+                ? ts('Hay un cuadro copiado. «Pegar» coloca el de esta página exactamente igual; sirve también en otros capítulos e historias.')
+                : ts('Copia el cuadro de esta página para ponerlo idéntico en otra, aunque sea de otro capítulo.')}
             </Text>
           </View>
         )}
@@ -1787,7 +1791,7 @@ export default function PageEditorScreen() {
             onPress={() => setTransitionOpen(v => !v)}
             activeOpacity={0.75}
           >
-            <Text style={[styles.sectionLabel, { flex: 1 }]}>Animación al pasar esta página</Text>
+            <Text style={[styles.sectionLabel, { flex: 1 }]}>{ts('Animación al pasar esta página')}</Text>
             <View style={styles.foldValue}>
               <MaterialIcons name={transitionOption.icon as any} size={13} color={Colors.emerald} />
               <Text style={styles.foldValueText}>{transitionOption.label}</Text>
@@ -1806,7 +1810,7 @@ export default function PageEditorScreen() {
               activeOpacity={0.75}
             >
               <MaterialIcons name="subdirectory-arrow-right" size={13} color={transition === undefined ? '#000' : Colors.textSecondary} />
-              <Text style={[styles.anchorBtnText, transition === undefined && styles.anchorBtnTextActive]}>Heredar</Text>
+              <Text style={[styles.anchorBtnText, transition === undefined && styles.anchorBtnTextActive]}>{ts('Heredar')}</Text>
             </TouchableOpacity>
             {PAGE_TRANSITIONS.map(opt => (
               <TouchableOpacity
@@ -1816,7 +1820,7 @@ export default function PageEditorScreen() {
                 activeOpacity={0.75}
               >
                 <MaterialIcons name={opt.icon as any} size={13} color={transition === opt.value ? '#000' : Colors.textSecondary} />
-                <Text style={[styles.anchorBtnText, transition === opt.value && styles.anchorBtnTextActive]}>{opt.label}</Text>
+                <Text style={[styles.anchorBtnText, transition === opt.value && styles.anchorBtnTextActive]}>{ts(opt.label)}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -1825,7 +1829,7 @@ export default function PageEditorScreen() {
 
         {/* Tamaño de texto */}
         <View style={styles.section} nativeID={tutorialZone('peTextSize')}>
-          <Text style={styles.sectionLabel}>Tamaño de texto</Text>
+          <Text style={styles.sectionLabel}>{ts('Tamaño de texto')}</Text>
           <View style={styles.textSizeRow}>
             {TEXT_SIZE_OPTIONS.map(opt => {
               const isActive = opt.value === 'auto' ? textSize === undefined : textSize === opt.value;
@@ -1841,7 +1845,7 @@ export default function PageEditorScreen() {
                     { fontSize: opt.value === 'auto' ? 12 : opt.value === 'xs' ? 10 : opt.value === 'sm' ? 12 : opt.value === 'md' ? 14 : 17 },
                     isActive && styles.textSizeBtnLabelActive,
                   ]}>
-                    {opt.value === 'auto' ? 'Auto' : 'A'}
+                    {opt.value === 'auto' ? ts('Auto') : 'A'}
                   </Text>
                 </TouchableOpacity>
               );
@@ -1851,21 +1855,21 @@ export default function PageEditorScreen() {
 
         {/* Imagen de fondo */}
         <View style={styles.section} nativeID={tutorialZone('peBackground')}>
-          <Text style={styles.sectionLabel}>Imagen de fondo</Text>
+          <Text style={styles.sectionLabel}>{ts('Imagen de fondo')}</Text>
 
           {bgUri ? (
             <>
               <View style={styles.bgActiveRow}>
                 <MaterialIcons name="check-circle" size={16} color={Colors.emerald} />
-                <Text style={styles.bgActiveText}>Imagen añadida</Text>
+                <Text style={styles.bgActiveText}>{ts('Imagen añadida')}</Text>
                 <TouchableOpacity onPress={() => { setBgUri(null); setBgUrl(''); }} style={styles.bgRemoveBtn}>
                   <MaterialIcons name="close" size={16} color="#FF6B6B" />
-                  <Text style={styles.bgRemoveText}>Quitar</Text>
+                  <Text style={styles.bgRemoveText}>{ts('Quitar')}</Text>
                 </TouchableOpacity>
               </View>
               {/* Fit */}
               <View style={styles.fitRow}>
-                {([{ value: 'cover', icon: 'crop-free', label: 'Rellenar' }, { value: 'contain', icon: 'fit-screen', label: 'Ver todo' }] as any[]).map(opt => (
+                {([{ value: 'cover', icon: 'crop-free', label: ts('Rellenar') }, { value: 'contain', icon: 'fit-screen', label: ts('Ver todo') }] as any[]).map(opt => (
                   <TouchableOpacity
                     key={opt.value}
                     style={[styles.fitBtn, imageFit === opt.value && styles.fitBtnActive]}
@@ -1873,14 +1877,14 @@ export default function PageEditorScreen() {
                     activeOpacity={0.75}
                   >
                     <MaterialIcons name={opt.icon} size={14} color={imageFit === opt.value ? '#000' : Colors.textSecondary} />
-                    <Text style={[styles.fitBtnText, imageFit === opt.value && styles.fitBtnTextActive]}>{opt.label}</Text>
+                    <Text style={[styles.fitBtnText, imageFit === opt.value && styles.fitBtnTextActive]}>{ts(opt.label)}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
               {/* Ancla */}
               {imageFit === 'cover' && (
                 <View style={styles.anchorRow}>
-                  <Text style={styles.anchorLabel}>Encuadre:</Text>
+                  <Text style={styles.anchorLabel}>{ts('Encuadre:')}</Text>
                   {(['top', 'center', 'bottom'] as ImageAnchor[]).map(a => (
                     <TouchableOpacity
                       key={a}
@@ -1894,7 +1898,7 @@ export default function PageEditorScreen() {
                         color={imageAnchor === a ? '#000' : Colors.textSecondary}
                       />
                       <Text style={[styles.anchorBtnText, imageAnchor === a && styles.anchorBtnTextActive]}>
-                        {a === 'top' ? 'Arriba' : a === 'center' ? 'Centro' : 'Abajo'}
+                        {a === 'top' ? ts('Arriba') : a === 'center' ? ts('Centro') : ts('Abajo')}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -1903,7 +1907,7 @@ export default function PageEditorScreen() {
               {/* Desenfoque */}
               <View style={styles.blurBlock}>
                 <View style={styles.anchorRow}>
-                  <Text style={styles.anchorLabel}>Desenfoque:</Text>
+                  <Text style={styles.anchorLabel}>{ts('Desenfoque:')}</Text>
                   <TouchableOpacity
                     style={[styles.blurStepBtn, bgBlur === 0 && { opacity: 0.35 }]}
                     onPress={() => setBgBlur(b => Math.max(0, b - 1))}
@@ -1912,7 +1916,7 @@ export default function PageEditorScreen() {
                   >
                     <MaterialIcons name="remove" size={14} color={Colors.textSecondary} />
                   </TouchableOpacity>
-                  <Text style={styles.blurValue}>{bgBlur === 0 ? 'Sin' : bgBlur}</Text>
+                  <Text style={styles.blurValue}>{bgBlur === 0 ? ts('Sin') : bgBlur}</Text>
                   <TouchableOpacity
                     style={[styles.blurStepBtn, bgBlur >= BG_BLUR_MAX && { opacity: 0.35 }]}
                     onPress={() => setBgBlur(b => Math.min(BG_BLUR_MAX, b + 1))}
@@ -1930,7 +1934,7 @@ export default function PageEditorScreen() {
                       onPress={() => setBgBlur(p.value)}
                       activeOpacity={0.75}
                     >
-                      <Text style={[styles.anchorBtnText, bgBlur === p.value && styles.anchorBtnTextActive]}>{p.label}</Text>
+                      <Text style={[styles.anchorBtnText, bgBlur === p.value && styles.anchorBtnTextActive]}>{ts(p.label)}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -1941,24 +1945,24 @@ export default function PageEditorScreen() {
               {/* Sin imagen propia: seguir con la de la página anterior o fondo negro */}
               <View style={styles.anchorRow}>
                 {([
-                  { value: false, icon: 'subdirectory-arrow-right', label: 'Heredar la anterior' },
-                  { value: true,  icon: 'block', label: 'Sin fondo (negro)' },
+                  { value: false, icon: 'subdirectory-arrow-right', label: ts('Heredar la anterior') },
+                  { value: true,  icon: 'block', label: ts('Sin fondo (negro)') },
                 ] as const).map(opt => (
                   <TouchableOpacity
-                    key={opt.label}
+                    key={ts(opt.label)}
                     style={[styles.anchorBtn, bgNone === opt.value && styles.anchorBtnActive]}
                     onPress={() => setBgNone(opt.value)}
                     activeOpacity={0.75}
                   >
                     <MaterialIcons name={opt.icon} size={13} color={bgNone === opt.value ? '#000' : Colors.textSecondary} />
-                    <Text style={[styles.anchorBtnText, bgNone === opt.value && styles.anchorBtnTextActive]}>{opt.label}</Text>
+                    <Text style={[styles.anchorBtnText, bgNone === opt.value && styles.anchorBtnTextActive]}>{ts(opt.label)}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
               <Text style={styles.sectionHint}>
                 {bgNone
-                  ? 'Esta página se ve con el fondo en negro. Las siguientes que hereden también, hasta que una ponga imagen.'
-                  : 'Sin imagen propia, la página usa la de la anterior. O elige una nueva:'}
+                  ? ts('Esta página se ve con el fondo en negro. Las siguientes que hereden también, hasta que una ponga imagen.')
+                  : ts('Sin imagen propia, la página usa la de la anterior. O elige una nueva:')}
               </Text>
               <View style={styles.sourceToggleRow}>
                 {MEDIA_SOURCES.map(src => (
@@ -1970,7 +1974,7 @@ export default function PageEditorScreen() {
                   >
                     <MaterialIcons name={MEDIA_SOURCE_ICON[src]} size={13} color={imageSource === src ? '#000' : Colors.textSecondary} />
                     <Text style={[styles.sourceBtnText, imageSource === src && styles.sourceBtnTextActive]}>
-                      {MEDIA_SOURCE_LABEL[src]}
+                      {ts(MEDIA_SOURCE_LABEL[src])}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -1985,7 +1989,7 @@ export default function PageEditorScreen() {
               ) : imageSource === 'file' ? (
                 <TouchableOpacity style={styles.pickBtn} onPress={handlePickImage} disabled={uploadingBg} activeOpacity={0.7}>
                   <MaterialIcons name="add-photo-alternate" size={18} color={Colors.textSecondary} />
-                  <Text style={styles.pickBtnText}>Añadir imagen de fondo</Text>
+                  <Text style={styles.pickBtnText}>{ts('Añadir imagen de fondo')}</Text>
                   {uploadingBg && <ActivityIndicator size="small" color={Colors.emerald} />}
                 </TouchableOpacity>
               ) : (
@@ -1994,7 +1998,7 @@ export default function PageEditorScreen() {
                     style={styles.urlInput}
                     defaultValue={imageUrlInput}
                     onChangeText={setImageUrlInput}
-                    placeholder="Link de Drive o URL directa a imagen…"
+                    placeholder={ts('Link de Drive o URL directa a imagen…')}
                     placeholderTextColor={Colors.textMuted}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -2005,7 +2009,7 @@ export default function PageEditorScreen() {
                     disabled={!imageUrlInput.trim()}
                     activeOpacity={0.75}
                   >
-                    <Text style={styles.urlConfirmText}>Usar</Text>
+                    <Text style={styles.urlConfirmText}>{ts('Usar')}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -2015,12 +2019,12 @@ export default function PageEditorScreen() {
 
         {/* Música */}
         <View style={styles.section} nativeID={tutorialZone('peMusic')}>
-          <Text style={styles.sectionLabel}>Música</Text>
+          <Text style={styles.sectionLabel}>{ts('Música')}</Text>
           <View style={styles.musicModeRow}>
             {([
-              { value: 'inherit', icon: 'redo',       label: 'Heredar'   },
-              { value: 'play',    icon: 'audiotrack',  label: 'Pista'     },
-              { value: 'silence', icon: 'music-off',   label: 'Silenciar' },
+              { value: 'inherit', icon: 'redo',       label: ts('Heredar')   },
+              { value: 'play',    icon: 'audiotrack',  label: ts('Pista')     },
+              { value: 'silence', icon: 'music-off',   label: ts('Silenciar') },
             ] as any[]).map(opt => (
               <TouchableOpacity
                 key={opt.value}
@@ -2033,7 +2037,7 @@ export default function PageEditorScreen() {
               >
                 <MaterialIcons name={opt.icon} size={13} color={musicMode === opt.value ? '#000' : Colors.textSecondary} />
                 <Text style={[styles.musicModeBtnText, musicMode === opt.value && styles.musicModeBtnTextActive]}>
-                  {opt.label}
+                  {ts(opt.label)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -2044,7 +2048,7 @@ export default function PageEditorScreen() {
               <>
               <View style={styles.musicTrackRow}>
                 <MaterialIcons name="audiotrack" size={14} color={Colors.aqua} />
-                <Text style={styles.musicTrackName} numberOfLines={1}>{musicFileName || 'Pista de audio'}</Text>
+                <Text style={styles.musicTrackName} numberOfLines={1}>{musicFileName || ts('Pista de audio')}</Text>
                 {uploadingMusic
                   ? <ActivityIndicator size="small" color={Colors.aqua} />
                   : <TouchableOpacity
@@ -2068,7 +2072,7 @@ export default function PageEditorScreen() {
                 return (
                   <>
                     <View style={styles.anchorRow}>
-                      <Text style={styles.anchorLabel}>Empieza en el párrafo:</Text>
+                      <Text style={styles.anchorLabel}>{ts('Empieza en el párrafo:')}</Text>
                       <TouchableOpacity
                         style={[styles.blurStepBtn, paragraph <= 1 && { opacity: 0.35 }]}
                         onPress={() => setMusicParagraph(Math.max(1, paragraph - 1))}
@@ -2093,19 +2097,19 @@ export default function PageEditorScreen() {
                           <Text style={styles.sfxCueSnippet} numberOfLines={1}>«{snippet.replace(/\n/g, ' ')}»</Text>
                         ) : null}
                         <View style={[styles.anchorRow, { flexWrap: 'wrap' }]}>
-                          <Text style={styles.anchorLabel}>Hasta entonces:</Text>
+                          <Text style={styles.anchorLabel}>{ts('Hasta entonces:')}</Text>
                           {([
-                            { value: false, icon: 'subdirectory-arrow-right', label: 'Sigue la música anterior' },
-                            { value: true,  icon: 'volume-off', label: 'Silencio' },
+                            { value: false, icon: 'subdirectory-arrow-right', label: ts('Sigue la música anterior') },
+                            { value: true,  icon: 'volume-off', label: ts('Silencio') },
                           ] as const).map(opt => (
                             <TouchableOpacity
-                              key={opt.label}
+                              key={ts(opt.label)}
                               style={[styles.anchorBtn, musicBeforeSilence === opt.value && styles.anchorBtnActive]}
                               onPress={() => setMusicBeforeSilence(opt.value)}
                               activeOpacity={0.75}
                             >
                               <MaterialIcons name={opt.icon} size={13} color={musicBeforeSilence === opt.value ? '#000' : Colors.textSecondary} />
-                              <Text style={[styles.anchorBtnText, musicBeforeSilence === opt.value && styles.anchorBtnTextActive]}>{opt.label}</Text>
+                              <Text style={[styles.anchorBtnText, musicBeforeSilence === opt.value && styles.anchorBtnTextActive]}>{ts(opt.label)}</Text>
                             </TouchableOpacity>
                           ))}
                         </View>
@@ -2127,7 +2131,7 @@ export default function PageEditorScreen() {
                     >
                       <MaterialIcons name={MEDIA_SOURCE_ICON[src]} size={13} color={musicSource === src ? '#000' : Colors.textSecondary} />
                       <Text style={[styles.sourceBtnText, musicSource === src && styles.sourceBtnTextActive]}>
-                        {MEDIA_SOURCE_LABEL[src]}
+                        {ts(MEDIA_SOURCE_LABEL[src])}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -2151,7 +2155,7 @@ export default function PageEditorScreen() {
                       : <MaterialIcons name="upload-file" size={16} color={Colors.textSecondary} />
                     }
                     <Text style={styles.pickBtnText}>
-                      {uploadingMusic ? 'Subiendo…' : 'Elegir archivo de audio'}
+                      {uploadingMusic ? ts('Subiendo…') : ts('Elegir archivo de audio')}
                     </Text>
                   </TouchableOpacity>
                 ) : (
@@ -2160,7 +2164,7 @@ export default function PageEditorScreen() {
                       style={styles.urlInput}
                       defaultValue={musicUrlInput}
                       onChangeText={setMusicUrlInput}
-                      placeholder="Link de Drive o URL directa a audio…"
+                      placeholder={ts('Link de Drive o URL directa a audio…')}
                       placeholderTextColor={Colors.textMuted}
                       autoCapitalize="none"
                       autoCorrect={false}
@@ -2171,7 +2175,7 @@ export default function PageEditorScreen() {
                       disabled={!musicUrlInput.trim()}
                       activeOpacity={0.75}
                     >
-                      <Text style={styles.urlConfirmText}>Usar</Text>
+                      <Text style={styles.urlConfirmText}>{ts('Usar')}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -2181,33 +2185,32 @@ export default function PageEditorScreen() {
           {musicMode === 'inherit' && (
             <View style={styles.musicHint}>
               <MaterialIcons name="redo" size={12} color={Colors.textMuted} />
-              <Text style={styles.musicHintText}>Continúa la pista de la página anterior</Text>
+              <Text style={styles.musicHintText}>{ts('Continúa la pista de la página anterior')}</Text>
             </View>
           )}
           {musicMode === 'silence' && (
             <View style={styles.musicHint}>
               <MaterialIcons name="music-off" size={12} color={Colors.textMuted} />
-              <Text style={styles.musicHintText}>La música se detendrá en esta página</Text>
+              <Text style={styles.musicHintText}>{ts('La música se detendrá en esta página')}</Text>
             </View>
           )}
         </View>
 
         {/* Silencio momentáneo de la música */}
         <View style={styles.section} nativeID={tutorialZone('peQuiet')}>
-          <Text style={styles.sectionLabel}>Silencio momentáneo</Text>
+          <Text style={styles.sectionLabel}>{ts('Silencio momentáneo')}</Text>
           <Text style={styles.sectionHint}>
-            Calla la música durante algunos párrafos de esta página, sea la suya o la heredada.
-            Después vuelve sola, por donde iba.
+            {ts('Calla la música durante algunos párrafos de esta página, sea la suya o la heredada. Después vuelve sola, por donde iba.')}
           </Text>
           <View style={styles.anchorRow}>
-            {([{ value: false, label: 'No' }, { value: true, label: 'Callar la música' }] as const).map(opt => (
+            {([{ value: false, label: 'No' }, { value: true, label: ts('Callar la música') }] as const).map(opt => (
               <TouchableOpacity
-                key={opt.label}
+                key={ts(opt.label)}
                 style={[styles.anchorBtn, quietOn === opt.value && styles.anchorBtnActive]}
                 onPress={() => setQuietOn(opt.value)}
                 activeOpacity={0.75}
               >
-                <Text style={[styles.anchorBtnText, quietOn === opt.value && styles.anchorBtnTextActive]}>{opt.label}</Text>
+                <Text style={[styles.anchorBtnText, quietOn === opt.value && styles.anchorBtnTextActive]}>{ts(opt.label)}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -2238,12 +2241,12 @@ export default function PageEditorScreen() {
             );
             return (
               <>
-                {row('Desde el párrafo:', from, n => { setQuietFrom(n); if (n > quietTo) setQuietTo(n); }, 1)}
-                {row('Hasta el párrafo:', to, setQuietTo, from)}
+                {row(ts('Desde el párrafo:'), from, n => { setQuietFrom(n); if (n > quietTo) setQuietTo(n); }, 1)}
+                {row(ts('Hasta el párrafo:'), to, setQuietTo, from)}
                 <Text style={styles.sfxCueSnippet}>
                   {to >= paragraphCount
-                    ? 'Llega hasta el final de la página: la música vuelve al pasar a la siguiente.'
-                    : `La música vuelve al aparecer el párrafo ${to + 1}.`}
+                    ? ts('Llega hasta el final de la página: la música vuelve al pasar a la siguiente.')
+                    : ts('La música vuelve al aparecer el párrafo {n}.', { n: to + 1 })}
                 </Text>
               </>
             );
@@ -2252,7 +2255,7 @@ export default function PageEditorScreen() {
 
         {/* Efecto de sonido */}
         <View style={styles.section} nativeID={tutorialZone('peSfx')}>
-          <Text style={styles.sectionLabel}>Efectos de sonido</Text>
+          <Text style={styles.sectionLabel}>{ts('Efectos de sonido')}</Text>
           <Text style={styles.sectionHint}>
             Suenan una vez cuando aparece el párrafo que elijas (una puerta, un trueno…). Puedes
             poner varios. El párrafo 1 es al llegar a la página. No se heredan.
@@ -2264,7 +2267,7 @@ export default function PageEditorScreen() {
               <View key={cue.id} style={styles.sfxCueCard}>
                 <View style={styles.musicTrackRow}>
                   <MaterialIcons name="graphic-eq" size={14} color={Colors.aqua} />
-                  <Text style={styles.musicTrackName} numberOfLines={1}>{cue.name || 'Efecto de sonido'}</Text>
+                  <Text style={styles.musicTrackName} numberOfLines={1}>{cue.name || ts('Efecto de sonido')}</Text>
                   <TouchableOpacity
                     onPress={() => removeSfxCue(cue.id)}
                     style={{ padding: 6 }}
@@ -2274,7 +2277,7 @@ export default function PageEditorScreen() {
                   </TouchableOpacity>
                 </View>
                 <View style={styles.anchorRow}>
-                  <Text style={styles.anchorLabel}>Suena en el párrafo:</Text>
+                  <Text style={styles.anchorLabel}>{ts('Suena en el párrafo:')}</Text>
                   <TouchableOpacity
                     style={[styles.blurStepBtn, paragraph <= 1 && { opacity: 0.35 }]}
                     onPress={() => updateSfxCue(cue.id, { paragraph: Math.max(1, paragraph - 1) })}
@@ -2304,7 +2307,7 @@ export default function PageEditorScreen() {
               </View>
             );
           })}
-          <Text style={styles.anchorLabel}>{sfxCues.length ? 'Añadir otro efecto:' : 'Añadir un efecto:'}</Text>
+          <Text style={styles.anchorLabel}>{sfxCues.length ? ts('Añadir otro efecto:') : ts('Añadir un efecto:')}</Text>
           {(
             <>
               <View style={styles.sourceToggleRow}>
@@ -2317,7 +2320,7 @@ export default function PageEditorScreen() {
                   >
                     <MaterialIcons name={MEDIA_SOURCE_ICON[src]} size={13} color={sfxSource === src ? '#000' : Colors.textSecondary} />
                     <Text style={[styles.sourceBtnText, sfxSource === src && styles.sourceBtnTextActive]}>
-                      {MEDIA_SOURCE_LABEL[src]}
+                      {ts(MEDIA_SOURCE_LABEL[src])}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -2341,7 +2344,7 @@ export default function PageEditorScreen() {
                     : <MaterialIcons name="upload-file" size={16} color={Colors.textSecondary} />
                   }
                   <Text style={styles.pickBtnText}>
-                    {uploadingSfx ? 'Subiendo…' : 'Elegir archivo de sonido'}
+                    {uploadingSfx ? ts('Subiendo…') : ts('Elegir archivo de sonido')}
                   </Text>
                 </TouchableOpacity>
               ) : (
@@ -2350,7 +2353,7 @@ export default function PageEditorScreen() {
                     style={styles.urlInput}
                     defaultValue={sfxUrlInput}
                     onChangeText={setSfxUrlInput}
-                    placeholder="Link de Drive o URL directa a audio…"
+                    placeholder={ts('Link de Drive o URL directa a audio…')}
                     placeholderTextColor={Colors.textMuted}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -2361,7 +2364,7 @@ export default function PageEditorScreen() {
                     disabled={!sfxUrlInput.trim()}
                     activeOpacity={0.75}
                   >
-                    <Text style={styles.urlConfirmText}>Usar</Text>
+                    <Text style={styles.urlConfirmText}>{ts('Usar')}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -2371,11 +2374,9 @@ export default function PageEditorScreen() {
 
         {/* ── Cuadros de texto extra ── */}
         <View style={styles.section} nativeID={tutorialZone('peExtra')}>
-          <Text style={styles.sectionLabel}>Cuadros de texto extra</Text>
+          <Text style={styles.sectionLabel}>{ts('Cuadros de texto extra')}</Text>
           <Text style={styles.sectionHint}>
-            Texto suelto que aparece en el párrafo que elijas: voces de fondo, un rótulo, una
-            decisión… Hasta {EXTRA_BOX_MAX}. En la vista previa, arrástralos para colocarlos y tira
-            de su esquina inferior derecha para cambiarles el tamaño.
+            {ts('Texto suelto que aparece en el párrafo que elijas: voces de fondo, un rótulo, una decisión… Hasta {n}. En la vista previa, arrástralos para colocarlos y tira de su esquina inferior derecha para cambiarles el tamaño.', { n: EXTRA_BOX_MAX })}
           </Text>
           {extraBoxes.map((box, i) => {
             const paragraph = Math.min(box.paragraph, paragraphCount);
@@ -2408,25 +2409,25 @@ export default function PageEditorScreen() {
                   style={[styles.urlInput, { minHeight: 56, textAlignVertical: 'top' }]}
                   value={box.text}
                   onChangeText={text => updateExtraBox(box.id, { text })}
-                  placeholder="Texto del cuadro…"
+                  placeholder={ts('Texto del cuadro…')}
                   placeholderTextColor={Colors.textMuted}
                   multiline
                   maxLength={200}
                 />
-                {stepper('Aparece en el párrafo:', String(paragraph),
+                {stepper(ts('Aparece en el párrafo:'), String(paragraph),
                   () => updateExtraBox(box.id, { paragraph: Math.max(1, paragraph - 1) }),
                   () => updateExtraBox(box.id, { paragraph: Math.min(paragraphCount, paragraph + 1) }))}
                 {stepper('Ancho:', `${Math.round(box.w)}%`,
                   () => updateExtraBox(box.id, { w: Math.max(6, box.w - 2) }),
                   () => updateExtraBox(box.id, { w: Math.min(100, box.w + 2) }))}
                 <View style={styles.anchorRow}>
-                  <Text style={styles.anchorLabel}>Alto:</Text>
+                  <Text style={styles.anchorLabel}>{ts('Alto:')}</Text>
                   <TouchableOpacity
                     style={[styles.anchorBtn, box.h === null && styles.anchorBtnActive]}
                     onPress={() => updateExtraBox(box.id, { h: null })}
                     activeOpacity={0.75}
                   >
-                    <Text style={[styles.anchorBtnText, box.h === null && styles.anchorBtnTextActive]}>Según el texto</Text>
+                    <Text style={[styles.anchorBtnText, box.h === null && styles.anchorBtnTextActive]}>{ts('Según el texto')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.blurStepBtn} onPress={() => updateExtraBox(box.id, { h: Math.max(5, (box.h ?? 20) - 2) })} hitSlop={6}>
                     <MaterialIcons name="remove" size={14} color={Colors.textSecondary} />
@@ -2447,26 +2448,26 @@ export default function PageEditorScreen() {
                       onPress={() => updateExtraBox(box.id, { rotation: p.value })}
                       activeOpacity={0.75}
                     >
-                      <Text style={[styles.anchorBtnText, box.rotation === p.value && styles.anchorBtnTextActive]}>{p.label}</Text>
+                      <Text style={[styles.anchorBtnText, box.rotation === p.value && styles.anchorBtnTextActive]}>{ts(p.label)}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
                 {/* Animación con la que aparece */}
                 <View style={[styles.anchorRow, { flexWrap: 'wrap' }]}>
-                  <Text style={styles.anchorLabel}>Aparece:</Text>
-                  {([{ value: 'fade', label: 'Desvanecer' }, { value: 'pop', label: 'Pop' }] as const).map(opt => (
+                  <Text style={styles.anchorLabel}>{ts('Aparece:')}</Text>
+                  {([{ value: 'fade', label: ts('Desvanecer') }, { value: 'pop', label: ts('Pop') }] as const).map(opt => (
                     <TouchableOpacity
                       key={opt.value}
                       style={[styles.anchorBtn, box.animation === opt.value && styles.anchorBtnActive]}
                       onPress={() => updateExtraBox(box.id, { animation: opt.value })}
                       activeOpacity={0.75}
                     >
-                      <Text style={[styles.anchorBtnText, box.animation === opt.value && styles.anchorBtnTextActive]}>{opt.label}</Text>
+                      <Text style={[styles.anchorBtnText, box.animation === opt.value && styles.anchorBtnTextActive]}>{ts(opt.label)}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
                 <View style={[styles.anchorRow, { flexWrap: 'wrap' }]}>
-                  <Text style={styles.anchorLabel}>Deslizándose:</Text>
+                  <Text style={styles.anchorLabel}>{ts('Deslizándose:')}</Text>
                   {EXTRA_BOX_SLIDES.map(opt => (
                     <TouchableOpacity
                       key={opt.value}
@@ -2479,7 +2480,7 @@ export default function PageEditorScreen() {
                   ))}
                 </View>
                 <View style={[styles.anchorRow, { flexWrap: 'wrap' }]}>
-                  <Text style={styles.anchorLabel}>Con barrido:</Text>
+                  <Text style={styles.anchorLabel}>{ts('Con barrido:')}</Text>
                   {EXTRA_BOX_WIPES.map(opt => (
                     <TouchableOpacity
                       key={opt.value}
@@ -2492,7 +2493,7 @@ export default function PageEditorScreen() {
                   ))}
                 </View>
                 <View style={styles.anchorRow}>
-                  <Text style={styles.anchorLabel}>Al pulsarlo, ir a la página:</Text>
+                  <Text style={styles.anchorLabel}>{ts('Al pulsarlo, ir a la página:')}</Text>
                   <TextInput
                     style={[styles.urlInput, { flex: 0, width: 64, textAlign: 'center' }]}
                     value={box.target}
@@ -2509,7 +2510,7 @@ export default function PageEditorScreen() {
                   </Text>
                 ) : (
                   <Text style={styles.sfxCueSnippet}>
-                    {box.target ? 'Es una decisión: al pulsarlo se va a esa página.' : 'Vacío = solo texto, no se pulsa.'}
+                    {box.target ? ts('Es una decisión: al pulsarlo se va a esa página.') : ts('Vacío = solo texto, no se pulsa.')}
                   </Text>
                 )}
               </View>
@@ -2518,25 +2519,25 @@ export default function PageEditorScreen() {
           {extraBoxes.length < EXTRA_BOX_MAX && (
             <TouchableOpacity style={styles.pickBtn} onPress={addExtraBox} activeOpacity={0.7}>
               <MaterialIcons name="add" size={16} color={Colors.textSecondary} />
-              <Text style={styles.pickBtnText}>Añadir cuadro de texto</Text>
+              <Text style={styles.pickBtnText}>{ts('Añadir cuadro de texto')}</Text>
             </TouchableOpacity>
           )}
         </View>
 
         {/* ── Personajes ── */}
         <View style={styles.section} nativeID={tutorialZone('peCharacters')}>
-          <Text style={styles.sectionLabel}>Personajes</Text>
+          <Text style={styles.sectionLabel}>{ts('Personajes')}</Text>
           <Text style={styles.sectionHint}>
             Nombres que aparecen sobre el recuadro de texto. Se heredan de página en página.
           </Text>
           {/* Slot izquierda — POV / Protagonista */}
           <View style={styles.charSlot}>
-            <Text style={styles.charSlotLabel}>POV / Protagonista</Text>
+            <Text style={styles.charSlotLabel}>{ts('POV / Protagonista')}</Text>
             <View style={styles.charModeRow}>
               {([
-                { value: 'inherit' as CharMode, icon: 'redo',      label: 'Heredar' },
-                { value: 'show'    as CharMode, icon: 'person',     label: 'Nombre'  },
-                { value: 'hide'    as CharMode, icon: 'person-off', label: 'Ocultar' },
+                { value: 'inherit' as CharMode, icon: 'redo',      label: ts('Heredar') },
+                { value: 'show'    as CharMode, icon: 'person',     label: ts('Nombre')  },
+                { value: 'hide'    as CharMode, icon: 'person-off', label: ts('Ocultar') },
               ]).map(opt => (
                 <TouchableOpacity
                   key={opt.value}
@@ -2545,7 +2546,7 @@ export default function PageEditorScreen() {
                   activeOpacity={0.75}
                 >
                   <MaterialIcons name={opt.icon as any} size={12} color={leftCharMode === opt.value ? '#000' : Colors.textSecondary} />
-                  <Text style={[styles.charModeBtnText, leftCharMode === opt.value && styles.charModeBtnTextActive]}>{opt.label}</Text>
+                  <Text style={[styles.charModeBtnText, leftCharMode === opt.value && styles.charModeBtnTextActive]}>{ts(opt.label)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -2557,7 +2558,7 @@ export default function PageEditorScreen() {
                   style={styles.charNameInput}
                   defaultValue={leftCharName}
                   onChangeText={setLeftCharName}
-                  placeholder="Nombre del personaje…"
+                  placeholder={ts('Nombre del personaje…')}
                   placeholderTextColor={Colors.textMuted}
                   autoCorrect={false}
                   autoCapitalize="words"
@@ -2569,25 +2570,25 @@ export default function PageEditorScreen() {
             {leftCharMode === 'inherit' && (
               <View style={styles.musicHint}>
                 <MaterialIcons name="redo" size={12} color={Colors.textMuted} />
-                <Text style={styles.musicHintText}>Toma el nombre de la página anterior</Text>
+                <Text style={styles.musicHintText}>{ts('Toma el nombre de la página anterior')}</Text>
               </View>
             )}
             {leftCharMode === 'hide' && (
               <View style={styles.musicHint}>
                 <MaterialIcons name="person-off" size={12} color={Colors.textMuted} />
-                <Text style={styles.musicHintText}>Oculta el nombre aunque venga heredado</Text>
+                <Text style={styles.musicHintText}>{ts('Oculta el nombre aunque venga heredado')}</Text>
               </View>
             )}
           </View>
 
           {/* Slot derecha — Otro personaje */}
           <View style={styles.charSlot}>
-            <Text style={styles.charSlotLabel}>Otro personaje</Text>
+            <Text style={styles.charSlotLabel}>{ts('Otro personaje')}</Text>
             <View style={styles.charModeRow}>
               {([
-                { value: 'inherit' as CharMode, icon: 'redo',      label: 'Heredar' },
-                { value: 'show'    as CharMode, icon: 'person',     label: 'Nombre'  },
-                { value: 'hide'    as CharMode, icon: 'person-off', label: 'Ocultar' },
+                { value: 'inherit' as CharMode, icon: 'redo',      label: ts('Heredar') },
+                { value: 'show'    as CharMode, icon: 'person',     label: ts('Nombre')  },
+                { value: 'hide'    as CharMode, icon: 'person-off', label: ts('Ocultar') },
               ]).map(opt => (
                 <TouchableOpacity
                   key={opt.value}
@@ -2596,7 +2597,7 @@ export default function PageEditorScreen() {
                   activeOpacity={0.75}
                 >
                   <MaterialIcons name={opt.icon as any} size={12} color={rightCharMode === opt.value ? '#000' : Colors.textSecondary} />
-                  <Text style={[styles.charModeBtnText, rightCharMode === opt.value && styles.charModeBtnTextActive]}>{opt.label}</Text>
+                  <Text style={[styles.charModeBtnText, rightCharMode === opt.value && styles.charModeBtnTextActive]}>{ts(opt.label)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -2608,7 +2609,7 @@ export default function PageEditorScreen() {
                   style={styles.charNameInput}
                   defaultValue={rightCharName}
                   onChangeText={setRightCharName}
-                  placeholder="Nombre del personaje…"
+                  placeholder={ts('Nombre del personaje…')}
                   placeholderTextColor={Colors.textMuted}
                   autoCorrect={false}
                   autoCapitalize="words"
@@ -2620,13 +2621,13 @@ export default function PageEditorScreen() {
             {rightCharMode === 'inherit' && (
               <View style={styles.musicHint}>
                 <MaterialIcons name="redo" size={12} color={Colors.textMuted} />
-                <Text style={styles.musicHintText}>Toma el nombre de la página anterior</Text>
+                <Text style={styles.musicHintText}>{ts('Toma el nombre de la página anterior')}</Text>
               </View>
             )}
             {rightCharMode === 'hide' && (
               <View style={styles.musicHint}>
                 <MaterialIcons name="person-off" size={12} color={Colors.textMuted} />
-                <Text style={styles.musicHintText}>Oculta el nombre aunque venga heredado</Text>
+                <Text style={styles.musicHintText}>{ts('Oculta el nombre aunque venga heredado')}</Text>
               </View>
             )}
           </View>
@@ -2634,9 +2635,9 @@ export default function PageEditorScreen() {
 
         {/* ── Palabras enlazadas ── */}
         <View style={styles.section} nativeID={tutorialZone('peLinks')}>
-          <Text style={styles.sectionLabel}>Palabras enlazadas</Text>
+          <Text style={styles.sectionLabel}>{ts('Palabras enlazadas')}</Text>
           <Text style={styles.sectionHint}>
-            El lector podrá tocar estas palabras para saltar a otra página.
+            {ts('El lector podrá tocar estas palabras para saltar a otra página.')}
           </Text>
 
           {/* Chips de enlaces existentes */}
@@ -2671,7 +2672,7 @@ export default function PageEditorScreen() {
               activeOpacity={0.75}
             >
               <MaterialIcons name="add-link" size={16} color={Colors.emerald} />
-              <Text style={styles.linkAddText}>Añadir enlace</Text>
+              <Text style={styles.linkAddText}>{ts('Añadir enlace')}</Text>
             </TouchableOpacity>
           )}
 
@@ -2679,7 +2680,7 @@ export default function PageEditorScreen() {
           {linkMode && (
             <View style={styles.linkPendingPanel}>
               <View style={styles.linkPendingHeader}>
-                <Text style={styles.linkPendingTitle}>Nuevo enlace</Text>
+                <Text style={styles.linkPendingTitle}>{ts('Nuevo enlace')}</Text>
                 <TouchableOpacity
                   onPress={() => { setLinkMode(false); setPendingWord(''); setPendingLinkTarget(null); }}
                   style={{ padding: 4 }}
@@ -2691,12 +2692,12 @@ export default function PageEditorScreen() {
 
               {/* Palabra — escribir o seleccionar en el preview */}
               <View style={styles.linkPagePickerRow}>
-                <Text style={styles.linkColorPickerLabel}>Palabra:</Text>
+                <Text style={styles.linkColorPickerLabel}>{ts('Palabra:')}</Text>
                 <TextInput
                   style={[styles.linkPageInputFull, pendingWord ? { color: pendingLinkColor } : {}]}
                   value={pendingWord}
                   onChangeText={setPendingWord}
-                  placeholder="Escribe o selecciónala arriba…"
+                  placeholder={ts('Escribe o selecciónala arriba…')}
                   placeholderTextColor={Colors.textMuted}
                   autoCorrect={false}
                   autoCapitalize="none"
@@ -2706,7 +2707,7 @@ export default function PageEditorScreen() {
 
               {/* Selector de color */}
               <View style={styles.linkColorPickerRow}>
-                <Text style={styles.linkColorPickerLabel}>Color:</Text>
+                <Text style={styles.linkColorPickerLabel}>{ts('Color:')}</Text>
                 <View style={styles.linkColorPickerDots}>
                   {LINK_COLORS.map(c => (
                     <TouchableOpacity
@@ -2720,7 +2721,7 @@ export default function PageEditorScreen() {
 
               {/* Página destino */}
               <View style={styles.linkPagePickerRow}>
-                <Text style={styles.linkColorPickerLabel}>Saltar a página:</Text>
+                <Text style={styles.linkColorPickerLabel}>{ts('Saltar a página:')}</Text>
                 <TouchableOpacity
                   style={styles.linkPageSelector}
                   onPress={openPagePicker}
@@ -2757,7 +2758,7 @@ export default function PageEditorScreen() {
                         style={styles.pickerSearchInput}
                         value={pagePickerSearch}
                         onChangeText={setPagePickerSearch}
-                        placeholder="Buscar por número o capítulo…"
+                        placeholder={ts('Buscar por número o capítulo…')}
                         placeholderTextColor={Colors.textMuted}
                         autoCorrect={false}
                         clearButtonMode="while-editing"
@@ -2790,7 +2791,7 @@ export default function PageEditorScreen() {
                           : <MaterialIcons name="add-circle-outline" size={16} color={Colors.emerald} />
                         }
                         <Text style={styles.pickerCreateBtnText}>
-                          {creatingNewPage ? 'Creando página…' : 'Crear nueva página en este capítulo'}
+                          {creatingNewPage ? ts('Creando página…') : ts('Crear nueva página en este capítulo')}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -2798,7 +2799,7 @@ export default function PageEditorScreen() {
                     {loadingPageOptions ? (
                       <View style={styles.pickerLoading}>
                         <ActivityIndicator color={Colors.emerald} size="small" />
-                        <Text style={styles.pickerLoadingText}>Cargando páginas…</Text>
+                        <Text style={styles.pickerLoadingText}>{ts('Cargando páginas…')}</Text>
                       </View>
                     ) : (() => {
                       const filtered = pageOptions.filter(opt => {
@@ -2815,7 +2816,7 @@ export default function PageEditorScreen() {
                           {filtered.length === 0 ? (
                             <View style={styles.pickerEmpty}>
                               <Text style={styles.pickerEmptyText}>
-                                {pageOptions.length === 0 ? 'Este libro aún no tiene páginas' : 'Sin resultados'}
+                                {pageOptions.length === 0 ? ts('Este libro aún no tiene páginas') : ts('Sin resultados')}
                               </Text>
                             </View>
                           ) : filtered.map(item => {
@@ -2860,7 +2861,7 @@ export default function PageEditorScreen() {
                   onPress={() => { setLinkMode(false); setPendingWord(''); setPendingLinkTarget(null); }}
                   activeOpacity={0.75}
                 >
-                  <Text style={styles.linkCancelText}>Cancelar</Text>
+                  <Text style={styles.linkCancelText}>{ts('Cancelar')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
@@ -2888,7 +2889,7 @@ export default function PageEditorScreen() {
                   activeOpacity={0.75}
                 >
                   <MaterialIcons name="check" size={15} color="#000" />
-                  <Text style={styles.linkConfirmText}>Añadir</Text>
+                  <Text style={styles.linkConfirmText}>{ts('Añadir')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -2897,9 +2898,9 @@ export default function PageEditorScreen() {
 
         {/* ── Redirección de página ── */}
         <View style={styles.section} nativeID={tutorialZone('peNext')}>
-          <Text style={styles.sectionLabel}>Al pasar la página</Text>
+          <Text style={styles.sectionLabel}>{ts('Al pasar la página')}</Text>
           <Text style={styles.sectionHint}>
-            Por defecto avanza a la siguiente. Puedes redirigir a cualquier otra.
+            {ts('Por defecto avanza a la siguiente. Puedes redirigir a cualquier otra.')}
           </Text>
           <View style={styles.nextPageRow}>
             <TouchableOpacity
@@ -2909,7 +2910,7 @@ export default function PageEditorScreen() {
             >
               <MaterialIcons name="arrow-forward" size={14} color={!jumpEnabled ? '#000' : Colors.textSecondary} />
               <Text style={[styles.nextPageBtnText, !jumpEnabled && styles.nextPageBtnTextActive]}>
-                Siguiente
+                {ts('Siguiente')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -2919,12 +2920,12 @@ export default function PageEditorScreen() {
             >
               <MaterialIcons name="call-split" size={14} color={jumpEnabled ? '#000' : Colors.textSecondary} />
               <Text style={[styles.nextPageBtnText, jumpEnabled && styles.nextPageBtnTextActive]}>
-                Saltar a
+                {ts('Saltar a')}
               </Text>
             </TouchableOpacity>
             {jumpEnabled && (
               <View style={styles.nextPageInputWrap}>
-                <Text style={styles.nextPageInputLabel}>pág.</Text>
+                <Text style={styles.nextPageInputLabel}>{ts('pág.')}</Text>
                 <TextInput
                   style={styles.nextPageInput}
                   value={nextPageInput}

@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { es, type TKey } from './es';
 import { en } from './en';
 import { ja } from './ja';
+import { PHRASES } from './phrases';
 
 // Idiomas de la web.
 //
@@ -120,3 +121,11 @@ export function genreLabel(genre: string): string {
 // Números con el formato del idioma actual (1.234 / 1,234)
 const LOCALES: Record<Lang, string> = { es: 'es-ES', en: 'en-US', ja: 'ja-JP' };
 export const formatNumber = (n: number) => n.toLocaleString(LOCALES[lang]);
+
+// Traduccion por frase (ver phrases.ts): el texto en español es la propia clave. Lo usan
+// las pantallas con muchisimo texto. Si la frase no esta traducida, sale en español.
+export function ts(text: string, params?: Record<string, string | number>): string {
+  let out = lang === 'es' ? text : (PHRASES[text]?.[lang] ?? text);
+  if (params) for (const k in params) out = out.split(`{${k}}`).join(String(params[k]));
+  return out;
+}
