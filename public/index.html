@@ -48,6 +48,41 @@
       }
     </style>
 
+    <!-- Las ilustraciones de las novelas son de sus autores: se quita lo que permite
+         guardarlas directamente (menú de "guardar imagen" con el botón derecho o al mantener
+         pulsado, y arrastrarlas fuera). No impide una captura de pantalla; eso no se puede. -->
+    <style id="immersa-images">
+      img {
+        pointer-events: none;
+        -webkit-touch-callout: none;
+        -webkit-user-drag: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+    </style>
+    <script>
+      (function () {
+        // ¿El elemento (o alguno de los que lo contienen, hasta cierto nivel) es una imagen?
+        function isImage(el) {
+          for (var i = 0; el && el !== document.body && i < 5; i++, el = el.parentElement) {
+            if (el.tagName === 'IMG' || el.tagName === 'PICTURE' || el.tagName === 'CANVAS') return true;
+            var bg = window.getComputedStyle(el).backgroundImage;
+            if (bg && bg.indexOf('url(') !== -1) return true;
+            if (el.querySelector && el.querySelector(':scope > img')) return true;
+          }
+          return false;
+        }
+        document.addEventListener('contextmenu', function (e) {
+          var tag = e.target && e.target.tagName;
+          if (tag === 'INPUT' || tag === 'TEXTAREA') return; // en los campos de texto, el menú normal
+          if (isImage(e.target)) e.preventDefault();
+        }, true);
+        document.addEventListener('dragstart', function (e) {
+          if (isImage(e.target)) e.preventDefault();
+        }, true);
+      })();
+    </script>
+
     <style id="expo-reset">
       /* These styles make the body full-height */
       html,
