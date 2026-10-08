@@ -98,7 +98,7 @@ export default function WriteScreen() {
     }
   };
   const ImportLink = () => Platform.OS !== 'web' ? null : (
-    <TouchableOpacity style={styles.importLink} onPress={handleImport} disabled={importing} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.importLink} onPress={handleImport} disabled={importing} activeOpacity={0.7} testID={tutorialZone('import')}>
       {importing
         ? <ActivityIndicator size="small" color={Colors.textMuted} />
         : <MaterialIcons name="file-upload" size={16} color={Colors.textMuted} />}
@@ -220,6 +220,7 @@ export default function WriteScreen() {
             <Animated.View key={f.key} style={{ opacity: anims[i].opacity, transform: [{ translateY: anims[i].translateY }] }}>
               <TouchableOpacity
                 style={styles.formatCard}
+                testID={f.key === 'Moderno' ? tutorialZone('formatModerno') : undefined}
                 activeOpacity={0.75}
                 onPress={() => startStory(f.key)}
               >
@@ -296,6 +297,7 @@ export default function WriteScreen() {
               <Animated.View key={f.key} style={{ opacity: anims[i].opacity, transform: [{ translateY: anims[i].translateY }] }}>
                 <TouchableOpacity
                   style={styles.formatCard}
+                testID={f.key === 'Moderno' ? tutorialZone('formatModerno') : undefined}
                   activeOpacity={0.75}
                   onPress={() => startStory(f.key)}
                 >

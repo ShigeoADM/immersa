@@ -43,8 +43,13 @@ type Piece = { t: string; italic?: boolean };
 //     momento para aparecer antes de darlo por ausente.
 //   · unless: si esa otra zona está a la vista, el paso no procede y se salta sin esperar
 //     (por ejemplo: quien no tiene libros no ve "Mis libros", ve ya los formatos).
+//   · boxAt: en zonas sin título, dónde va el cuadro: encima o debajo de la zona.
+//   · shape 'rect': el botón que hay que pulsar es grande (una tarjeta): se ilumina su
+//     rectángulo en vez de rodearlo con un círculo.
+//   · morph: la luz no se apaga y se vuelve a encender; se encoge desde la zona anterior.
 type Step = {
   pieces: Piece[]; target?: string; sameBox?: boolean; action?: boolean; arrives?: boolean; unless?: string;
+  boxAt?: 'above' | 'below'; shape?: 'rect'; morph?: boolean;
 };
 const STEPS: Step[] = [
   {
@@ -66,6 +71,24 @@ const STEPS: Step[] = [
     pieces: [{ t: 'Aquí están todas tus novelas.' }],
   },
   { target: 'newBook', action: true, unless: 'formats', pieces: [{ t: 'Aquí podrás crear un nuevo libro.' }] },
+  {
+    target: 'import', arrives: true, boxAt: 'below',
+    pieces: [{ t: 'Aquí podrás importar las novelas que hayas exportado. Sirve para tener una copia de seguridad de tu historia fuera de la web.' }],
+  },
+  {
+    target: 'formats', boxAt: 'above',
+    pieces: [
+      { t: 'Aquí puedes crear novelas con dos formatos diferentes:\n\n' },
+      { t: 'Webnovel', italic: true },
+      { t: ', el estilo clásico de las novelas web, con scroll continuo.\n\nY ' },
+      { t: 'Novela Moderna', italic: true },
+      { t: ', más parecida a una novela visual, en la que se centrará este tutorial.' },
+    ],
+  },
+  {
+    target: 'formatModerno', action: true, shape: 'rect', morph: true,
+    pieces: [{ t: 'Crea una nueva historia, por favor. Puede ir en serio o no: luego decidirás si borras esta prueba o la aprovechas.' }],
+  },
 ];
 // Los pasos encadenados con sameBox comparten cuadro: este es el primero de su cadena
 const groupOf = (i: number) => { let g = i; while (g > 0 && STEPS[g].sameBox) g--; return g; };
@@ -84,6 +107,8 @@ const RING_WIDTH = 4;
 const RING_GAP = 9;       // aire entre el botón y el círculo
 const RING_MAX = 64;      // radio máximo del círculo
 const ARRIVE_WAIT_MS = 2500; // lo que se espera a que aparezca una zona al llegar a una pantalla
+const SETTLE_MS = 450;    // y a que termine su animación de entrada antes de medirla
+const MORPH_MS = 520;     // la luz se encoge de una zona a otra más pequeña
 
 const BOX_MAX_WIDTH = 440;
 // Alrededor del cuadro del centro queda una franja sin oscurecer: se ve la página con su
@@ -125,6 +150,8 @@ type Placement = {
   circle?: { cx: number; cy: number; r: number };
   // Parte de la pantalla que se deja libre para pulsar el botón (el botón, dentro del círculo)
   hole?: { left: number; top: number; right: number; bottom: number };
+  // La luz viene encogiéndose desde este otro rectángulo (la zona anterior)
+  from?: { x: number; y: number; w: number; h: number };
   // El cuadro va en la línea del título, a su derecha (centerY). Si ahí no cabe (pantallas
   // estrechas), va justo encima de la zona, a todo lo ancho (bottomY). Con un botón, va
   // debajo o encima de él (top / bottomY), pegado a su mismo lado de la pantalla.
@@ -141,10 +168,19 @@ function visibleElement(id: string): any {
   return all.find((el: any) => el.getClientRects().length > 0 && el.getBoundingClientRect().width > 0) ?? null;
 }
 
-function measureTarget(target: string, winWidth: number, action?: boolean): Placement | null {
+function measureTarget(step: Step, winWidth: number): Placement | null {
+  const target = step.target as string;
   const zone = visibleElement(tutorialZone(target))?.getBoundingClientRect();
   if (!zone) return null;
-  if (action) {
+  if (step.action && step.shape === 'rect') {
+    // Una tarjeta entera: se ilumina su rectángulo y solo ella se puede pulsar
+    const light = { x: zone.left - 6, y: zone.top - 6, w: zone.width + 12, h: zone.height + 12 };
+    const hole = { left: zone.left, top: zone.top, right: zone.right, bottom: zone.bottom };
+    const maxWidth = Math.min(520, light.w);
+    const vertical = light.y > 150 ? { bottomY: light.y - 12 } : { top: light.y + light.h + 12 };
+    return { light, hole, box: { left: light.x, maxWidth, ...vertical } };
+  }
+  if (step.action) {
     const winHeight = (globalThis as any).innerHeight as number;
     const cx = zone.left + zone.width / 2, cy = zone.top + zone.height / 2;
     // El círculo rodea lo que el botón enseña (su icono o su texto), no todo su tamaño:
@@ -176,6 +212,14 @@ function measureTarget(target: string, winWidth: number, action?: boolean): Plac
   const x = Math.max(ZONE_MARGIN, zone.left + ZONE_MARGIN);
   const right = Math.min(winWidth - ZONE_MARGIN, zone.right - ZONE_MARGIN);
   const light = { x, y: zone.top - ZONE_PAD, w: right - x, h: zone.height + ZONE_PAD * 2 };
+  if (step.boxAt) {
+    const maxWidth = Math.min(560, light.w);
+    const left = light.x + Math.max(0, (light.w - maxWidth) / 2);
+    return {
+      light,
+      box: step.boxAt === 'above' ? { left, maxWidth, bottomY: light.y - 12 } : { left, maxWidth, top: light.y + light.h + 12 },
+    };
+  }
   // El cuadro va a lo largo, en la línea del título y a su derecha: así no tapa las
   // novelas de esa zona ni las de las zonas vecinas
   const title = visibleElement(tutorialTitle(target))?.getBoundingClientRect();
@@ -213,6 +257,9 @@ export function TutorialOverlay() {
   const [boxHeight, setBoxHeight] = useState(0);         // altura del cuadro abierto
   const [place, setPlace] = useState<Placement | null>(null);
   const [ringOn, setRingOn] = useState(false);           // círculo dibujado
+  const morph = useRef(new Animated.Value(1)).current;   // luz encogiéndose de una zona a otra
+  const placeRef = useRef<Placement | null>(null);
+  placeRef.current = place;
   const typingRef = useRef<any>(null);
   const busyRef = useRef(false);                         // en plena animación entre pasos
   const lastHeightRef = useRef(0);
@@ -289,11 +336,27 @@ export function TutorialOverlay() {
           if (stepIndex + 1 < STEPS.length) setState({ step: stepIndex + 1 }); else closeRef.current();
           return;
         }
-        sweep.setValue(0);
-        if (s.action) {
+        if (s.arrives) { await wait(SETTLE_MS); if (cancelled) return; }
+        const winWidth = (globalThis as any).innerWidth as number;
+        const previous = s.morph ? placeRef.current?.light : undefined;
+        if (previous) {
+          // La zona iluminada se encoge hasta quedarse solo con lo que ahora se señala
+          const next = measureTarget(s, winWidth);
+          morph.setValue(0);
+          setPlace(next ? { ...next, from: previous } : null);
+          await wait(40);
+          if (cancelled) return;
+          await run(morph, 1, MORPH_MS);
+        } else if (s.action && s.shape === 'rect') {
+          sweep.setValue(0);
+          setPlace(measureTarget(s, winWidth));
+          await wait(40);
+          await run(sweep, 1, SWEEP_MS);
+        } else if (s.action) {
+          sweep.setValue(0);
           // Un botón: se dibuja un círculo a su alrededor y su interior se ilumina
           setRingOn(false);
-          setPlace(measureTarget(s.target, (globalThis as any).innerWidth, true));
+          setPlace(measureTarget(s, winWidth));
           await wait(60);
           if (cancelled) return;
           setRingOn(true);
@@ -303,7 +366,8 @@ export function TutorialOverlay() {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           await wait(SCROLL_MS);
           if (cancelled) return;
-          setPlace(measureTarget(s.target, (globalThis as any).innerWidth));
+          sweep.setValue(0);
+          setPlace(measureTarget(s, (globalThis as any).innerWidth));
           await wait(40);
           // La luz recorre la zona de izquierda a derecha y, poco después, sale el cuadro
           await run(sweep, 1, SWEEP_MS);
@@ -323,7 +387,7 @@ export function TutorialOverlay() {
   // Si cambia el tamaño de la ventana, la luz y el cuadro se recolocan
   useEffect(() => {
     if (!WEB || !step?.target || !place) return;
-    setPlace(measureTarget(step.target, win.width, step.action));
+    setPlace(measureTarget(step, win.width));
   }, [win.width, win.height]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Texto completo: se deja de escribir y aparece, parpadeando, el icono de continuar
@@ -355,7 +419,7 @@ export function TutorialOverlay() {
     // El cuadro se cierra como se abrió, al revés, y la luz de la zona se retira
     busyRef.current = true;
     await run(open, 0, CLOSE_MS);
-    if (place) await run(sweep, 0, CLOSE_MS);
+    if (place && !(next < STEPS.length && STEPS[next].morph)) await run(sweep, 0, CLOSE_MS);
     busyRef.current = false;
     if (state?.step !== current.step) return; // se salió entretanto
     if (next < STEPS.length) setState({ step: next });
@@ -364,7 +428,7 @@ export function TutorialOverlay() {
   // ── Paso con botón: se espera a que se pulse de verdad ─────────────────────
   // El botón hace lo suyo (navegar, abrir…); aquí solo se retira el círculo, se cierra
   // el cuadro y se sigue. La pantalla se queda a oscuras.
-  const actionTarget = step?.action && place?.circle ? step.target : undefined;
+  const actionTarget = step?.action && place?.hole ? step.target : undefined;
   useEffect(() => {
     if (!WEB || !actionTarget || stepIndex === undefined) return;
     const doc = (globalThis as any).document;
@@ -375,7 +439,9 @@ export function TutorialOverlay() {
       play(sfxBoxRef);
       clearInterval(typingRef.current);
       setRingOn(false);                       // el círculo se desdibuja
-      await Promise.all([run(open, 0, CLOSE_MS), run(sweep, 0, RING_MS)]);
+      await run(open, 0, CLOSE_MS);
+      await run(sweep, 0, RING_MS);
+      morph.setValue(1);
       busyRef.current = false;
       if (state?.step !== stepIndex) return;
       if (stepIndex + 1 < STEPS.length) setState({ step: stepIndex + 1 });
@@ -511,40 +577,63 @@ export function TutorialOverlay() {
     );
   }
 
+  const outside = WEB ? ({ outlineStyle: 'none', cursor: 'default' } as any) : null;
+  // Zona de la página iluminada: un recuadro invisible cuya sombra enorme es la oscuridad
+  // de todo lo demás. Crece de izquierda a derecha, o se encoge desde la zona anterior.
+  const zone = place && (
+    <>
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.zoneLight, { opacity: dim }, place.from ? {
+          left: morph.interpolate({ inputRange: [0, 1], outputRange: [place.from.x, place.light.x] }),
+          top: morph.interpolate({ inputRange: [0, 1], outputRange: [place.from.y, place.light.y] }),
+          width: Animated.multiply(sweep, morph.interpolate({ inputRange: [0, 1], outputRange: [place.from.w, place.light.w] })),
+          height: morph.interpolate({ inputRange: [0, 1], outputRange: [place.from.h, place.light.h] }),
+        } : {
+          left: place.light.x, top: place.light.y, height: place.light.h,
+          width: sweep.interpolate({ inputRange: [0, 1], outputRange: [0, place.light.w] }),
+        }, ({ boxShadow: `0 0 ${GLOW_FADE}px 9999px ${DIM}` } as any)]}
+      />
+      <View
+        pointerEvents={place.hole ? 'none' : undefined}
+        style={{
+          position: 'absolute', left: place.box.left, right: place.box.right, maxWidth: place.box.maxWidth,
+          // Hasta saber cuánto mide el cuadro no se puede colocar del todo
+          top: place.box.centerY !== undefined
+            // (si el texto ocupa dos líneas, el cuadro crece hacia arriba, no sobre las novelas)
+            ? Math.min(place.box.centerY - boxHeight / 2, place.box.centerY + 22 - boxHeight)
+            : place.box.top !== undefined ? place.box.top : Math.max(8, (place.box.bottomY ?? 0) - boxHeight),
+        }}
+      >
+        {box}
+      </View>
+    </>
+  );
+
+  // Tarjeta que hay que pulsar: la capa deja libre justo su rectángulo
+  if (place?.hole) {
+    const hole = place.hole;
+    const blocker = (style: any) => (
+      <TouchableOpacity activeOpacity={1} onPress={advance} style={[{ position: 'absolute' }, style, outside]} />
+    );
+    return (
+      <Animated.View style={[styles.layer, { opacity: layer }]} pointerEvents="box-none">
+        {!WEB && <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM, opacity: dim }]} />}
+        {blocker({ left: 0, right: 0, top: 0, height: Math.max(0, hole.top) })}
+        {blocker({ left: 0, right: 0, top: hole.bottom, bottom: 0 })}
+        {blocker({ left: 0, width: Math.max(0, hole.left), top: hole.top, height: hole.bottom - hole.top })}
+        {blocker({ left: hole.right, right: 0, top: hole.top, height: hole.bottom - hole.top })}
+        {zone}
+      </Animated.View>
+    );
+  }
+
   return (
     <Animated.View style={[styles.layer, { opacity: layer }]}>
       {/* App: oscuridad lisa. En la web la oscuridad la pinta la sombra de la zona iluminada. */}
       {!WEB && <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: DIM, opacity: dim }]} />}
-      <TouchableOpacity
-        style={[StyleSheet.absoluteFill, WEB ? ({ outlineStyle: 'none', cursor: 'default' } as any) : null]}
-        activeOpacity={1}
-        onPress={advance}
-      >
-        {place ? (
-          <>
-            {/* Zona de la página iluminada: un recuadro invisible cuya sombra enorme es la
-                oscuridad de todo lo demás. Crece de izquierda a derecha. */}
-            <Animated.View
-              pointerEvents="none"
-              style={[styles.zoneLight, {
-                left: place.light.x, top: place.light.y, height: place.light.h, opacity: dim,
-                width: sweep.interpolate({ inputRange: [0, 1], outputRange: [0, place.light.w] }),
-              }, ({ boxShadow: `0 0 ${GLOW_FADE}px 9999px ${DIM}` } as any)]}
-            />
-            <View
-              style={{
-                position: 'absolute', left: place.box.left, maxWidth: place.box.maxWidth,
-                // Hasta saber cuánto mide el cuadro no se puede colocar del todo
-                top: place.box.centerY !== undefined
-                  // (si el texto ocupa dos líneas, el cuadro crece hacia arriba, no sobre las novelas)
-                  ? Math.min(place.box.centerY - boxHeight / 2, place.box.centerY + 22 - boxHeight)
-                  : Math.max(8, (place.box.bottomY ?? 0) - boxHeight),
-              }}
-            >
-              {box}
-            </View>
-          </>
-        ) : (
+      <TouchableOpacity style={[StyleSheet.absoluteFill, outside]} activeOpacity={1} onPress={advance}>
+        {place ? zone : (
           <View style={styles.center}>
             <View style={{ width: boxWidth }}>
               {/* Franja iluminada alrededor del cuadro: aparece y desaparece con él */}
