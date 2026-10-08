@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { useAuth } from '@/context/AuthContext';
+import { useTutorialNotice } from '@/services/tutorial-notice';
 import {
   registerBackgroundSync, setupNotificationPermissions, syncNotifications,
 } from '@/services/notifications';
@@ -16,6 +17,8 @@ const NotificationsContext = createContext<NotificationsContextType>({ unreadCou
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
+  // El aviso fijo del tutorial cuenta como una notificación sin leer hasta que se abre
+  const tutorialNotice = useTutorialNotice();
 
   // Contador de no leídas en tiempo real
   useEffect(() => {
@@ -50,7 +53,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, [user]);
 
   return (
-    <NotificationsContext.Provider value={{ unreadCount }}>
+    <NotificationsContext.Provider value={{ unreadCount: unreadCount + (tutorialNotice.unread ? 1 : 0) }}>
       {children}
     </NotificationsContext.Provider>
   );

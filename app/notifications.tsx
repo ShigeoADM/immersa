@@ -1,4 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { type Href } from 'expo-router';
+import { startTutorial } from '@/components/tutorial';
+import { markTutorialNoticeSeen, useTutorialNotice } from '@/services/tutorial-notice';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator,
 } from 'react-native';
@@ -69,6 +72,54 @@ export default function NotificationsScreen() {
 
   const hasUnread = items.some(n => !n.read);
 
+  // ── Aviso fijo del tutorial ───────────────────────────────────────────────
+  // Va siempre arriba y no se puede borrar. Al tocarlo se despliega con las dos opciones.
+  const tutorialNotice = useTutorialNotice();
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const openTutorialNotice = () => {
+    if (user) markTutorialNoticeSeen(user.uid);
+    setTutorialOpen(v => !v);
+  };
+  const beginTutorial = () => {
+    setTutorialOpen(false);
+    // Se vuelve al inicio que ya está abierto debajo, en vez de abrir otro encima
+    if (router.canDismiss()) router.dismissAll();
+    router.navigate('/(tabs)' as Href);
+    startTutorial();
+  };
+  const tutorialCard = tutorialNotice.visible && (
+    <View style={[styles.tutorialCard, tutorialNotice.unread && styles.itemUnread]}>
+      <TouchableOpacity style={styles.tutorialHead} onPress={openTutorialNotice} activeOpacity={0.8}>
+        <View style={[styles.iconWrap, { backgroundColor: Colors.emerald + '22' }]}>
+          <MaterialIcons name="school" size={20} color={Colors.emerald} />
+        </View>
+        <View style={styles.itemText}>
+          <Text style={styles.itemTitle} numberOfLines={1}>Tutorial Immersa</Text>
+          <Text style={styles.itemBody}>Aprende en unos minutos a crear tu primera Novela Moderna.</Text>
+        </View>
+        {tutorialNotice.unread && <View style={styles.unreadDot} />}
+        <MaterialIcons name={tutorialOpen ? 'expand-less' : 'expand-more'} size={20} color={Colors.textMuted} />
+      </TouchableOpacity>
+      {tutorialOpen && (
+        <View style={styles.tutorialBody}>
+          <Text style={styles.itemBody}>
+            Es un recorrido guiado: te va señalando cada cosa mientras creas una historia de prueba, que al
+            final puedes quedarte o borrar. También puedes descubrirlo todo por tu cuenta; este aviso seguirá
+            aquí por si quieres hacerlo más adelante.
+          </Text>
+          <View style={styles.tutorialActions}>
+            <TouchableOpacity style={styles.tutorialSkip} onPress={() => setTutorialOpen(false)} activeOpacity={0.75}>
+              <Text style={styles.tutorialSkipText}>Lo descubriré por mi cuenta</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.tutorialStart} onPress={beginTutorial} activeOpacity={0.85}>
+              <Text style={styles.tutorialStartText}>Hacer el tutorial</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <AppHeader onBack={() => router.back()} />
@@ -86,6 +137,8 @@ export default function NotificationsScreen() {
           <MaterialIcons name="done-all" size={20} color={Colors.emerald} />
         </TouchableOpacity>
       </View>
+
+      {tutorialCard}
 
       {loading ? (
         <View style={styles.centered}><ActivityIndicator color={Colors.emerald} /></View>
@@ -158,4 +211,12 @@ const styles = StyleSheet.create({
   itemTime:   { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
   unreadDot:  { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.emerald, marginTop: 6 },
   deleteBtn:  { paddingTop: 2 },
+  tutorialCard: { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  tutorialHead: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
+  tutorialBody: { paddingLeft: 66, paddingRight: 16, paddingBottom: 16, gap: 14 },
+  tutorialActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  tutorialSkip: { paddingVertical: 9, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: Colors.border },
+  tutorialSkipText: { fontSize: 13, color: Colors.textSecondary },
+  tutorialStart: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: 8, backgroundColor: Colors.emerald },
+  tutorialStartText: { fontSize: 13, fontWeight: '700', color: '#000' },
 });
