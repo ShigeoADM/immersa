@@ -105,7 +105,7 @@ export default function StoryDetailScreen() {
     if (Platform.OS !== 'web' || !story?.title) return;
     const doc = (globalThis as any).document;
     doc.title = `${story.title} · Immersa`;
-    return () => { doc.title = 'Immersa — Lee y escribe novelas interactivas'; };
+    return () => { doc.title = 'Immersa — Novelas visuales, novelas ligeras y webnovels'; };
   }, [story?.title]);
   const [chapters, setChapters]       = useState<Chapter[]>([]);
   // Ilustración de capítulo abierta a pantalla completa
