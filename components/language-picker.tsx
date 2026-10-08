@@ -1,13 +1,15 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Colors } from '@/constants/theme';
-import { LANGUAGES, setLang, useLang } from '@/i18n';
+import { LANGUAGES, setLang, t, useLang } from '@/i18n';
+import { LEGAL_CONTACT_EMAIL } from '@/constants/legal';
 
 // Selector de idioma de la web: tres botones, uno por idioma. Se usa donde no llega el de
 // la barra superior de escritorio (pantalla de acceso, ajustes).
 export function LanguagePicker({ compact }: { compact?: boolean }) {
   const lang = useLang();
   return (
+    <View style={{ gap: 10 }}>
     <View style={[styles.row, compact && { justifyContent: 'center' }]}>
       {LANGUAGES.map(l => (
         <TouchableOpacity
@@ -20,6 +22,11 @@ export function LanguagePicker({ compact }: { compact?: boolean }) {
         </TouchableOpacity>
       ))}
     </View>
+    {/* El japonés está traducido con IA: se dice siempre que está elegido */}
+    {lang === 'ja' && !compact && (
+      <Text style={styles.note}>{t('lang.aiBody', { email: LEGAL_CONTACT_EMAIL })}</Text>
+    )}
+    </View>
   );
 }
 
@@ -30,4 +37,5 @@ const styles = StyleSheet.create({
   chipActive: { borderColor: Colors.emerald, backgroundColor: Colors.emerald + '18' },
   text: { fontSize: 14, color: Colors.textSecondary },
   textActive: { color: Colors.emerald, fontWeight: '700' },
+  note: { fontSize: 12, lineHeight: 18, color: Colors.textMuted },
 });

@@ -1,3 +1,5 @@
+import { t, type TKey } from '@/i18n';
+
 // Clasificación de una historia: público y contenido adulto.
 // Lo usan la pantalla de creación (para elegir) y la ficha de la historia (para mostrar).
 
@@ -24,5 +26,8 @@ export const ADULT_CONTENT = [
   { key: 'nudity',    label: 'Desnudo parcial en ilustraciones' },
 ];
 
-export const audienceLabel = (key?: string) => AUDIENCES.find(a => a.key === key)?.label ?? null;
-export const adultContentLabel = (key: string) => ADULT_CONTENT.find(c => c.key === key)?.label ?? key;
+// (en el idioma actual de la web; las etiquetas de arriba son la referencia en español)
+export const audienceLabel = (key?: string) =>
+  AUDIENCES.some(a => a.key === key) ? t(`audience.${key}` as TKey) : null;
+export const adultContentLabel = (key: string) =>
+  ADULT_CONTENT.some(c => c.key === key) ? t(`adult.${key}` as TKey) : key;

@@ -15,6 +15,7 @@ import { NotificationsProvider } from '@/context/NotificationsContext';
 import { AppDialogHost } from '@/components/app-dialog';
 import { WebTopBar } from '@/components/web-top-bar';
 import { WelcomeSplash } from '@/components/welcome-splash';
+import { LanguageNotice } from '@/components/language-notice';
 import { DevSiteOverlay } from '@/components/dev-site';
 import { TutorialOverlay } from '@/components/tutorial';
 import { IS_DEV_SITE } from '@/constants/site';
@@ -185,6 +186,8 @@ function RootNavigator() {
     {loading && <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0A0A0A' }]} />}
     {/* Web: bienvenida animada al abrir la página (en la app no pinta nada) */}
     <WelcomeSplash />
+    {/* Aviso de traducción automática al poner la web en japonés */}
+    <LanguageNotice />
     {/* Web de desarrollo: etiqueta y cierre del paso a quien no tiene el permiso */}
     {/* Tutorial guiado (en pruebas: se abre desde Desarrollo) */}
     <TutorialOverlay />

@@ -16,6 +16,7 @@ import {
   type AppNotification, type NotificationType,
   deleteNotification, markAllNotificationsRead, markNotificationRead,
 } from '@/services/notifications';
+import { t, useT } from '@/i18n';
 
 const TYPE_ICON: Record<NotificationType, { icon: string; color: string }> = {
   story_deleted: { icon: 'delete-outline',   color: '#FF6B6B' },
@@ -31,18 +32,19 @@ const TYPE_ICON: Record<NotificationType, { icon: string; color: string }> = {
 // "hace 5 min", "hace 3 h", "hace 2 d" o la fecha
 function timeAgo(iso: string): string {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 1)  return 'ahora';
-  if (mins < 60) return `hace ${mins} min`;
+  if (mins < 1)  return t('notif.now');
+  if (mins < 60) return t('notif.mins', { n: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `hace ${hours} h`;
+  if (hours < 24) return t('notif.hours', { n: hours });
   const days = Math.floor(hours / 24);
-  if (days < 7) return `hace ${days} d`;
+  if (days < 7) return t('notif.days', { n: days });
   return new Date(iso).toLocaleDateString();
 }
 
 export default function NotificationsScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  useT(); // la pantalla se repinta al cambiar de idioma
   const [items, setItems]     = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -94,8 +96,8 @@ export default function NotificationsScreen() {
           <MaterialIcons name="school" size={20} color={Colors.emerald} />
         </View>
         <View style={styles.itemText}>
-          <Text style={styles.itemTitle} numberOfLines={1}>Tutorial Immersa</Text>
-          <Text style={styles.itemBody}>Aprende en unos minutos a crear tu primera Novela Moderna.</Text>
+          <Text style={styles.itemTitle} numberOfLines={1}>{t('notif.tutorialTitle')}</Text>
+          <Text style={styles.itemBody}>{t('notif.tutorialBody')}</Text>
         </View>
         {tutorialNotice.unread && <View style={styles.unreadDot} />}
         <MaterialIcons name={tutorialOpen ? 'expand-less' : 'expand-more'} size={20} color={Colors.textMuted} />
@@ -103,16 +105,14 @@ export default function NotificationsScreen() {
       {tutorialOpen && (
         <View style={styles.tutorialBody}>
           <Text style={styles.itemBody}>
-            Es un recorrido guiado: te va señalando cada cosa mientras creas una historia de prueba, que al
-            final puedes quedarte o borrar. También puedes descubrirlo todo por tu cuenta; este aviso seguirá
-            aquí por si quieres hacerlo más adelante.
+            {t('notif.tutorialLong')}
           </Text>
           <View style={styles.tutorialActions}>
             <TouchableOpacity style={styles.tutorialSkip} onPress={() => setTutorialOpen(false)} activeOpacity={0.75}>
-              <Text style={styles.tutorialSkipText}>Lo descubriré por mi cuenta</Text>
+              <Text style={styles.tutorialSkipText}>{t('notif.tutorialSkip')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.tutorialStart} onPress={beginTutorial} activeOpacity={0.85}>
-              <Text style={styles.tutorialStartText}>Hacer el tutorial</Text>
+              <Text style={styles.tutorialStartText}>{t('notif.tutorialStart')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -127,7 +127,7 @@ export default function NotificationsScreen() {
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
           <MaterialIcons name="arrow-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notificaciones</Text>
+        <Text style={styles.headerTitle}>{t('notif.title')}</Text>
         <TouchableOpacity
           style={[styles.readAllBtn, !hasUnread && { opacity: 0.35 }]}
           disabled={!hasUnread || !user}
@@ -145,7 +145,7 @@ export default function NotificationsScreen() {
       ) : items.length === 0 ? (
         <View style={styles.centered}>
           <MaterialIcons name="notifications-none" size={40} color={Colors.textMuted} />
-          <Text style={styles.emptyText}>No tienes notificaciones</Text>
+          <Text style={styles.emptyText}>{t('notif.empty')}</Text>
         </View>
       ) : (
         <FlatList

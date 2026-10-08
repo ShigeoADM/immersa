@@ -5,6 +5,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { belongsToStory, deleteStoredFile, isStoredFile } from '@/services/media';
+import { formatNumber, t } from '@/i18n';
 
 export type DeletedBy = 'author' | 'admin';
 
@@ -15,7 +16,7 @@ export const countWords = (text: string) => (text.trim().match(/\S+/g) ?? []).le
 export const readingMinutes = (words: number) => Math.max(1, Math.round(words / 200));
 
 export const formatReadingStats = (words: number) =>
-  `${words.toLocaleString('es-ES')} ${words === 1 ? 'palabra' : 'palabras'} · ~${readingMinutes(words)} min`;
+  t(words === 1 ? 'stats.wordsOne' : 'stats.wordsMany', { n: formatNumber(words), m: readingMinutes(words) });
 
 // ── Orden ────────────────────────────────────────────────────────────────────
 

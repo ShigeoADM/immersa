@@ -36,6 +36,7 @@ import { type StoryComment, deleteComment, listStoryComments } from '@/services/
 import { CommentItem } from '@/components/comment-item';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { promptLogin } from '@/components/login-prompt';
+import { genreLabel, statusLabel, useT } from '@/i18n';
 
 interface Story {
   id: string;
@@ -99,6 +100,7 @@ export default function StoryDetailScreen() {
   const [wnTheme, setWnTheme] = useState<WebnovelTheme>(WEBNOVEL_THEME_DEFAULT);
   useFocusEffect(useCallback(() => { getWebnovelTheme().then(setWnTheme); }, []));
 
+  const t = useT();
   const [story, setStory]             = useState<Story | null>(null);
   // Web: el título de la pestaña es el de la novela mientras se está en su ficha
   useEffect(() => {
@@ -226,7 +228,7 @@ export default function StoryDetailScreen() {
       router.back();
     } catch (e: any) {
       console.error('Error eliminando historia como administrador:', e);
-      AppAlert.alert('Error', e?.message ?? 'No se pudo eliminar la historia.');
+      AppAlert.alert(t('common.error'), e?.message ?? t('story.deleteFailed'));
     } finally {
       setRemoving(false);
     }
@@ -261,7 +263,7 @@ export default function StoryDetailScreen() {
         await nav.share({ title: story.title, url });
       } else {
         await nav.clipboard.writeText(url);
-        AppAlert.alert('Enlace copiado', 'El enlace de la novela está en el portapapeles.');
+        AppAlert.alert(t('story.linkCopied'), t('story.linkCopiedBody'));
       }
     } catch { /* el usuario cerró el menú de compartir */ }
   };
@@ -269,8 +271,8 @@ export default function StoryDetailScreen() {
   // Los "me gusta" se dan capítulo a capítulo, desde el lector. Aquí se ve el total.
   const explainLikes = () => {
     AppAlert.alert(
-      'Me gusta',
-      'Los «me gusta» se dan a cada capítulo, mientras lo lees. Aquí ves el total de la novela.',
+      t('story.likes'),
+      t('story.likesBody'),
     );
   };
 
@@ -278,15 +280,15 @@ export default function StoryDetailScreen() {
   const visibleComments = comments.filter(c => !blocked.has(c.uid));
 
   const handleDeleteComment = (c: StoryComment) => {
-    AppAlert.alert('Borrar comentario', '¿Seguro que quieres borrar este comentario?', [
-      { text: 'Cancelar', style: 'cancel' },
+    AppAlert.alert(t('story.deleteComment'), t('story.deleteCommentBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Borrar', style: 'destructive',
+        text: t('common.delete'), style: 'destructive',
         onPress: async () => {
           try {
             await deleteComment(id as string, c.id);
             setComments(prev => prev.filter(x => x.id !== c.id));
-          } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo borrar el comentario.'); }
+          } catch (e: any) { AppAlert.alert(t('common.error'), e?.message ?? t('story.deleteCommentFailed')); }
         },
       },
     ]);
@@ -323,7 +325,7 @@ export default function StoryDetailScreen() {
         <TouchableOpacity style={[styles.backBtn, { marginTop: 48, marginLeft: 16 }]} onPress={() => router.back()}>
           <MaterialIcons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <Text style={{ color: Colors.textMuted, textAlign: 'center', marginTop: 80 }}>Historia no encontrada</Text>
+        <Text style={{ color: Colors.textMuted, textAlign: 'center', marginTop: 80 }}>{t('story.notFound')}</Text>
       </View>
     );
   }
@@ -345,7 +347,7 @@ export default function StoryDetailScreen() {
         <View style={styles.modOverlay}>
           <AppDialogHost />
           <View style={styles.modBox}>
-            <Text style={styles.modTitle}>Eliminar historia</Text>
+            <Text style={styles.modTitle}>{t('story.modTitle')}</Text>
             <Text style={styles.modText}>
               Se borrará "{story.title}" con todos sus capítulos. Sus lectores y el autor
               recibirán un aviso de que la eliminó un administrador. No se puede deshacer.
@@ -354,7 +356,7 @@ export default function StoryDetailScreen() {
               style={styles.modInput}
               value={removeReason}
               onChangeText={setRemoveReason}
-              placeholder="Motivo (opcional, se envía al autor)"
+              placeholder={t('story.modReason')}
               placeholderTextColor={Colors.textMuted}
               multiline
               textAlignVertical="top"
@@ -362,12 +364,12 @@ export default function StoryDetailScreen() {
             />
             <View style={styles.modActions}>
               <TouchableOpacity style={styles.modCancel} onPress={() => setModerating(false)} disabled={removing}>
-                <Text style={styles.modCancelText}>Cancelar</Text>
+                <Text style={styles.modCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.modDelete, removing && { opacity: 0.5 }]} onPress={handleAdminDelete} disabled={removing}>
                 {removing
                   ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={styles.modDeleteText}>Eliminar</Text>}
+                  : <Text style={styles.modDeleteText}>{t('story.modDelete')}</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -460,7 +462,7 @@ export default function StoryDetailScreen() {
               onPress={() => router.push({ pathname: '/user/[uid]', params: { uid: story.uid! } })}
             >
               <MaterialIcons name="person" size={13} color="rgba(255,255,255,0.75)" />
-              <Text style={styles.authorName} numberOfLines={1}>{author?.displayName ?? 'Ver autor'}</Text>
+              <Text style={styles.authorName} numberOfLines={1}>{author?.displayName ?? t('story.viewAuthor')}</Text>
               <RoleBadge role={author?.role} size="sm" />
             </TouchableOpacity>
           ) : null}
@@ -468,7 +470,7 @@ export default function StoryDetailScreen() {
             <Text style={styles.heroSubtitle}>{story.subtitle}</Text>
           ) : null}
           <View style={styles.heroBottomRow}>
-            <Text style={styles.heroStatus}>{STATUS_LABELS[story.status] ?? story.status ?? 'En curso'}</Text>
+            <Text style={styles.heroStatus}>{statusLabel(story.status)}</Text>
             {/* Me gusta (solo en historias publicadas) */}
             {story.published && (
               <TouchableOpacity
@@ -490,7 +492,7 @@ export default function StoryDetailScreen() {
         {/* Sinopsis */}
         {story.synopsis ? (
           <View style={styles.section}>
-            <Text style={[styles.sectionLabel, themed.muted]}>Sinopsis</Text>
+            <Text style={[styles.sectionLabel, themed.muted]}>{t('story.synopsis')}</Text>
             <Text style={[styles.description, themed.text]}>{story.synopsis}</Text>
           </View>
         ) : null}
@@ -498,13 +500,13 @@ export default function StoryDetailScreen() {
         {/* Clasificación: géneros, público y contenido +18 con sus motivos */}
         {(story.genres?.length || story.audience || story.isAdult) ? (
           <View style={styles.section}>
-            <Text style={[styles.sectionLabel, themed.muted]}>Detalles</Text>
+            <Text style={[styles.sectionLabel, themed.muted]}>{t('story.details')}</Text>
 
             {story.genres && story.genres.length > 0 && (
               <View style={styles.chipRow}>
                 {story.genres.map(g => (
                   <View key={g} style={[styles.chip, { borderColor: fmtColor + '70', backgroundColor: fmtColor + '18' }]}>
-                    <Text style={[styles.chipText, { color: fmtColor }]}>{g}</Text>
+                    <Text style={[styles.chipText, { color: fmtColor }]}>{genreLabel(g)}</Text>
                   </View>
                 ))}
               </View>
@@ -513,7 +515,7 @@ export default function StoryDetailScreen() {
             {audienceLabel(story.audience) && (
               <View style={styles.metaRow}>
                 <MaterialIcons name="groups" size={15} color={wn ? wn.muted : Colors.textMuted} />
-                <Text style={[styles.metaText, themed.text]}>Público: {audienceLabel(story.audience)}</Text>
+                <Text style={[styles.metaText, themed.text]}>{t('story.audience', { a: audienceLabel(story.audience) ?? '' })}</Text>
               </View>
             )}
 
@@ -523,7 +525,7 @@ export default function StoryDetailScreen() {
                   <View style={styles.adultBadge}>
                     <Text style={styles.adultBadgeText}>+18</Text>
                   </View>
-                  <Text style={[styles.metaText, themed.text]}>Contenido para adultos</Text>
+                  <Text style={[styles.metaText, themed.text]}>{t('story.adult')}</Text>
                 </View>
                 {story.adultContent && story.adultContent.length > 0 && (
                   <View style={styles.chipRow}>
@@ -541,10 +543,10 @@ export default function StoryDetailScreen() {
 
         {/* Capítulos */}
         <View style={styles.section}>
-          <Text style={[styles.sectionLabel, themed.muted]}>Capítulos ({chapters.length})</Text>
+          <Text style={[styles.sectionLabel, themed.muted]}>{t('story.chapters', { n: chapters.length })}</Text>
 
           {chapters.length === 0 ? (
-            <Text style={[styles.emptyChapters, themed.muted]}>No hay capítulos publicados aún.</Text>
+            <Text style={[styles.emptyChapters, themed.muted]}>{t('story.noChapters')}</Text>
           ) : (
             chapters.map((ch, i) => {
               const isBookmarked = bookmark?.chapterId === ch.id;
@@ -579,7 +581,7 @@ export default function StoryDetailScreen() {
                     ) : null}
                     {isBookmarked && (
                       <Text style={styles.chapterBookmarkHint}>
-                        Marcador · pág. {(bookmark!.pageIndex) + 1}
+                        {t('story.bookmarkPage', { n: bookmark!.pageIndex + 1 })}
                       </Text>
                     )}
                   </View>
@@ -602,7 +604,7 @@ export default function StoryDetailScreen() {
         {/* Créditos: de quién son la música, las imágenes… (los escribe el autor) */}
         {story.credits ? (
           <View style={styles.section}>
-            <Text style={[styles.sectionLabel, themed.muted]}>Créditos</Text>
+            <Text style={[styles.sectionLabel, themed.muted]}>{t('story.credits')}</Text>
             <Text style={[styles.description, themed.text]}>{story.credits}</Text>
           </View>
         ) : null}
@@ -610,13 +612,13 @@ export default function StoryDetailScreen() {
         {/* ── Comentarios de toda la novela (por página en Moderno, por capítulo en Webnovel) ── */}
         <View style={styles.section}>
           <Text style={[styles.sectionLabel, themed.muted]}>
-            Comentarios{visibleComments.length > 0 ? ` · ${visibleComments.length}` : ''}
+            {t('story.comments')}{visibleComments.length > 0 ? ` · ${visibleComments.length}` : ''}
           </Text>
           {visibleComments.length === 0 ? (
             <Text style={[styles.emptyChapters, themed.muted]}>
               {story.format === 'Webnovel'
-                ? 'Todavía no hay comentarios. Se escriben al final de cada capítulo.'
-                : 'Todavía no hay comentarios. Se escriben desde cada página, al leer.'}
+                ? t('story.noCommentsWebnovel')
+                : t('story.noCommentsModerno')}
             </Text>
           ) : visibleComments.map(c => (
             <CommentItem
@@ -651,7 +653,9 @@ export default function StoryDetailScreen() {
             >
               <MaterialIcons name="bookmark" size={18} color={Colors.emerald} />
               <Text style={[styles.readBtnText, { color: Colors.emerald }]} numberOfLines={1}>
-                {bookmark.chapterTitle ? `Marcador · ${bookmark.chapterTitle} · pág. ${bookmark.pageIndex + 1}` : `Ir al marcador · pág. ${bookmark.pageIndex + 1}`}
+                {bookmark.chapterTitle
+                  ? t('story.bookmarkAt', { title: bookmark.chapterTitle, n: bookmark.pageIndex + 1 })
+                  : t('story.goToBookmark', { n: bookmark.pageIndex + 1 })}
               </Text>
             </TouchableOpacity>
           )}
@@ -668,7 +672,7 @@ export default function StoryDetailScreen() {
             }}
           >
             <MaterialIcons name={readingProgress ? 'play-circle-outline' : 'play-arrow'} size={20} color="#000" />
-            <Text style={styles.readBtnText}>{readingProgress ? 'Continuar leyendo' : 'Leer desde el principio'}</Text>
+            <Text style={styles.readBtnText}>{readingProgress ? t('story.continue') : t('story.start')}</Text>
           </TouchableOpacity>
         </SafeAreaView>
       )}

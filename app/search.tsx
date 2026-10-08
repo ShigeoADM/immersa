@@ -12,7 +12,7 @@ import { Colors } from '@/constants/theme';
 import { AppHeader } from '@/components/app-header';
 import { GENRES } from '@/constants/story-meta';
 import { useAuth } from '@/context/AuthContext';
-import { useT } from '@/i18n';
+import { genreLabel, useT } from '@/i18n';
 
 interface SearchStory {
   id: string;
@@ -207,7 +207,7 @@ export default function SearchScreen() {
                     )}
                   </View>
                   {s.genres && s.genres.length > 0 && (
-                    <Text style={styles.rowGenres} numberOfLines={1}>{s.genres.join(' · ')}</Text>
+                    <Text style={styles.rowGenres} numberOfLines={1}>{s.genres.map(genreLabel).join(' · ')}</Text>
                   )}
                 </View>
               </TouchableOpacity>

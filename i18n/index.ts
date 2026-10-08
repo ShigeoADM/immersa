@@ -103,3 +103,20 @@ const STATUSES = ['ongoing', 'completed', 'hiatus', 'upcoming'];
 export function statusLabel(status?: string | null): string {
   return t(`status.${STATUSES.includes(status ?? '') ? status : 'ongoing'}` as TKey);
 }
+
+// Género de una historia. Las historias guardan el género con su nombre en español
+// ('Fantasía'); aquí se pasa al idioma actual. Uno que no se conozca se enseña tal cual.
+const GENRE_KEYS: Record<string, TKey> = {
+  'Fantasía': 'genre.fantasia', 'Romance': 'genre.romance', 'Acción': 'genre.accion', 'Aventura': 'genre.aventura',
+  'Misterio': 'genre.misterio', 'Terror': 'genre.terror', 'Ciencia Ficción': 'genre.cienciaFiccion',
+  'Drama': 'genre.drama', 'Comedia': 'genre.comedia', 'Thriller': 'genre.thriller', 'Histórico': 'genre.historico',
+  'Sobrenatural': 'genre.sobrenatural', 'Slice of Life': 'genre.sliceOfLife', 'Cyberpunk': 'genre.cyberpunk',
+};
+export function genreLabel(genre: string): string {
+  const key = GENRE_KEYS[genre];
+  return key ? t(key) : genre;
+}
+
+// Números con el formato del idioma actual (1.234 / 1,234)
+const LOCALES: Record<Lang, string> = { es: 'es-ES', en: 'en-US', ja: 'ja-JP' };
+export const formatNumber = (n: number) => n.toLocaleString(LOCALES[lang]);
