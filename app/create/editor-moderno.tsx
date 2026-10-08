@@ -25,7 +25,7 @@ function confirmAction(
     if ((window as any).confirm(`${title}\n\n${message}`)) onConfirm();
   } else {
     AppAlert.alert(title, message, [
-      { text: 'Cancelar', style: 'cancel' },
+      { text: translate('common.cancel'), style: 'cancel' },
       { text: confirmText, style: 'destructive', onPress: onConfirm },
     ]);
   }
@@ -44,6 +44,7 @@ import { type StoryStats, getStoryStats } from '@/services/social';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { tutorialEvent, tutorialIntercept, tutorialZone } from '@/components/tutorial';
 import { BACKUP_EXTENSION, encodeBackup } from '@/services/backup-file';
+import { t as translate, useT } from '@/i18n';
 
 interface Chapter {
   id: string;
@@ -56,6 +57,7 @@ interface Chapter {
 }
 
 export default function EditorModernoScreen() {
+  const t = useT();
   const isDesktop = useIsDesktop();
   const router = useRouter();
   const { storyId, title, format: formatParam } = useLocalSearchParams<{ storyId: string; title: string; format?: string }>();
@@ -87,7 +89,7 @@ export default function EditorModernoScreen() {
   );
   const chaptersPath = `stories/${storyId}/chapters`;
 
-  const storyTitle = title ? decodeURIComponent(title) : 'Sin título';
+  const storyTitle = title ? decodeURIComponent(title) : t('common.untitled');
 
   // Cargar story + capítulos al entrar y al volver (p. ej. tras renombrar un capítulo)
   useFocusEffect(useCallback(() => {
@@ -120,9 +122,9 @@ export default function EditorModernoScreen() {
 
   const handleDeleteStory = () => {
     confirmAction(
-      'Borrar libro',
-      `¿Seguro que quieres borrar "${storyTitle}"? Se borrarán también todos sus capítulos y páginas.`,
-      'Borrar',
+      t('write.deleteTitle'),
+      t('book.deleteBody', { title: storyTitle }),
+      t('common.delete'),
       async () => {
         try {
           await deleteStoryWithCascade(storyId as string);
@@ -167,7 +169,7 @@ export default function EditorModernoScreen() {
       setTimeout(() => g.URL.revokeObjectURL(href), 2000);
     } catch (e: any) {
       console.error('Error exportando:', e);
-      AppAlert.alert('No se pudo exportar', e?.message ?? 'Inténtalo de nuevo.');
+      AppAlert.alert(t('book.exportFailed'), e?.message ?? t('common.tryAgain'));
     } finally {
       setExporting(false);
     }
@@ -187,7 +189,7 @@ export default function EditorModernoScreen() {
       setChapters(next.map((c, k) => ({ ...c, order: k + 1 })));
     } catch (e) {
       console.error('Error ordenando capítulos:', e);
-      AppAlert.alert('Error', 'No se pudo cambiar el orden. Inténtalo de nuevo.');
+      AppAlert.alert(t('common.error'), t('common.reorderFailed'));
       setChapters(prev);
     } finally {
       setReordering(false);
@@ -196,9 +198,9 @@ export default function EditorModernoScreen() {
 
   const handleDeleteChapter = (chapter: Chapter) => {
     confirmAction(
-      'Borrar capítulo',
-      `¿Seguro que quieres borrar "${chapter.title}"? Se borrarán también todas sus páginas.`,
-      'Borrar',
+      t('book.deleteChapter'),
+      t('book.deleteChapterBody', { title: chapter.title }),
+      t('common.delete'),
       async () => {
         try {
           await deleteChapterWithCascade(storyId as string, chapter.id);
@@ -263,18 +265,18 @@ export default function EditorModernoScreen() {
 
     if (!published) {
       confirmAction(
-        'Publicar libro',
+        t('book.publishTitle'),
         chapters.length > 0
-          ? `Se publicará "${storyTitle}" junto con todos sus capítulos (${chapters.length}) y aparecerá en el feed.`
-          : `Se publicará "${storyTitle}". Como aún no tiene capítulos, aparecerá en el feed pero sin contenido.`,
-        'Publicar',
+          ? t('book.publishWithChapters', { title: storyTitle, n: chapters.length })
+          : t('book.publishEmpty', { title: storyTitle }),
+        t('common.publish'),
         () => doToggleStory(true),
       );
     } else {
       confirmAction(
-        'Despublicar libro',
-        `Se despublicará "${storyTitle}" y todos sus capítulos desaparecerán del feed.`,
-        'Despublicar',
+        t('book.unpublishTitle'),
+        t('book.unpublishBody', { title: storyTitle }),
+        t('common.unpublish'),
         () => doToggleStory(false),
       );
     }
@@ -314,7 +316,7 @@ export default function EditorModernoScreen() {
       );
     } catch (e) {
       console.error('Error publicando historia:', e);
-      AppAlert.alert('Error', 'No se pudo cambiar el estado de publicación. Inténtalo de nuevo.');
+      AppAlert.alert(t('common.error'), t('book.publishFailed'));
     } finally {
       setPublishing(false);
     }
@@ -392,7 +394,7 @@ export default function EditorModernoScreen() {
               {publishing
                 ? <ActivityIndicator size="small" color={accent} />
                 : <Text style={[styles.publishBtnText, published && styles.publishBtnTextDone]}>
-                    {published ? 'Despublicar' : 'Publicar'}
+                    {published ? t('common.unpublish') : t('common.publish')}
                   </Text>
               }
             </TouchableOpacity>
@@ -416,11 +418,11 @@ export default function EditorModernoScreen() {
         {stats && (
           <View style={[styles.statsRow, isDesktop && { justifyContent: 'flex-start' }]}>
             {([
-              { icon: 'visibility',     value: stats.views,    label: stats.views === 1 ? 'lectura' : 'lecturas' },
-              { icon: 'person',         value: stats.readers,  label: stats.readers === 1 ? 'lector' : 'lectores' },
-              { icon: 'bookmark',       value: stats.saves,    label: stats.saves === 1 ? 'guardado' : 'guardados' },
-              { icon: 'favorite',       value: stats.likes,    label: 'me gusta' },
-              { icon: 'chat-bubble',    value: stats.comments, label: stats.comments === 1 ? 'comentario' : 'comentarios' },
+              { icon: 'visibility',     value: stats.views,    label: stats.views === 1 ? t('book.view') : t('book.views') },
+              { icon: 'person',         value: stats.readers,  label: stats.readers === 1 ? t('book.reader') : t('book.readers') },
+              { icon: 'bookmark',       value: stats.saves,    label: stats.saves === 1 ? t('book.save') : t('book.saves') },
+              { icon: 'favorite',       value: stats.likes,    label: t('profile.likes') },
+              { icon: 'chat-bubble',    value: stats.comments, label: stats.comments === 1 ? t('book.comment') : t('book.comments') },
             ] as const).map(s => (
               <View key={s.icon} style={styles.statItem}>
                 <MaterialIcons name={s.icon} size={14} color={accent} />
@@ -444,7 +446,7 @@ export default function EditorModernoScreen() {
           >
             <MaterialIcons name={reorderMode ? 'check' : 'swap-vert'} size={14} color={reorderMode ? '#000' : Colors.textSecondary} />
             <Text style={[styles.reorderToggleText, reorderMode && { color: '#000' }]}>
-              {reorderMode ? 'Listo' : 'Ordenar'}
+              {reorderMode ? t('common.done') : t('common.reorder')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -458,8 +460,8 @@ export default function EditorModernoScreen() {
         ) : chapters.length === 0 ? (
           <View style={styles.emptyState}>
             <MaterialIcons name="menu-book" size={36} color={Colors.textMuted} />
-            <Text style={styles.emptyText}>Aún no hay capítulos.</Text>
-            <Text style={styles.emptyHint}>Pulsa el botón para añadir el primero.</Text>
+            <Text style={styles.emptyText}>{t('book.noChapters')}</Text>
+            <Text style={styles.emptyHint}>{t('book.noChaptersHint')}</Text>
           </View>
         ) : (
           chapters.map((ch, i) => (
@@ -475,8 +477,8 @@ export default function EditorModernoScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.chapterTitle} numberOfLines={1}>{ch.title}</Text>
                   {ch.published
-                    ? <Text style={styles.chapterPublishedLabel}>● Publicado</Text>
-                    : <Text style={styles.chapterDraftLabel}>○ Borrador</Text>
+                    ? <Text style={styles.chapterPublishedLabel}>{t('book.published')}</Text>
+                    : <Text style={styles.chapterDraftLabel}>{t('book.draft')}</Text>
                   }
                   {ch.wordCount ? (
                     <Text style={styles.chapterDraftLabel}>{formatReadingStats(ch.wordCount)}</Text>
@@ -514,7 +516,7 @@ export default function EditorModernoScreen() {
                 {publishingChapter === ch.id
                   ? <ActivityIndicator size="small" color={accent} />
                   : <Text style={[styles.chapterPublishBtnText, ch.published && styles.chapterPublishedBtnText]}>
-                      {ch.published ? 'Despublicar' : 'Publicar'}
+                      {ch.published ? t('common.unpublish') : t('common.publish')}
                     </Text>
                 }
               </TouchableOpacity>
@@ -532,26 +534,26 @@ export default function EditorModernoScreen() {
       <SafeAreaView edges={['bottom']} style={styles.footer}>
         <TouchableOpacity style={styles.addChapterBtn} activeOpacity={0.85} onPress={() => setModalVisible(true)} testID={tutorialZone('addChapter')}>
           <MaterialIcons name="add" size={20} color="#000" />
-          <Text style={styles.addChapterText}>Añadir capítulo</Text>
+          <Text style={styles.addChapterText}>{t('book.addChapter')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
 
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Nuevo capítulo</Text>
+            <Text style={styles.modalTitle}>{t('book.newChapter')}</Text>
             <TextInput
               style={styles.modalInput}
               value={chapterTitle}
               onChangeText={setChapterTitle}
-              placeholder="Título del capítulo"
+              placeholder={t('book.chapterTitlePlaceholder')}
               placeholderTextColor={Colors.textMuted}
               autoFocus
               maxLength={80}
             />
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancelBtn} onPress={() => { setModalVisible(false); setChapterTitle(''); }}>
-                <Text style={styles.modalCancelText}>Cancelar</Text>
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalConfirmBtn, (!chapterTitle.trim() || saving) && styles.modalConfirmDisabled]}
@@ -560,7 +562,7 @@ export default function EditorModernoScreen() {
               >
                 {saving
                   ? <ActivityIndicator size="small" color="#000" />
-                  : <Text style={styles.modalConfirmText}>Crear</Text>
+                  : <Text style={styles.modalConfirmText}>{t('common.create')}</Text>
                 }
               </TouchableOpacity>
             </View>

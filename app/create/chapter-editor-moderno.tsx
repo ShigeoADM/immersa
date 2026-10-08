@@ -28,13 +28,14 @@ import {
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { ChapterCoverSettings } from '@/components/chapter-cover-settings';
 import { tutorialZone } from '@/components/tutorial';
+import { t as translate, useT } from '@/i18n';
 
 function confirmAction(title: string, message: string, confirmText: string, onConfirm: () => void) {
   if (Platform.OS === 'web') {
     if ((window as any).confirm(`${title}\n\n${message}`)) onConfirm();
   } else {
     AppAlert.alert(title, message, [
-      { text: 'Cancelar', style: 'cancel' },
+      { text: translate('common.cancel'), style: 'cancel' },
       { text: confirmText, style: 'destructive', onPress: onConfirm },
     ]);
   }
@@ -61,6 +62,7 @@ interface Page {
 }
 
 export default function ChapterEditorModernoScreen() {
+  const t = useT();
   const isDesktop = useIsDesktop();
   const router = useRouter();
   const { storyId, chapterId, chapterTitle } = useLocalSearchParams<{
@@ -85,7 +87,7 @@ export default function ChapterEditorModernoScreen() {
     refsByIdRef.current = true;
   };
 
-  const [title, setTitle] = useState(chapterTitle ? decodeURIComponent(chapterTitle) : 'Capítulo');
+  const [title, setTitle] = useState(chapterTitle ? decodeURIComponent(chapterTitle) : translate('chapter.default'));
 
   const startEditingTitle = () => {
     setTitleInput(title);
@@ -106,7 +108,7 @@ export default function ChapterEditorModernoScreen() {
     } catch (e) {
       console.error('Error actualizando título:', e);
       setTitle(previous);
-      AppAlert.alert('Error', 'No se pudo cambiar el título. Inténtalo de nuevo.');
+      AppAlert.alert(t('common.error'), t('chapter.renameFailed'));
     }
   };
 
@@ -194,9 +196,9 @@ export default function ChapterEditorModernoScreen() {
   // ── Borrar página ─────────────────────────────────────────────────────────
   const handleDeletePage = (page: Page) => {
     confirmAction(
-      'Borrar página',
-      `¿Seguro que quieres borrar la página ${pages.findIndex(p => p.id === page.id) + 1}?`,
-      'Borrar',
+      t('chapter.deletePage'),
+      t('chapter.deletePageBody', { n: pages.findIndex(p => p.id === page.id) + 1 }),
+      t('common.delete'),
       async () => {
         try {
           await ensureRefsById();
@@ -228,7 +230,7 @@ export default function ChapterEditorModernoScreen() {
       setPages(next.map((p, k) => ({ ...p, order: k + 1 })));
     } catch (e) {
       console.error('Error ordenando páginas:', e);
-      AppAlert.alert('Error', 'No se pudo cambiar el orden. Inténtalo de nuevo.');
+      AppAlert.alert(t('common.error'), t('common.reorderFailed'));
       loadPages();
     } finally {
       setBusy(false);
@@ -245,7 +247,7 @@ export default function ChapterEditorModernoScreen() {
       await loadPages();
     } catch (e) {
       console.error('Error duplicando página:', e);
-      AppAlert.alert('Error', 'No se pudo duplicar la página. Inténtalo de nuevo.');
+      AppAlert.alert(t('common.error'), t('chapter.duplicateFailed'));
     } finally {
       setBusy(false);
     }
@@ -288,7 +290,7 @@ export default function ChapterEditorModernoScreen() {
           <TouchableOpacity style={styles.saveBtn} activeOpacity={0.8} onPress={handleSaveChapter} disabled={savingChapter}>
             {savingChapter
               ? <ActivityIndicator size="small" color={Colors.emerald} />
-              : <Text style={styles.saveBtnText}>Guardar</Text>
+              : <Text style={styles.saveBtnText}>{t('common.save')}</Text>
             }
           </TouchableOpacity>
         </View>
@@ -328,7 +330,7 @@ export default function ChapterEditorModernoScreen() {
         )}
         <View style={styles.orientationBadge}>
           <MaterialIcons name="stay-current-landscape" size={12} color={Colors.emerald} />
-          <Text style={styles.orientationText}>Horizontal</Text>
+          <Text style={styles.orientationText}>{t('chapter.landscape')}</Text>
         </View>
       </View>
       <View style={styles.divider} />
@@ -337,7 +339,7 @@ export default function ChapterEditorModernoScreen() {
       {pages.length > 0 && (
         <View style={styles.listToolbar}>
           <Text style={styles.listCount} numberOfLines={1}>
-            {pages.length} {pages.length === 1 ? 'página' : 'páginas'} · {formatReadingStats(wordCount)}
+            {t(pages.length === 1 ? 'chapter.pageOne' : 'chapter.pageMany', { n: pages.length })} · {formatReadingStats(wordCount)}
           </Text>
           {pages.length > 1 && (
             <TouchableOpacity
@@ -347,7 +349,7 @@ export default function ChapterEditorModernoScreen() {
             >
               <MaterialIcons name={reorderMode ? 'check' : 'swap-vert'} size={14} color={reorderMode ? '#000' : Colors.textSecondary} />
               <Text style={[styles.reorderToggleText, reorderMode && { color: '#000' }]}>
-                {reorderMode ? 'Listo' : 'Ordenar'}
+                {reorderMode ? t('common.done') : t('common.reorder')}
               </Text>
             </TouchableOpacity>
           )}
@@ -366,8 +368,8 @@ export default function ChapterEditorModernoScreen() {
         ) : pages.length === 0 ? (
           <View style={styles.emptyState}>
             <MaterialIcons name="article" size={36} color={Colors.textMuted} />
-            <Text style={styles.emptyText}>Aún no hay páginas.</Text>
-            <Text style={styles.emptyHint}>Añade la primera página del capítulo.</Text>
+            <Text style={styles.emptyText}>{t('chapter.noPages')}</Text>
+            <Text style={styles.emptyHint}>{t('chapter.noPagesHint')}</Text>
           </View>
         ) : (
           pages.map((page, i) => (
@@ -394,7 +396,7 @@ export default function ChapterEditorModernoScreen() {
                     {page.backgroundUrl
                       ? <View style={styles.hasBgBadge}>
                           <MaterialIcons name="image" size={11} color={Colors.emerald} />
-                          <Text style={styles.hasBgText}>Con imagen</Text>
+                          <Text style={styles.hasBgText}>{t('chapter.hasImage')}</Text>
                         </View>
                       : null
                     }
@@ -409,19 +411,19 @@ export default function ChapterEditorModernoScreen() {
                           color={page.musicUrl === null ? Colors.textMuted : Colors.aqua}
                         />
                         <Text style={[styles.hasBgText, { color: page.musicUrl === null ? Colors.textMuted : Colors.aqua }]}>
-                          {page.musicUrl === null ? 'Silencio' : 'Con música'}
+                          {page.musicUrl === null ? t('chapter.silence') : t('chapter.hasMusic')}
                         </Text>
                       </View>
                     )}
                     {page.sfxUrl || page.sfxCues?.length ? (
                       <View style={[styles.hasBgBadge, { backgroundColor: Colors.aqua + '18', borderColor: Colors.aqua + '50' }]}>
                         <MaterialIcons name="graphic-eq" size={11} color={Colors.aqua} />
-                        <Text style={[styles.hasBgText, { color: Colors.aqua }]}>Sonido</Text>
+                        <Text style={[styles.hasBgText, { color: Colors.aqua }]}>{t('chapter.hasSound')}</Text>
                       </View>
                     ) : null}
                   </View>
                   <Text style={styles.pagePreview} numberOfLines={2}>
-                    {page.text || 'Página sin texto'}
+                    {page.text || t('chapter.emptyPage')}
                   </Text>
                 </View>
                 <MaterialIcons name="edit" size={16} color={Colors.textMuted} />
@@ -470,12 +472,12 @@ export default function ChapterEditorModernoScreen() {
         {chapterPublished ? (
           <View style={styles.publishedNotice}>
             <MaterialIcons name="lock" size={14} color={Colors.textMuted} />
-            <Text style={styles.publishedNoticeText}>Capítulo publicado — solo puedes editar o borrar páginas existentes</Text>
+            <Text style={styles.publishedNoticeText}>{t('chapter.publishedNotice')}</Text>
           </View>
         ) : (
           <TouchableOpacity style={styles.addPageBtn} activeOpacity={0.85} onPress={openNewPage} testID={tutorialZone('addPage')}>
             <MaterialIcons name="add" size={20} color="#000" />
-            <Text style={styles.addPageText}>Añadir página</Text>
+            <Text style={styles.addPageText}>{t('chapter.addPage')}</Text>
           </TouchableOpacity>
         )}
       </SafeAreaView>
