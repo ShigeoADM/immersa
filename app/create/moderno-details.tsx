@@ -25,6 +25,7 @@ import { DesktopColumn } from '@/components/desktop-column';
 import { uploadImage, deleteStoredFile } from '@/services/media';
 import { coverUsedByAnotherStory } from '@/services/stories';
 import { withUploadNotice } from '@/components/upload-notice';
+import { tutorialZone } from '@/components/tutorial';
 
 const LANGUAGES = ['Español', 'English', 'Português', 'Français', 'Deutsch', 'Otro'];
 
@@ -482,7 +483,7 @@ export default function ModernoDetailsScreen() {
         {/* ─── CONTENIDO +18 ─── */}
         <Text style={styles.sectionLabel}>Contenido</Text>
 
-        <View style={styles.toggleRow}>
+        <View style={styles.toggleRow} nativeID={tutorialZone('adult')}>
           <View style={styles.toggleInfo}>
             <Text style={styles.toggleTitle}>Contenido +18</Text>
             <Text style={styles.toggleDesc}>

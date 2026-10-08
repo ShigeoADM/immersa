@@ -89,6 +89,19 @@ const STEPS: Step[] = [
     target: 'formatModerno', action: true, shape: 'rect', morph: true,
     pieces: [{ t: 'Crea una nueva historia, por favor. Puede ir en serio o no: luego decidirás si borras esta prueba o la aprovechas.' }],
   },
+  // ── Ficha de la novela ──
+  {
+    arrives: true,
+    pieces: [{ t: 'Aquí podrás crear la ficha de tu novela: título, géneros, sinopsis, etc. Asegúrate de rellenarla correctamente.' }],
+  },
+  {
+    target: 'adult', boxAt: 'above',
+    pieces: [{
+      t: 'Marca esta casilla si tu novela tiene contenido para adultos: sexo explícito, gore, agresiones sexuales o violencia extrema.\n\n'
+        + 'Eso vale para el texto. Las imágenes no pueden mostrar desnudos, actos sexuales ni violencia real, ni siquiera con la casilla marcada. '
+        + 'La violencia en ilustraciones que son claramente ficción sí está permitida.',
+    }],
+  },
 ];
 // Los pasos encadenados con sameBox comparten cuadro: este es el primero de su cadena
 const groupOf = (i: number) => { let g = i; while (g > 0 && STEPS[g].sameBox) g--; return g; };
@@ -376,6 +389,8 @@ export function TutorialOverlay() {
       } else {
         setPlace(null);
         if (stepIndex === 0) await wait(DIM_MS - 100);
+        // Cuadro en el centro de una pantalla a la que se acaba de llegar: se le da tiempo a abrirse
+        else if (s.arrives) await wait(SETTLE_MS + 250);
       }
       if (cancelled) return;
       await run(open, 1, OPEN_MS);
