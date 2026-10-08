@@ -78,6 +78,10 @@ Esto se refiere al texto de la historia. Las imágenes (portadas, fondos y fotos
       { title: 'Qué puedes subir', body: UPLOAD_NOTICE[0] },
       { title: 'Si alguien reclama', body: `${UPLOAD_NOTICE[1]} Si eres titular de los derechos de algo publicado en Immersa y quieres que se retire, puedes pedirlo ${CONTACT} o con el botón de denunciar de la historia.` },
       { title: 'Nuestra recomendación', body: `${UPLOAD_NOTICE[2]} Cada historia tiene un apartado de créditos para ello, en sus detalles.` },
+      {
+        title: 'Qué pasa con tus imágenes',
+        body: 'Immersa no guarda tus archivos originales: las imágenes se reducen al subirlas, y los lectores no pueden descargarlas desde la web. Si quieres firmar o marcar tus ilustraciones, hazlo antes de subirlas.',
+      },
     ],
   },
   privacy: {
