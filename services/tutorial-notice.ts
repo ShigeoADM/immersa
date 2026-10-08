@@ -9,7 +9,8 @@ import { useAuth } from '@/context/AuthContext';
 // forma parte de la app. Sale arriba del todo y ofrece hacer el tutorial o descubrir la
 // web por cuenta propia. Cuenta como "sin leer" hasta que se abre una vez.
 //
-// EN PRUEBAS: por ahora solo la ven las cuentas con el permiso de desarrollo.
+// La ven todas las cuentas: las que ya existían y las que se creen. Como no es un dato
+// guardado, no hay que "enviársela" a nadie.
 
 const key = (uid: string) => `immersa_tutorial_notice_seen:${uid}`;
 
@@ -27,7 +28,7 @@ export function markTutorialNoticeSeen(uid: string) {
 }
 
 export function useTutorialNotice(): { visible: boolean; unread: boolean } {
-  const { user, can } = useAuth();
+  const { user } = useAuth();
   const all = useSyncExternalStore(subscribe, getSeen, getSeen);
   const uid = user?.uid;
   useEffect(() => {
@@ -39,7 +40,7 @@ export function useTutorialNotice(): { visible: boolean; unread: boolean } {
   }, [uid]);
 
   // El tutorial señala elementos de la página web: en la app del móvil aún no existe
-  const visible = Platform.OS === 'web' && !!uid && can('developer');
+  const visible = Platform.OS === 'web' && !!uid;
   // (hasta saber si ya se abrió, no se marca como sin leer: evita un aviso que parpadea)
   return { visible, unread: visible && all[uid!] === false };
 }

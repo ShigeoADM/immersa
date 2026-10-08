@@ -11,7 +11,8 @@ import { deleteStoryWithCascade } from '@/services/stories';
 // y van apareciendo cuadros de texto que explican cada cosa; la parte de la página de la
 // que se habla queda iluminada.
 //
-// EN PRUEBAS: por ahora solo se puede abrir desde la sección Desarrollo (app/dev.tsx).
+// Se abre desde el aviso fijo "Tutorial Immersa" de Notificaciones (services/tutorial-notice.ts)
+// y, para probar, desde la sección Desarrollo (app/dev.tsx).
 //
 // El estado vive fuera de React para poder arrancarlo desde cualquier pantalla y que la
 // capa (montada una sola vez, en la raíz) lo siga aunque se cambie de pantalla.
