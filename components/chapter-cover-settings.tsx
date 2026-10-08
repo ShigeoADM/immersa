@@ -17,6 +17,7 @@ import {
   INTRO_TEXT_ANIMS, type IntroStyle,
 } from '@/components/chapter-intro';
 import { musicPlaybackVolume } from '@/constants/reader-layout';
+import { ts, useT } from '@/i18n';
 
 // Ilustración del capítulo (editor de capítulo, formato Moderno).
 //
@@ -29,6 +30,7 @@ import { musicPlaybackVolume } from '@/constants/reader-layout';
 //   transición: rótulo, posición, colores, tipografía y animaciones)
 
 export function ChapterCoverSettings({ storyId, chapterId }: { storyId: string; chapterId: string }) {
+  useT();
   const [open, setOpen]             = useState(false);
   const [coverUrl, setCoverUrl]     = useState<string | null>(null);
   const [intro, setIntro]           = useState(false);
@@ -87,14 +89,14 @@ export function ChapterCoverSettings({ storyId, chapterId }: { storyId: string; 
     try {
       await updateDoc(chapterRef, data);
     } catch (e: any) {
-      AppAlert.alert('Error', e?.message ?? 'No se pudo guardar el cambio.');
+      AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo guardar el cambio.'));
     }
   };
 
   // ── Ilustración ────────────────────────────────────────────────────────────
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { AppAlert.alert('Permiso denegado', 'Necesitamos acceso a tu galería.'); return; }
+    if (status !== 'granted') { AppAlert.alert(ts('Permiso denegado'), ts('Necesitamos acceso a tu galería.')); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled || !result.assets[0]) return;
     setUploading('image');
@@ -105,7 +107,7 @@ export function ChapterCoverSettings({ storyId, chapterId }: { storyId: string; 
       await save({ coverUrl: url });
       if (old) deleteUnusedMedia(storyId, [old]);
     } catch (e: any) {
-      AppAlert.alert('Error al subir', e?.message ?? 'Inténtalo de nuevo.');
+      AppAlert.alert(ts('Error al subir'), e?.message ?? ts('Inténtalo de nuevo.'));
     } finally {
       setUploading(null);
     }
@@ -144,7 +146,7 @@ export function ChapterCoverSettings({ storyId, chapterId }: { storyId: string; 
     } catch (e: any) {
       if (turn !== turnRef.current) return;
       setPreviewing(false);
-      AppAlert.alert('No se pudo reproducir', e?.message ?? 'Comprueba el archivo.');
+      AppAlert.alert(ts('No se pudo reproducir'), e?.message ?? ts('Comprueba el archivo.'));
     }
   };
 
@@ -162,7 +164,7 @@ export function ChapterCoverSettings({ storyId, chapterId }: { storyId: string; 
       await save({ introMusicUrl: url, introMusicVolume: volume });
       if (old) deleteUnusedMedia(storyId, [old]);
     } catch (e: any) {
-      AppAlert.alert('Error al subir música', e?.message ?? 'Inténtalo de nuevo.');
+      AppAlert.alert(ts('Error al subir música'), e?.message ?? ts('Inténtalo de nuevo.'));
     } finally {
       setUploading(null);
     }
@@ -182,7 +184,7 @@ export function ChapterCoverSettings({ storyId, chapterId }: { storyId: string; 
     save({ introMusicVolume: next });
   };
 
-  const summary = !coverUrl ? 'Sin ilustración' : intro ? 'Se enseña al empezar el capítulo' : 'Solo en la lista de capítulos';
+  const summary = !coverUrl ? ts('Sin ilustración') : intro ? ts('Se enseña al empezar el capítulo') : ts('Solo en la lista de capítulos');
 
   return (
     <View style={styles.wrap}>
@@ -191,7 +193,7 @@ export function ChapterCoverSettings({ storyId, chapterId }: { storyId: string; 
           ? <Image source={{ uri: coverUrl }} style={styles.headerThumb} contentFit="cover" />
           : <MaterialIcons name="image" size={18} color={Colors.textMuted} />}
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Ilustración del capítulo</Text>
+          <Text style={styles.headerTitle}>{ts('Ilustración del capítulo')}</Text>
           <Text style={styles.headerSummary} numberOfLines={1}>{summary}</Text>
         </View>
         <MaterialIcons name={open ? 'expand-less' : 'expand-more'} size={22} color={Colors.textMuted} />
@@ -200,7 +202,7 @@ export function ChapterCoverSettings({ storyId, chapterId }: { storyId: string; 
       {open && (
         <View style={styles.body}>
           <Text style={styles.hint}>
-            Sale en la ficha de la novela, en la lista de capítulos, en lugar del número. Tocándola se ve entera.
+            {ts('Sale en la ficha de la novela, en la lista de capítulos, en lugar del número. Tocándola se ve entera.')}
           </Text>
           {coverUrl && <Image source={{ uri: coverUrl }} style={styles.preview} contentFit="contain" />}
           <View style={styles.row}>
@@ -208,28 +210,28 @@ export function ChapterCoverSettings({ storyId, chapterId }: { storyId: string; 
               {uploading === 'image'
                 ? <ActivityIndicator size="small" color={Colors.emerald} />
                 : <MaterialIcons name="upload" size={16} color={Colors.emerald} />}
-              <Text style={styles.btnText}>{coverUrl ? 'Cambiar ilustración' : 'Subir ilustración'}</Text>
+              <Text style={styles.btnText}>{coverUrl ? ts('Cambiar ilustración') : ts('Subir ilustración')}</Text>
             </TouchableOpacity>
             {coverUrl && (
               <TouchableOpacity style={styles.btn} onPress={removeImage} disabled={!!uploading} activeOpacity={0.75}>
                 <MaterialIcons name="close" size={16} color="#FF6B6B" />
-                <Text style={[styles.btnText, { color: '#FF6B6B' }]}>Quitar</Text>
+                <Text style={[styles.btnText, { color: '#FF6B6B' }]}>{ts('Quitar')}</Text>
               </TouchableOpacity>
             )}
           </View>
 
           {coverUrl && (
             <>
-              <Text style={styles.label}>Al empezar el capítulo</Text>
+              <Text style={styles.label}>{ts('Al empezar el capítulo')}</Text>
               <View style={styles.row}>
-                {([{ value: false, label: 'No enseñarla' }, { value: true, label: 'Enseñarla a pantalla completa' }] as const).map(opt => (
+                {([{ value: false, label: ts('No enseñarla') }, { value: true, label: ts('Enseñarla a pantalla completa') }] as const).map(opt => (
                   <TouchableOpacity
-                    key={opt.label}
+                    key={ts(opt.label)}
                     style={[styles.choice, intro === opt.value && styles.choiceActive]}
                     onPress={() => { setIntro(opt.value); save({ coverIntro: opt.value }); }}
                     activeOpacity={0.75}
                   >
-                    <Text style={[styles.choiceText, intro === opt.value && styles.choiceTextActive]}>{opt.label}</Text>
+                    <Text style={[styles.choiceText, intro === opt.value && styles.choiceTextActive]}>{ts(opt.label)}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -239,14 +241,13 @@ export function ChapterCoverSettings({ storyId, chapterId }: { storyId: string; 
           {coverUrl && intro && (
             <>
               <Text style={styles.hint}>
-                El lector ve la ilustración con el título del capítulo y toca para empezar. La música que viniera
-                sonando del capítulo anterior se apaga: este capítulo empieza de cero, con la música de sus páginas.
+                {ts('El lector ve la ilustración con el título del capítulo y toca para empezar. La música que viniera sonando del capítulo anterior se apaga: este capítulo empieza de cero, con la música de sus páginas.')}
               </Text>
               <IntroStyleEditor image={coverUrl} value={introStyle} onChange={changeStyle} number={number} title={title} />
 
-              <Text style={styles.label}>Música de la transición (opcional)</Text>
+              <Text style={styles.label}>{ts('Música de la transición (opcional)')}</Text>
               <Text style={styles.hint}>
-                Una pista corta que suena una vez mientras se ve la ilustración. No pasa a las páginas del capítulo.
+                {ts('Una pista corta que suena una vez mientras se ve la ilustración. No pasa a las páginas del capítulo.')}
               </Text>
               {musicUrl && (
                 <View style={styles.musicRow}>
@@ -268,12 +269,12 @@ export function ChapterCoverSettings({ storyId, chapterId }: { storyId: string; 
                   {uploading === 'music'
                     ? <ActivityIndicator size="small" color={Colors.emerald} />
                     : <MaterialIcons name="music-note" size={16} color={Colors.emerald} />}
-                  <Text style={styles.btnText}>{musicUrl ? 'Cambiar pista' : 'Subir pista'}</Text>
+                  <Text style={styles.btnText}>{musicUrl ? ts('Cambiar pista') : ts('Subir pista')}</Text>
                 </TouchableOpacity>
                 {musicUrl && (
                   <TouchableOpacity style={styles.btn} onPress={removeMusic} disabled={!!uploading} activeOpacity={0.75}>
                     <MaterialIcons name="close" size={16} color="#FF6B6B" />
-                    <Text style={[styles.btnText, { color: '#FF6B6B' }]}>Quitar</Text>
+                    <Text style={[styles.btnText, { color: '#FF6B6B' }]}>{ts('Quitar')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -309,7 +310,7 @@ function Chips<T extends string>({ options, value, onPick }: {
           onPress={() => onPick(o.key)}
           activeOpacity={0.75}
         >
-          <Text style={[styles.choiceText, value === o.key && styles.choiceTextActive]}>{o.label}</Text>
+          <Text style={[styles.choiceText, value === o.key && styles.choiceTextActive]}>{ts(o.label)}</Text>
         </TouchableOpacity>
       ))}
     </View>
@@ -337,7 +338,7 @@ function ColorPicker({ value, onPick, auto }: { value?: string; onPick: (hex?: s
     <View style={[styles.row, { alignItems: 'center' }]}>
       {auto && (
         <TouchableOpacity style={[styles.choice, !value && styles.choiceActive]} onPress={() => onPick(undefined)} activeOpacity={0.75}>
-          <Text style={[styles.choiceText, !value && styles.choiceTextActive]}>El del lector</Text>
+          <Text style={[styles.choiceText, !value && styles.choiceTextActive]}>{ts('El del lector')}</Text>
         </TouchableOpacity>
       )}
       {SWATCHES.map(s => (
@@ -356,7 +357,7 @@ function ColorPicker({ value, onPick, auto }: { value?: string; onPick: (hex?: s
           const m = t.trim().match(/^#?([0-9a-fA-F]{6})$/);
           if (m) onPick(`#${m[1].toUpperCase()}`);
         }}
-        placeholder="#RRGGBB"
+        placeholder={ts('#RRGGBB')}
         placeholderTextColor={Colors.textMuted}
         autoCapitalize="characters"
         maxLength={7}
@@ -374,7 +375,7 @@ function LineEditor({ label, auto, text, hidden, onChange }: {
     <>
       <Text style={styles.label}>{label}</Text>
       <Chips
-        options={[{ key: 'auto', label: auto }, { key: 'custom', label: 'Otro texto' }, { key: 'hidden', label: 'No ponerla' }] as const}
+        options={[{ key: 'auto', label: auto }, { key: 'custom', label: ts('Otro texto') }, { key: 'hidden', label: ts('No ponerla') }] as const}
         value={mode}
         onPick={k => onChange(k === 'hidden' ? { text, hidden: true } : k === 'custom' ? { text: text ?? '', hidden: false } : { text: undefined, hidden: false })}
       />
@@ -383,7 +384,7 @@ function LineEditor({ label, auto, text, hidden, onChange }: {
           style={styles.textInput}
           value={text ?? ''}
           onChangeText={t => onChange({ text: t, hidden: false })}
-          placeholder="Escribe el texto"
+          placeholder={ts('Escribe el texto')}
           placeholderTextColor={Colors.textMuted}
           maxLength={80}
         />
@@ -422,9 +423,9 @@ function IntroStyleEditor({ image, value, onChange, number, title }: {
 
   return (
     <>
-      <Text style={styles.label}>Diseño de la transición</Text>
+      <Text style={styles.label}>{ts('Diseño de la transición')}</Text>
       <Text style={styles.hint}>
-        Así la verá el lector. Arrastra el rótulo en la imagen para colocarlo donde quieras.
+        {ts('Así la verá el lector. Arrastra el rótulo en la imagen para colocarlo donde quieras.')}
       </Text>
       {/* La vista previa se queda a la vista mientras se baja por los ajustes (navegador) */}
       <View style={[styles.introSticky, Platform.OS === 'web' ? ({ position: 'sticky', top: 0 } as any) : null]}>
@@ -432,36 +433,36 @@ function IntroStyleEditor({ image, value, onChange, number, title }: {
           style={styles.introPreview}
           onLayout={e => { boxRef.current = { width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height }; }}
         >
-          <ChapterIntroView image={image} style={value} number={number} title={title || 'Título del capítulo'} accent={Colors.emerald} replayKey={replay} />
+          <ChapterIntroView image={image} style={value} number={number} title={title || ts('Título del capítulo')} accent={Colors.emerald} replayKey={replay} />
           <View style={[StyleSheet.absoluteFill, Platform.OS === 'web' ? ({ cursor: 'move' } as any) : null]} {...pan.panHandlers} />
         </View>
         <View style={styles.row}>
           <TouchableOpacity style={styles.btn} onPress={() => setReplay(n => n + 1)} activeOpacity={0.75}>
             <MaterialIcons name="replay" size={16} color={Colors.emerald} />
-            <Text style={styles.btnText}>Ver las animaciones</Text>
+            <Text style={styles.btnText}>{ts('Ver las animaciones')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.btn} onPress={() => onChange({})} activeOpacity={0.75}>
             <MaterialIcons name="restart-alt" size={16} color={Colors.textSecondary} />
-            <Text style={[styles.btnText, { color: Colors.textSecondary }]}>Restablecer</Text>
+            <Text style={[styles.btnText, { color: Colors.textSecondary }]}>{ts('Restablecer')}</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <LineEditor
-        label="Primera línea" auto={`«Capítulo ${number}»`} text={value.line1} hidden={value.hide1}
+        label="Primera línea" auto={ts('«Capítulo {n}»', { n: number })} text={value.line1} hidden={value.hide1}
         onChange={p => onChange({ ...value, line1: p.text, hide1: p.hidden })}
       />
-      <Text style={styles.sublabel}>Color</Text>
+      <Text style={styles.sublabel}>{ts('Color')}</Text>
       <ColorPicker value={value.color1} onPick={hex => set({ color1: hex })} auto />
 
       <LineEditor
         label="Segunda línea" auto="El título del capítulo" text={value.line2} hidden={value.hide2}
         onChange={p => onChange({ ...value, line2: p.text, hide2: p.hidden })}
       />
-      <Text style={styles.sublabel}>Color</Text>
+      <Text style={styles.sublabel}>{ts('Color')}</Text>
       <ColorPicker value={c.color2} onPick={hex => set({ color2: hex ?? '#FFFFFF' })} />
 
-      <Text style={styles.label}>Posición del rótulo</Text>
+      <Text style={styles.label}>{ts('Posición del rótulo')}</Text>
       <View style={styles.musicRow}>
         <View style={styles.posGrid}>
           {POSITIONS.map((p, i) => {
@@ -473,48 +474,48 @@ function IntroStyleEditor({ image, value, onChange, number, title }: {
         </View>
         <View style={{ flex: 1, gap: 8 }}>
           <Chips
-            options={[{ key: 'left', label: 'Izquierda' }, { key: 'center', label: 'Centrado' }, { key: 'right', label: 'Derecha' }] as const}
+            options={[{ key: 'left', label: ts('Izquierda') }, { key: 'center', label: ts('Centrado') }, { key: 'right', label: ts('Derecha') }] as const}
             value={c.align}
             // Además de alinear el texto, lleva el rótulo a ese lado de la pantalla (si solo
             // cambiara la alineación, el rótulo saltaría de sitio y podría salirse)
             onPick={align => set({ align, x: align === 'left' ? 6 : align === 'center' ? 50 : 94 })}
           />
-          <Text style={styles.hint}>Horizontal {c.x}% · vertical {c.y}%</Text>
+          <Text style={styles.hint}>{ts('Horizontal {x}% · vertical {y}%', { x: c.x, y: c.y })}</Text>
         </View>
       </View>
 
-      <Text style={styles.label}>Tamaño</Text>
+      <Text style={styles.label}>{ts('Tamaño')}</Text>
       <Stepper
         label={`${Math.round(c.size * 100)}%`}
         onMinus={() => set({ size: Math.round(clamp(c.size - 0.1, 0.4, 4) * 10) / 10 })}
         onPlus={() => set({ size: Math.round(clamp(c.size + 0.1, 0.4, 4) * 10) / 10 })}
       />
 
-      <Text style={styles.label}>Tipografía</Text>
+      <Text style={styles.label}>{ts('Tipografía')}</Text>
       <Chips options={INTRO_FONTS} value={c.font} onPick={font => set({ font })} />
       {Platform.OS !== 'web' ? null : (
-        <Text style={styles.hint}>En la app del móvil algunas tipografías se sustituyen por la más parecida del teléfono.</Text>
+        <Text style={styles.hint}>{ts('En la app del móvil algunas tipografías se sustituyen por la más parecida del teléfono.')}</Text>
       )}
 
-      <Text style={styles.label}>Detrás del texto</Text>
+      <Text style={styles.label}>{ts('Detrás del texto')}</Text>
       <Chips options={INTRO_BACKDROPS} value={c.backdrop} onPick={backdrop => set({ backdrop })} />
 
-      <Text style={styles.label}>Animación del rótulo</Text>
+      <Text style={styles.label}>{ts('Animación del rótulo')}</Text>
       <Chips options={INTRO_TEXT_ANIMS} value={c.textAnim} onPick={textAnim => { set({ textAnim }); }} />
-      <Text style={styles.sublabel}>Aparece tras la ilustración</Text>
+      <Text style={styles.sublabel}>{ts('Aparece tras la ilustración')}</Text>
       <Stepper
-        label={c.textDelay === 0 ? 'A la vez' : `${c.textDelay.toFixed(2).replace(/0$/, '').replace('.', ',')} s`}
+        label={c.textDelay === 0 ? ts('A la vez') : `${c.textDelay.toFixed(2).replace(/0$/, '').replace('.', ',')} s`}
         onMinus={() => set({ textDelay: clamp(Math.round((c.textDelay - 0.25) * 100) / 100, 0, 8) })}
         onPlus={() => set({ textDelay: clamp(Math.round((c.textDelay + 0.25) * 100) / 100, 0, 8) })}
       />
 
-      <Text style={styles.label}>Animación de la ilustración</Text>
+      <Text style={styles.label}>{ts('Animación de la ilustración')}</Text>
       <Chips options={INTRO_IMAGE_ANIMS} value={c.imageAnim} onPick={imageAnim => set({ imageAnim })} />
-      <Text style={styles.sublabel}>Velocidad</Text>
+      <Text style={styles.sublabel}>{ts('Velocidad')}</Text>
       <Chips options={INTRO_SPEEDS} value={c.imageSpeed} onPick={imageSpeed => set({ imageSpeed })} />
-      <Text style={styles.sublabel}>Encaje en la pantalla</Text>
+      <Text style={styles.sublabel}>{ts('Encaje en la pantalla')}</Text>
       <Chips
-        options={[{ key: 'contain', label: 'Entera (sin recortar)' }, { key: 'cover', label: 'Llenar la pantalla' }] as const}
+        options={[{ key: 'contain', label: ts('Entera (sin recortar)') }, { key: 'cover', label: ts('Llenar la pantalla') }] as const}
         value={c.imageFit}
         onPick={imageFit => set({ imageFit })}
       />

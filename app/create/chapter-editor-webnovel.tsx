@@ -27,11 +27,13 @@ import { useSaveShortcut } from '@/hooks/use-save-shortcut';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { useLeaveWarning } from '@/hooks/use-leave-warning';
+import { ts, useT } from '@/i18n';
 
 const TITLE_MAX = 80;
 
 // Editor de un capítulo Webnovel: título + texto largo con **negrita** y *cursiva*.
 export default function ChapterEditorWebnovelScreen() {
+  useT();
   const router = useRouter();
   const navigation = useNavigation();
   const { storyId, chapterId, chapterTitle } = useLocalSearchParams<{
@@ -90,12 +92,12 @@ export default function ChapterEditorWebnovelScreen() {
         return;
       }
       AppAlert.alert(
-        'Borrador sin guardar',
-        'Hay cambios de este capítulo que no llegaste a guardar. ¿Quieres recuperarlos?',
+        ts('Borrador sin guardar'),
+        ts('Hay cambios de este capítulo que no llegaste a guardar. ¿Quieres recuperarlos?'),
         [
-          { text: 'Descartar', style: 'destructive', onPress: () => { clearDraft(); draftResolvedRef.current = true; } },
+          { text: ts('Descartar'), style: 'destructive', onPress: () => { clearDraft(); draftResolvedRef.current = true; } },
           {
-            text: 'Recuperar',
+            text: ts('Recuperar'),
             onPress: () => {
               try {
                 const d = JSON.parse(raw as string);
@@ -123,10 +125,10 @@ export default function ChapterEditorWebnovelScreen() {
     return navigation.addListener('beforeRemove', (e: any) => {
       if (allowLeaveRef.current || !isDirtyRef.current) return;
       e.preventDefault();
-      AppAlert.alert('Cambios sin guardar', 'Si sales ahora perderás los cambios de este capítulo.', [
-        { text: 'Cancelar', style: 'cancel' },
+      AppAlert.alert(ts('Cambios sin guardar'), ts('Si sales ahora perderás los cambios de este capítulo.'), [
+        { text: ts('Cancelar'), style: 'cancel' },
         {
-          text: 'Salir sin guardar', style: 'destructive',
+          text: ts('Salir sin guardar'), style: 'destructive',
           onPress: () => { allowLeaveRef.current = true; clearDraft(); navigation.dispatch(e.data.action); },
         },
       ]);
@@ -147,11 +149,11 @@ export default function ChapterEditorWebnovelScreen() {
         : await FileSystem.readAsStringAsync(asset.uri);
       // Saltos de línea de Windows, y líneas en blanco de más
       const text = raw.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-      if (!text) { AppAlert.alert('Archivo vacío', 'Ese archivo no tiene texto.'); return; }
+      if (!text) { AppAlert.alert(ts('Archivo vacío'), ts('Ese archivo no tiene texto.')); return; }
       setContent(prev => (prev.trim() ? `${prev.replace(/\s+$/, '')}\n\n${text}` : text));
       setPreview(false);
     } catch (e: any) {
-      AppAlert.alert('No se pudo importar', e?.message ?? 'Comprueba que es un archivo de texto (.txt).');
+      AppAlert.alert(ts('No se pudo importar'), e?.message ?? ts('Comprueba que es un archivo de texto (.txt).'));
     }
   };
 
@@ -159,7 +161,7 @@ export default function ChapterEditorWebnovelScreen() {
     if (saving) return;
     const cleanTitle = title.trim();
     if (!cleanTitle) {
-      AppAlert.alert('Falta el título', 'Ponle un título al capítulo.');
+      AppAlert.alert(ts('Falta el título'), ts('Ponle un título al capítulo.'));
       return;
     }
     setSaving(true);
@@ -175,7 +177,7 @@ export default function ChapterEditorWebnovelScreen() {
       router.back();
     } catch (e) {
       console.error('Error guardando capítulo:', e);
-      AppAlert.alert('Error', 'No se pudo guardar el capítulo. Inténtalo de nuevo.');
+      AppAlert.alert(ts('Error'), ts('No se pudo guardar el capítulo. Inténtalo de nuevo.'));
     } finally {
       setSaving(false);
     }
@@ -270,7 +272,7 @@ export default function ChapterEditorWebnovelScreen() {
         <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()} activeOpacity={0.7}>
           <MaterialIcons name="arrow-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Capítulo</Text>
+        <Text style={styles.headerTitle}>{ts('Capítulo')}</Text>
         <TouchableOpacity
           style={[styles.saveBtn, saving && { opacity: 0.5 }]}
           onPress={handleSave}
@@ -279,7 +281,7 @@ export default function ChapterEditorWebnovelScreen() {
         >
           {saving
             ? <ActivityIndicator size="small" color="#000" />
-            : <Text style={styles.saveBtnText}>Guardar</Text>}
+            : <Text style={styles.saveBtnText}>{ts('Guardar')}</Text>}
         </TouchableOpacity>
       </View>
 
@@ -290,7 +292,7 @@ export default function ChapterEditorWebnovelScreen() {
           style={styles.titleInput}
           value={title}
           onChangeText={setTitle}
-          placeholder="Título del capítulo"
+          placeholder={ts('Título del capítulo')}
           placeholderTextColor={Colors.textMuted}
           maxLength={TITLE_MAX}
         />
@@ -323,7 +325,7 @@ export default function ChapterEditorWebnovelScreen() {
             activeOpacity={0.8}
           >
             <MaterialIcons name={preview ? 'edit' : 'visibility'} size={15} color={preview ? '#000' : Colors.textSecondary} />
-            <Text style={[styles.previewBtnText, preview && { color: '#000' }]}>{preview ? 'Editar' : 'Vista previa'}</Text>
+            <Text style={[styles.previewBtnText, preview && { color: '#000' }]}>{preview ? ts('Editar') : ts('Vista previa')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -332,7 +334,7 @@ export default function ChapterEditorWebnovelScreen() {
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.previewContent}>
             {content.trim()
               ? <RichText content={content} style={styles.previewText} paragraphSpacing={14} />
-              : <Text style={styles.hint}>El capítulo está vacío.</Text>}
+              : <Text style={styles.hint}>{ts('El capítulo está vacío.')}</Text>}
           </ScrollView>
         ) : (
           <TextInput

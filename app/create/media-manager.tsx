@@ -18,6 +18,7 @@ import {
   belongsToStory, deleteStoredFile, mediaKey, plainFileName, rememberMediaNames,
 } from '@/services/media';
 import { pageSfxCues } from '@/constants/reader-layout';
+import { ts, useT } from '@/i18n';
 
 // Archivos de una historia Moderno: todas sus imágenes, músicas y efectos, dónde se usa
 // cada uno, con qué nombre se muestra, y los que ya no usa ninguna página.
@@ -38,6 +39,7 @@ const KIND_LABEL: Record<Kind, string> = { image: 'Imágenes', music: 'Música',
 const FOLDER_KIND: Record<string, Kind> = { pages: 'image', music: 'music', sfx: 'sfx' };
 
 export default function MediaManagerScreen() {
+  useT();
   const router = useRouter();
   const { storyId, title } = useLocalSearchParams<{ storyId: string; title?: string }>();
 
@@ -110,7 +112,7 @@ export default function MediaManagerScreen() {
       setFiles([...byKey.values()].sort((a, b) =>
         Number(a.uses.length === 0) - Number(b.uses.length === 0) || displayName(a, savedNames).localeCompare(displayName(b, savedNames))));
     } catch (e: any) {
-      AppAlert.alert('Error', e?.message ?? 'No se pudieron cargar los archivos.');
+      AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudieron cargar los archivos.'));
     } finally {
       setLoading(false);
     }
@@ -145,7 +147,7 @@ export default function MediaManagerScreen() {
     } catch (e: any) {
       if (turn !== turnRef.current) return;
       setPlayingKey(null);
-      AppAlert.alert('No se pudo reproducir', e?.message ?? 'Comprueba el archivo.');
+      AppAlert.alert(ts('No se pudo reproducir'), e?.message ?? ts('Comprueba el archivo.'));
     }
   };
   useFocusEffect(useCallback(() => stopAudio, [stopAudio]));
@@ -163,7 +165,7 @@ export default function MediaManagerScreen() {
     try {
       await updateDoc(doc(db, 'stories', storyId), { mediaNames: next });
     } catch (e: any) {
-      AppAlert.alert('Error', e?.message ?? 'No se pudo guardar el nombre.');
+      AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo guardar el nombre.'));
     }
   };
 
@@ -183,13 +185,13 @@ export default function MediaManagerScreen() {
   const confirmRemove = (targets: MediaFile[]) => {
     if (targets.length === 0) return;
     AppAlert.alert(
-      targets.length === 1 ? 'Borrar archivo' : `Borrar ${targets.length} archivos`,
+      targets.length === 1 ? ts('Borrar archivo') : ts('Borrar {n} archivos', { n: targets.length }),
       targets.length === 1
-        ? `Se borrará «${displayName(targets[0], names)}» para siempre. Ninguna página lo usa.`
-        : 'Se borrarán para siempre todos los archivos que no usa ninguna página.',
+        ? ts('Se borrará «{name}» para siempre. Ninguna página lo usa.', { name: displayName(targets[0], names) })
+        : ts('Se borrarán para siempre todos los archivos que no usa ninguna página.'),
       [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Borrar', style: 'destructive', onPress: () => removeFiles(targets) },
+        { text: ts('Cancelar'), style: 'cancel' },
+        { text: ts('Borrar'), style: 'destructive', onPress: () => removeFiles(targets) },
       ],
     );
   };
@@ -214,7 +216,7 @@ export default function MediaManagerScreen() {
                 value={editing!.value}
                 onChangeText={value => setEditing({ key: file.key, value })}
                 onSubmitEditing={saveName}
-                placeholder="Nombre para mostrar"
+                placeholder={ts('Nombre para mostrar')}
                 placeholderTextColor={Colors.textMuted}
                 autoFocus
                 maxLength={60}
@@ -238,8 +240,8 @@ export default function MediaManagerScreen() {
           )}
           <Text style={[styles.uses, isUnused && styles.usesUnused]} numberOfLines={2}>
             {isUnused
-              ? (file.stored ? 'No la usa ninguna página' : 'Enlace externo sin usar')
-              : `${file.stored ? '' : 'Enlace externo · '}${file.uses.length > 6
+              ? (file.stored ? ts('No la usa ninguna página') : ts('Enlace externo sin usar'))
+              : `${file.stored ? '' : ts('Enlace externo · ')}${file.uses.length > 6
                   ? `${file.uses.slice(0, 6).join(', ')} y ${file.uses.length - 6} más`
                   : file.uses.join(', ')}`}
           </Text>
@@ -260,7 +262,7 @@ export default function MediaManagerScreen() {
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
           <MaterialIcons name="arrow-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>Archivos{title ? ` · ${title}` : ''}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{ts('Archivos')}{title ? ` · ${title}` : ''}</Text>
         <TouchableOpacity style={styles.backBtn} onPress={load} disabled={loading} activeOpacity={0.7}>
           <MaterialIcons name="refresh" size={21} color={Colors.textSecondary} />
         </TouchableOpacity>
@@ -272,17 +274,15 @@ export default function MediaManagerScreen() {
         ) : (
           <ScrollView contentContainerStyle={styles.content}>
             <Text style={styles.summary}>
-              {files.length} {files.length === 1 ? 'archivo' : 'archivos'}
-              {unused.length > 0 ? ` · ${unused.length} sin usar` : ''}
+              {files.length === 1 ? ts('{n} archivo', { n: 1 }) : ts('{n} archivos', { n: files.length })}
+              {unused.length > 0 ? ts(' · {n} sin usar', { n: unused.length }) : ''}
             </Text>
             <Text style={styles.hint}>
-              Toca un nombre para cambiarlo: es solo cómo se muestra, no afecta al archivo ni a las páginas.
-              Los archivos que no usa ninguna página se pueden borrar.
+              {ts('Toca un nombre para cambiarlo: es solo cómo se muestra, no afecta al archivo ni a las páginas. Los archivos que no usa ninguna página se pueden borrar.')}
             </Text>
             {scanDenied && (
               <Text style={[styles.hint, { color: '#E0A040' }]}>
-                No se han podido revisar las carpetas de la historia, así que aquí solo salen los archivos que usa
-                alguna página. Para ver también los que se quedaron sin usar hay que publicar las reglas nuevas de Storage.
+                {ts('No se han podido revisar las carpetas de la historia, así que aquí solo salen los archivos que usa alguna página. Para ver también los que se quedaron sin usar hay que publicar las reglas nuevas de Storage.')}
               </Text>
             )}
             {unused.length > 1 && (
@@ -305,7 +305,7 @@ export default function MediaManagerScreen() {
               );
             })}
             {files.length === 0 && (
-              <Text style={styles.empty}>Esta historia todavía no tiene imágenes ni audios.</Text>
+              <Text style={styles.empty}>{ts('Esta historia todavía no tiene imágenes ni audios.')}</Text>
             )}
           </ScrollView>
         )}
@@ -315,7 +315,7 @@ export default function MediaManagerScreen() {
 }
 
 function displayName(file: MediaFile, names: Record<string, string>) {
-  return names[file.key] ?? plainFileName(file.url, file.kind === 'image' ? 'Imagen' : 'Audio');
+  return names[file.key] ?? plainFileName(file.url, file.kind === 'image' ? ts('Imagen') : ts('Audio'));
 }
 
 const styles = StyleSheet.create({

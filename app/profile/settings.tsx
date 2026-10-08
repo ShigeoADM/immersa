@@ -31,7 +31,7 @@ import {
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { DesktopColumn } from '@/components/desktop-column';
 import { PasswordInput } from '@/components/password-input';
-import { useT } from '@/i18n';
+import { useT, ts } from '@/i18n';
 import { LanguagePicker } from '@/components/language-picker';
 
 export default function SettingsScreen() {
@@ -80,7 +80,7 @@ export default function SettingsScreen() {
   const handlePickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      AppAlert.alert('Permiso denegado', 'Necesitamos acceso a tu galería.');
+      AppAlert.alert(ts('Permiso denegado'), ts('Necesitamos acceso a tu galería.'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -97,7 +97,7 @@ export default function SettingsScreen() {
         const url = await uploadImage(localUri, `avatars/${user!.uid}/${Date.now()}`, 512);
         setAvatarUrl(url);
       } catch (e: any) {
-        AppAlert.alert('Error al subir foto', e?.message ?? 'Inténtalo de nuevo.');
+        AppAlert.alert(ts('Error al subir foto'), e?.message ?? ts('Inténtalo de nuevo.'));
         setAvatarUrl(user?.photoURL ?? '');
       } finally {
         setUploadingAvatar(false);
@@ -126,7 +126,7 @@ export default function SettingsScreen() {
       router.back();
     } catch (e: any) {
       console.error('Error guardando ajustes:', e);
-      AppAlert.alert('Error', e?.message ?? 'No se pudieron guardar los cambios.');
+      AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudieron guardar los cambios.'));
     } finally {
       setSaving(false);
     }
@@ -149,7 +149,7 @@ export default function SettingsScreen() {
       router.replace('/auth/login');
     } catch (e: any) {
       const wrong = e?.code === 'auth/wrong-password' || e?.code === 'auth/invalid-credential';
-      setDeleteError(wrong ? 'La contraseña no es correcta.' : (e?.message ?? 'No se pudo eliminar la cuenta.'));
+      setDeleteError(wrong ? ts('La contraseña no es correcta.') : (e?.message ?? ts('No se pudo eliminar la cuenta.')));
     } finally {
       setDeleting(false);
     }
@@ -158,12 +158,12 @@ export default function SettingsScreen() {
   // ── Cerrar sesión ───────────────────────────────────────────────────────────
   const handleSignOut = () => {
     AppAlert.alert(
-      'Cerrar sesión',
-      '¿Seguro que quieres cerrar sesión?',
+      ts('Cerrar sesión'),
+      ts('¿Seguro que quieres cerrar sesión?'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: ts('Cancelar'), style: 'cancel' },
         {
-          text: 'Cerrar sesión',
+          text: ts('Cerrar sesión'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -199,7 +199,7 @@ export default function SettingsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <MaterialIcons name="arrow-back" size={22} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Ajustes de perfil</Text>
+          <Text style={styles.headerTitle}>{ts('Ajustes de perfil')}</Text>
           <TouchableOpacity
             style={[styles.saveBtn, (saving || uploadingAvatar) && styles.saveBtnDisabled]}
             onPress={handleSave}
@@ -208,7 +208,7 @@ export default function SettingsScreen() {
           >
             {saving
               ? <ActivityIndicator size="small" color="#000" />
-              : <Text style={styles.saveBtnText}>Guardar</Text>
+              : <Text style={styles.saveBtnText}>{ts('Guardar')}</Text>
             }
           </TouchableOpacity>
         </View>
@@ -248,28 +248,28 @@ export default function SettingsScreen() {
               </View>
             )}
           </TouchableOpacity>
-          <Text style={styles.avatarHint}>Toca para cambiar la foto</Text>
+          <Text style={styles.avatarHint}>{ts('Toca para cambiar la foto')}</Text>
         </View>
 
         {/* ── Nombre ── */}
-        <Text style={styles.fieldLabel}>Nombre</Text>
+        <Text style={styles.fieldLabel}>{ts('Nombre')}</Text>
         <TextInput
           style={styles.input}
           value={displayName}
           onChangeText={setDisplayName}
-          placeholder="Tu nombre o alias"
+          placeholder={ts('Tu nombre o alias')}
           placeholderTextColor={Colors.textMuted}
           maxLength={50}
           autoCorrect={false}
         />
 
         {/* ── Descripción ── */}
-        <Text style={styles.fieldLabel}>Descripción</Text>
+        <Text style={styles.fieldLabel}>{ts('Descripción')}</Text>
         <TextInput
           style={[styles.input, styles.inputMultiline]}
           value={bio}
           onChangeText={setBio}
-          placeholder="Cuéntanos algo sobre ti o sobre lo que escribes…"
+          placeholder={ts('Cuéntanos algo sobre ti o sobre lo que escribes…')}
           placeholderTextColor={Colors.textMuted}
           multiline
           numberOfLines={4}
@@ -280,7 +280,7 @@ export default function SettingsScreen() {
 
         {/* ── Cuenta ── */}
         <View style={styles.divider} />
-        <Text style={styles.sectionLabel}>Cuenta</Text>
+        <Text style={styles.sectionLabel}>{ts('Cuenta')}</Text>
 
         {user?.email ? (
           <View style={styles.emailRow}>
@@ -292,9 +292,9 @@ export default function SettingsScreen() {
         {/* Toggle visibilidad del email */}
         <View style={styles.toggleRow}>
           <View style={styles.toggleInfo}>
-            <Text style={styles.toggleTitle}>Mostrar email en perfil público</Text>
+            <Text style={styles.toggleTitle}>{ts('Mostrar email en perfil público')}</Text>
             <Text style={styles.toggleDesc}>
-              {emailPublic ? 'Tu email es visible para otros usuarios.' : 'Tu email está oculto (privado).'}
+              {emailPublic ? ts('Tu email es visible para otros usuarios.') : ts('Tu email está oculto (privado).')}
             </Text>
           </View>
           <Switch
@@ -307,8 +307,8 @@ export default function SettingsScreen() {
 
         {/* Tema de lectura de las novelas en formato Webnovel */}
         <View style={styles.themeBlock}>
-          <Text style={styles.toggleTitle}>Lectura Webnovel · Tema</Text>
-          <Text style={styles.toggleDesc}>Colores con los que lees las novelas de scroll continuo.</Text>
+          <Text style={styles.toggleTitle}>{ts('Lectura Webnovel · Tema')}</Text>
+          <Text style={styles.toggleDesc}>{ts('Colores con los que lees las novelas de scroll continuo.')}</Text>
           <View style={styles.themeRow}>
             {WEBNOVEL_THEME_ORDER.map(t => {
               const th = WEBNOVEL_THEMES[t];
@@ -335,7 +335,7 @@ export default function SettingsScreen() {
         {/* ── Cerrar sesión (en escritorio está en el menú del perfil) ── */}
         {!isDesktop && <TouchableOpacity style={styles.signOutBtn} activeOpacity={0.8} onPress={handleSignOut}>
           <MaterialIcons name="logout" size={18} color="#FF6B6B" />
-          <Text style={styles.signOutText}>Cerrar sesión</Text>
+          <Text style={styles.signOutText}>{ts('Cerrar sesión')}</Text>
         </TouchableOpacity>}
 
         {/* ── Usuarios bloqueados ── */}
@@ -345,7 +345,7 @@ export default function SettingsScreen() {
           onPress={() => router.push('/profile/lists?tab=blocked' as Href)}
         >
           <MaterialIcons name="block" size={18} color={Colors.textSecondary} />
-          <Text style={styles.blockedText}>Usuarios bloqueados</Text>
+          <Text style={styles.blockedText}>{ts('Usuarios bloqueados')}</Text>
           <MaterialIcons name="chevron-right" size={20} color={Colors.textMuted} />
         </TouchableOpacity>
 
@@ -360,16 +360,16 @@ export default function SettingsScreen() {
         {/* ── Textos legales ── */}
         <View style={styles.legalRow}>
           <TouchableOpacity onPress={() => router.push('/auth/legal?doc=terms' as Href)} hitSlop={8}>
-            <Text style={styles.legalLink}>Términos de uso</Text>
+            <Text style={styles.legalLink}>{ts('Términos de uso')}</Text>
           </TouchableOpacity>
           <Text style={styles.legalSep}>·</Text>
           <TouchableOpacity onPress={() => router.push('/auth/legal?doc=privacy' as Href)} hitSlop={8}>
-            <Text style={styles.legalLink}>Política de privacidad</Text>
+            <Text style={styles.legalLink}>{ts('Política de privacidad')}</Text>
           </TouchableOpacity>
         </View>
         <View style={[styles.legalRow, { marginTop: 10 }]}>
           <TouchableOpacity onPress={() => router.push('/auth/legal?doc=uploads' as Href)} hitSlop={8}>
-            <Text style={styles.legalLink}>Imágenes, música y derechos de autor</Text>
+            <Text style={styles.legalLink}>{ts('Imágenes, música y derechos de autor')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -379,7 +379,7 @@ export default function SettingsScreen() {
           activeOpacity={0.8}
           onPress={() => { setDeletePassword(''); setDeleteError(''); setDeleteOpen(true); }}
         >
-          <Text style={styles.deleteAccountText}>Eliminar mi cuenta</Text>
+          <Text style={styles.deleteAccountText}>{ts('Eliminar mi cuenta')}</Text>
         </TouchableOpacity>
 
         <Modal
@@ -391,18 +391,16 @@ export default function SettingsScreen() {
         >
           <View style={styles.deleteOverlay}>
             <View style={styles.deleteBox}>
-              <Text style={styles.deleteTitle}>Eliminar cuenta</Text>
+              <Text style={styles.deleteTitle}>{ts('Eliminar cuenta')}</Text>
               <Text style={styles.deleteText}>
-                Se borrarán para siempre tu perfil, tus historias con todos sus capítulos, tu biblioteca,
-                tus me gusta y tus notificaciones. Los lectores de tus historias recibirán un aviso.
-                No se puede deshacer.
+                {ts('Se borrarán para siempre tu perfil, tus historias con todos sus capítulos, tu biblioteca, tus me gusta y tus notificaciones. Los lectores de tus historias recibirán un aviso. No se puede deshacer.')}
               </Text>
-              <Text style={styles.deleteText}>Escribe tu contraseña para confirmar:</Text>
+              <Text style={styles.deleteText}>{ts('Escribe tu contraseña para confirmar:')}</Text>
               <PasswordInput
                 style={styles.deleteInput}
                 value={deletePassword}
                 onChangeText={setDeletePassword}
-                placeholder="Contraseña"
+                placeholder={ts('Contraseña')}
                 placeholderTextColor={Colors.textMuted}
                 autoCapitalize="none"
                 editable={!deleting}
@@ -410,7 +408,7 @@ export default function SettingsScreen() {
               {deleteError ? <Text style={styles.deleteErrorText}>{deleteError}</Text> : null}
               <View style={styles.deleteActions}>
                 <TouchableOpacity style={styles.deleteCancel} onPress={() => setDeleteOpen(false)} disabled={deleting}>
-                  <Text style={styles.deleteCancelText}>Cancelar</Text>
+                  <Text style={styles.deleteCancelText}>{ts('Cancelar')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.deleteConfirm, (!deletePassword || deleting) && { opacity: 0.4 }]}
@@ -419,7 +417,7 @@ export default function SettingsScreen() {
                 >
                   {deleting
                     ? <ActivityIndicator size="small" color="#fff" />
-                    : <Text style={styles.deleteConfirmText}>Eliminar</Text>}
+                    : <Text style={styles.deleteConfirmText}>{ts('Eliminar')}</Text>}
                 </TouchableOpacity>
               </View>
             </View>

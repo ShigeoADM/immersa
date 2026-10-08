@@ -15,6 +15,7 @@ import { getFollowerCount, isFollowing, setFollow } from '@/services/social';
 import { useAuth } from '@/context/AuthContext';
 import { AppAlert } from '@/components/app-dialog';
 import { blockUser, isSuspended, setSuspended, unblockUser } from '@/services/moderation';
+import { ts, useT, statusLabel } from '@/i18n';
 
 interface StoryCard {
   id: string;
@@ -32,6 +33,7 @@ const STATUS_LABELS: Record<string, string> = {
 // Perfil público de un usuario: lo que ven los demás (nombre, avatar, bio, rol)
 // y sus historias publicadas.
 export default function PublicProfileScreen() {
+  useT();
   const router = useRouter();
   const { uid } = useLocalSearchParams<{ uid: string }>();
 
@@ -58,18 +60,18 @@ export default function PublicProfileScreen() {
   const toggleBlock = () => {
     if (!user || !uid || isMe) return;
     if (isBlocked) {
-      unblockUser(user.uid, uid).catch(e => AppAlert.alert('Error', e?.message ?? 'No se pudo desbloquear.'));
+      unblockUser(user.uid, uid).catch(e => AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo desbloquear.')));
       return;
     }
     AppAlert.alert(
-      'Bloquear usuario',
-      `Dejarás de ver las historias y los comentarios de ${profile?.displayName ?? 'este usuario'}. No se le avisa, y puedes desbloquearlo cuando quieras.`,
+      ts('Bloquear usuario'),
+      ts('Dejarás de ver las historias y los comentarios de {name}. No se le avisa, y puedes desbloquearlo cuando quieras.', { name: profile?.displayName ?? ts('este usuario') }),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: ts('Cancelar'), style: 'cancel' },
         {
-          text: 'Bloquear', style: 'destructive',
-          onPress: () => blockUser(user.uid, { uid, name: profile?.displayName ?? 'Usuario' })
-            .catch(e => AppAlert.alert('Error', e?.message ?? 'No se pudo bloquear.')),
+          text: ts('Bloquear'), style: 'destructive',
+          onPress: () => blockUser(user.uid, { uid, name: profile?.displayName ?? ts('Usuario') })
+            .catch(e => AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo bloquear.'))),
         },
       ],
     );
@@ -87,19 +89,19 @@ export default function PublicProfileScreen() {
     if (!uid || !canModerate) return;
     const next = !targetSuspended;
     AppAlert.alert(
-      next ? 'Suspender cuenta' : 'Quitar suspensión',
+      next ? ts('Suspender cuenta') : ts('Quitar suspensión'),
       next
-        ? 'Esta persona podrá seguir leyendo, pero no publicar ni editar historias, ni comentar. Se le avisará.'
-        : 'Esta persona podrá volver a publicar y comentar. Se le avisará.',
+        ? ts('Esta persona podrá seguir leyendo, pero no publicar ni editar historias, ni comentar. Se le avisará.')
+        : ts('Esta persona podrá volver a publicar y comentar. Se le avisará.'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: ts('Cancelar'), style: 'cancel' },
         {
-          text: next ? 'Suspender' : 'Quitar suspensión', style: next ? 'destructive' : 'default',
+          text: next ? ts('Suspender') : ts('Quitar suspensión'), style: next ? 'destructive' : 'default',
           onPress: async () => {
             try {
               await setSuspended(uid, next);
               setTargetSuspended(next);
-            } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo cambiar la suspensión.'); }
+            } catch (e: any) { AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo cambiar la suspensión.')); }
           },
         },
       ],
@@ -113,11 +115,11 @@ export default function PublicProfileScreen() {
     setFollowing(next);
     setFollowers(n => Math.max(0, n + (next ? 1 : -1)));
     try {
-      await setFollow({ uid: user.uid, name: publicName || 'Alguien' }, uid, next);
+      await setFollow({ uid: user.uid, name: publicName || ts('Alguien') }, uid, next);
     } catch (e: any) {
       setFollowing(!next);
       setFollowers(n => Math.max(0, n + (next ? -1 : 1)));
-      AppAlert.alert('Error', e?.message ?? 'No se pudo actualizar el seguimiento.');
+      AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo actualizar el seguimiento.'));
     } finally {
       setFollowBusy(false);
     }
@@ -148,7 +150,7 @@ export default function PublicProfileScreen() {
     return () => { cancelled = true; };
   }, [uid]);
 
-  const name = profile?.displayName ?? 'Usuario';
+  const name = profile?.displayName ?? ts('Usuario');
   const initial = name.trim().charAt(0).toUpperCase() || '?';
 
   return (
@@ -179,11 +181,11 @@ export default function PublicProfileScreen() {
               <View style={styles.statRow}>
                 <View style={styles.stat}>
                   <Text style={styles.statNum}>{stories.length}</Text>
-                  <Text style={styles.statLabel}>{stories.length === 1 ? 'Historia' : 'Historias'}</Text>
+                  <Text style={styles.statLabel}>{stories.length === 1 ? ts('Historia') : ts('Historias')}</Text>
                 </View>
                 <View style={styles.stat}>
                   <Text style={styles.statNum}>{followers}</Text>
-                  <Text style={styles.statLabel}>{followers === 1 ? 'Seguidor' : 'Seguidores'}</Text>
+                  <Text style={styles.statLabel}>{followers === 1 ? ts('Seguidor') : ts('Seguidores')}</Text>
                 </View>
               </View>
               {user && !isMe && (
@@ -199,7 +201,7 @@ export default function PublicProfileScreen() {
                     color={following ? Colors.emerald : '#000'}
                   />
                   <Text style={[styles.followBtnText, following && { color: Colors.emerald }]}>
-                    {following ? 'Siguiendo' : 'Seguir'}
+                    {following ? ts('Siguiendo') : ts('Seguir')}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -207,19 +209,19 @@ export default function PublicProfileScreen() {
               {user && !isMe && (
                 <View style={styles.modRow}>
                   <TouchableOpacity onPress={toggleBlock} hitSlop={8} activeOpacity={0.7}>
-                    <Text style={styles.modLink}>{isBlocked ? 'Desbloquear' : 'Bloquear'}</Text>
+                    <Text style={styles.modLink}>{isBlocked ? ts('Desbloquear') : ts('Bloquear')}</Text>
                   </TouchableOpacity>
                   {canModerate && (
                     <TouchableOpacity onPress={toggleSuspended} hitSlop={8} activeOpacity={0.7}>
                       <Text style={[styles.modLink, { color: '#FF6B6B' }]}>
-                        {targetSuspended ? 'Quitar suspensión' : 'Suspender cuenta'}
+                        {targetSuspended ? ts('Quitar suspensión') : ts('Suspender cuenta')}
                       </Text>
                     </TouchableOpacity>
                   )}
                 </View>
               )}
               {targetSuspended && canModerate && (
-                <Text style={styles.suspendedNote}>Cuenta suspendida</Text>
+                <Text style={styles.suspendedNote}>{ts('Cuenta suspendida')}</Text>
               )}
             </>
           )}
@@ -227,9 +229,9 @@ export default function PublicProfileScreen() {
 
         {!loading && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Historias publicadas</Text>
+            <Text style={styles.sectionTitle}>{ts('Historias publicadas')}</Text>
             {stories.length === 0 ? (
-              <Text style={styles.empty}>Todavía no ha publicado ninguna historia.</Text>
+              <Text style={styles.empty}>{ts('Todavía no ha publicado ninguna historia.')}</Text>
             ) : (
               <View style={styles.grid}>
                 {stories.map(s => {
@@ -250,7 +252,7 @@ export default function PublicProfileScreen() {
                         }
                       </View>
                       <Text style={styles.cardTitle} numberOfLines={2}>{s.title}</Text>
-                      <Text style={styles.cardStatus}>{STATUS_LABELS[s.status] ?? 'En curso'}</Text>
+                      <Text style={styles.cardStatus}>{statusLabel(s.status)}</Text>
                     </TouchableOpacity>
                   );
                 })}
