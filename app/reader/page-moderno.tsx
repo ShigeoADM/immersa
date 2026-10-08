@@ -19,6 +19,7 @@ import {
   KeyboardAvoidingView,
   AppState,
   useWindowDimensions,
+  PanResponder,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -1872,8 +1873,10 @@ export default function PageModernoReaderScreen() {
     // La animación es la de la página que se DEJA (la actual): la que tenga elegida o, si
     // no define ninguna, la que herede de la página de la que se vino (y las anteriores
     // del camino). inheritChain empieza por la página actual.
-    const transition: PageTransition =
-      inheritChain.find(p => p.transition !== undefined)?.transition ?? DEFAULT_PAGE_TRANSITION;
+    // Solo al avanzar: volviendo atrás (record = false) se usa siempre el fundido sencillo.
+    const transition: PageTransition = !record
+      ? DEFAULT_PAGE_TRANSITION
+      : inheritChain.find(p => p.transition !== undefined)?.transition ?? DEFAULT_PAGE_TRANSITION;
 
     if (transition === 'none') {
       showNewPage();
@@ -1953,6 +1956,20 @@ export default function PageModernoReaderScreen() {
     if (typewriterRef.current?.scrollBy(1)) return;
     if (!paraComplete || paraIndex < paragraphs.length - 1) goNext();
   };
+  // Con el dedo: arrastrar el texto hacia abajo enseña lo de arriba, y hacia arriba vuelve a
+  // bajar. Va por párrafos, igual que la rueda del ratón. Un toque sin arrastrar sigue
+  // avanzando, como siempre.
+  const dragStepsRef = useRef(0);
+  const textDrag = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 10 && Math.abs(g.dy) > Math.abs(g.dx),
+    onPanResponderGrant: () => { dragStepsRef.current = 0; },
+    onPanResponderMove: (_, g) => {
+      const steps = Math.trunc(g.dy / 34); // un párrafo cada 34 px de arrastre
+      while (dragStepsRef.current < steps) { dragStepsRef.current++; typewriterRef.current?.scrollBy(-1); }
+      while (dragStepsRef.current > steps) { dragStepsRef.current--; typewriterRef.current?.scrollBy(1); }
+    },
+  }), []);
+
   const keyActionsRef = useRef({ next: goNext, prev: goPrev, up: textUp, down: textDown, blocked: false });
   keyActionsRef.current = {
     next: goNext, prev: goPrev, up: textUp, down: textDown,
@@ -2012,8 +2029,13 @@ export default function PageModernoReaderScreen() {
     doc.addEventListener('fullscreenchange', sync);
     return () => {
       doc.removeEventListener('fullscreenchange', sync);
-      // Al salir del lector se sale también de la pantalla completa
-      if (doc.fullscreenElement) doc.exitFullscreen?.().catch?.(() => {});
+      // Al salir del lector se sale también de la pantalla completa. Pero no al pasar de
+      // un capítulo a otro (se cierra un lector y se abre el siguiente): se espera un
+      // momento y solo se sale si ya no queda ningún lector abierto. Si no, en el móvil se
+      // perdía el giro en horizontal y volvía a pedirlo.
+      setTimeout(() => {
+        if (mountedReaders === 0 && doc.fullscreenElement) doc.exitFullscreen?.().catch?.(() => {});
+      }, 400);
     };
   }, []);
   const toggleFullscreen = () => {
@@ -2302,7 +2324,9 @@ export default function PageModernoReaderScreen() {
 
         {/* ── Bloque de texto — posición y tamaño definidos por el autor ── */}
         <View
-          style={[styles.textBox, {
+          {...textDrag.panHandlers}
+          // (web: que el navegador no se quede el gesto para desplazar la página)
+          style={[styles.textBox, Platform.OS === 'web' ? ({ touchAction: 'none' } as any) : null, {
             position: 'absolute', ...tbPixels,
             borderRadius: TEXT_BOX.radius * stageScale,
             paddingHorizontal: TEXT_BOX.paddingHorizontal * stageScale,
