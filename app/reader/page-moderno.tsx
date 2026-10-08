@@ -48,7 +48,7 @@ import type { Role } from '@/constants/permissions';
 import {
   REF_SCREEN, FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, pageSfxCues, splitParagraphs, type SfxCue,
   DEFAULT_PAGE_TRANSITION, type PageTransition,
-  pageExtraBoxes, EXTRA_BOX_STYLE, EXTRA_BOX_SLIDES, EXTRA_BOX_WIPES, type ExtraBox, MUSIC_FADE_MS, musicPlaybackVolume, sfxPlaybackVolume,
+  STORY_FONT, pageExtraBoxes, EXTRA_BOX_STYLE, EXTRA_BOX_SLIDES, EXTRA_BOX_WIPES, type ExtraBox, MUSIC_FADE_MS, musicPlaybackVolume, sfxPlaybackVolume,
   charLabelPos, charLabelSideStyle,
   type TextSize,
 } from '@/constants/reader-layout';
@@ -277,7 +277,7 @@ function SparkleOverlay({ x, y, color, onDone }: {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-const RETRO_FONT = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
+const RETRO_FONT = STORY_FONT;
 const END_CHAPTER_SEGMENTS: OutlineSegment[] = [{ text: '— FIN DEL CAPÍTULO —' }];
 
 // Lectores montados: al cambiar de capítulo se monta uno nuevo antes de desmontar el anterior

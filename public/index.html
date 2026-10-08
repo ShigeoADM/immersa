@@ -24,6 +24,30 @@
     <meta name="twitter:image" content="https://immersa.web.app/og-image.png" />
 
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <!-- Tipografía de Immersa: Inconsolata (licencia libre, ver /fonts/OFL.txt), ajustada de ancho.
+         Va en la propia web para que el texto ocupe exactamente lo mismo en todos los
+         dispositivos: lo que el autor ajusta en la vista previa es lo que ve cada lector. -->
+    <link rel="preload" href="/fonts/ImmersaMono-Bold.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/ImmersaMono-Regular.woff2" as="font" type="font/woff2" crossorigin />
+    <style id="immersa-font">
+      @font-face {
+        font-family: "Immersa Mono"; font-weight: 400; font-style: normal; font-display: block;
+        src: url("/fonts/ImmersaMono-Regular.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "Immersa Mono"; font-weight: 700; font-style: normal; font-display: block;
+        src: url("/fonts/ImmersaMono-Bold.woff2") format("woff2");
+      }
+      /* Toda la web usa esta tipografía, salvo lo que pide otra expresamente (el texto de
+         las Webnovels, los iconos, el tutorial): eso lleva una clase r-fontFamily propia. */
+      body,
+      [class*="css-text"]:not([class*="r-fontFamily"]),
+      input:not([class*="r-fontFamily"]),
+      textarea:not([class*="r-fontFamily"]) {
+        font-family: "Immersa Mono", Consolas, "Courier New", monospace;
+      }
+    </style>
+
     <style id="expo-reset">
       /* These styles make the body full-height */
       html,

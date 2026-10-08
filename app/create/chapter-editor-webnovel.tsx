@@ -399,6 +399,7 @@ const styles = StyleSheet.create({
   previewBtnActive: { backgroundColor: Colors.formatColors.Webnovel, borderColor: Colors.formatColors.Webnovel },
   previewBtnText:   { fontSize: 12, fontWeight: '600', color: Colors.textSecondary },
   contentInput: {
+    fontFamily: WEBNOVEL_FONT,
     flex: 1, paddingHorizontal: 20, paddingVertical: 14,
     fontSize: 16, lineHeight: 25, color: Colors.textPrimary,
   },

@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 // Medidas del lector "moderno" compartidas con el editor de páginas.
 // El editor escala estos valores para que su preview sea fiel a lo que se ve al leer.
 
@@ -127,6 +128,13 @@ export const PAGE_TRANSITIONS: { value: PageTransition; label: string; icon: str
 export const MUSIC_FADE_MS = 1000;
 
 // Cuadro de texto del lector
+// Tipografía del texto de las novelas Moderno (lector y vista previa del editor).
+// En la web es la de Immersa, que viaja con la página: igual en todos los dispositivos.
+// En la app todavía es la monoespaciada del sistema.
+export const STORY_FONT = Platform.OS === 'web'
+  ? '"Immersa Mono", Consolas, "Courier New", monospace'
+  : Platform.OS === 'ios' ? 'Courier New' : 'monospace';
+
 export const TEXT_BOX = {
   radius: 14,
   paddingHorizontal: 28,

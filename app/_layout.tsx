@@ -18,6 +18,7 @@ import { WelcomeSplash } from '@/components/welcome-splash';
 import { DevSiteOverlay } from '@/components/dev-site';
 import { TutorialOverlay } from '@/components/tutorial';
 import { IS_DEV_SITE } from '@/constants/site';
+import { STORY_FONT } from '@/constants/reader-layout';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 
 const ImmersaTheme = {
@@ -31,6 +32,15 @@ const ImmersaTheme = {
     primary: '#00C878',
     notification: '#00C878',
   },
+  // Web: los rótulos de la navegación (pestañas, cabeceras) usan también la tipografía de Immersa
+  ...(Platform.OS === 'web' ? {
+    fonts: {
+      regular: { fontFamily: STORY_FONT, fontWeight: '400' as const },
+      medium:  { fontFamily: STORY_FONT, fontWeight: '400' as const },
+      bold:    { fontFamily: STORY_FONT, fontWeight: '700' as const },
+      heavy:   { fontFamily: STORY_FONT, fontWeight: '700' as const },
+    },
+  } : {}),
 };
 
 // Web: barras de desplazamiento finas y oscuras, a juego con la app, en vez de las

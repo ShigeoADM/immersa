@@ -32,7 +32,7 @@ import Animated, { useSharedValue, useAnimatedStyle, runOnJS, type SharedValue }
 // correctamente junto con los GestureDetectors del preview.
 // Para los TextInput de nombre usamos refs + .focus() programático que bypasea el sistema de gestos.
 import { GestureDetector, Gesture, TouchableOpacity } from 'react-native-gesture-handler';
-import {
+import { STORY_FONT,
   REF_SCREEN, FONT_SIZES, TEXT_BOX, CHAR_LABEL, BG_BLUR_DEFAULT, BG_BLUR_MAX, BG_BLUR_PRESETS,
   MUSIC_VOLUME_MIN, MUSIC_VOLUME_MAX, MUSIC_VOLUME_STEP, SFX_VOLUME_MAX,
   musicPlaybackVolume, sfxPlaybackVolume, pageSfxCues, splitParagraphs,
@@ -215,7 +215,7 @@ function PreviewExtraBox({ box, pvWidth, pvHeight, pvScale, fontSize, onChange }
           style={{
             color: '#fff', fontWeight: '700', fontSize, lineHeight: fontSize * 1.5,
             letterSpacing: TEXT_BOX.letterSpacing * pvScale,
-            fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+            fontFamily: STORY_FONT,
           }}
         >
           {box.text || 'Texto…'}
@@ -3003,7 +3003,7 @@ const styles = StyleSheet.create({
   tbSW: { bottom: -5.5, left: -5.5   },
 
   previewInput: {
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    fontFamily: STORY_FONT,
     color: '#FFFFFF', fontWeight: '700', letterSpacing: 0.5,
     textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2,
     textAlignVertical: 'top',
@@ -3049,7 +3049,7 @@ const styles = StyleSheet.create({
   textSizeRow:         { flexDirection: 'row', gap: 8 },
   textSizeBtn:         { width: 44, height: 44, borderRadius: 6, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card, alignItems: 'center', justifyContent: 'center' },
   textSizeBtnActive:   { backgroundColor: Colors.emerald, borderColor: Colors.emerald },
-  textSizeBtnLabel:    { fontWeight: '700', color: Colors.textSecondary, fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace' },
+  textSizeBtnLabel:    { fontWeight: '700', color: Colors.textSecondary, fontFamily: STORY_FONT },
   textSizeBtnLabelActive: { color: '#000' },
 
   // Imagen
@@ -3300,7 +3300,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.emerald + '60',
   },
   previewCharLabelText: {
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    fontFamily: STORY_FONT,
     fontWeight: '700',
     color: Colors.emerald,
     flexShrink: 1,
