@@ -20,8 +20,11 @@ import { AppAlert } from '@/components/app-dialog';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { PasswordInput } from '@/components/password-input';
 import { IS_DEV_SITE } from '@/constants/site';
+import { useT } from '@/i18n';
+import { LanguagePicker } from '@/components/language-picker';
 
 export default function LoginScreen() {
+  const t = useT();
   const isDesktop = useIsDesktop();
   const router = useRouter();
   const [email, setEmail]       = useState('');
@@ -40,7 +43,7 @@ export default function LoginScreen() {
       await signInWithEmailAndPassword(auth, email.trim(), password);
       router.replace('/(tabs)');
     } catch (e: any) {
-      setError('Correo o contraseña incorrectos.');
+      setError(t('login.wrong'));
     } finally {
       setLoading(false);
     }
@@ -50,14 +53,14 @@ export default function LoginScreen() {
   // El mensaje es el mismo exista o no la cuenta, para no revelar qué correos están registrados.
   const handleForgotPassword = async () => {
     if (!email.trim()) {
-      setError('Escribe tu correo y pulsa de nuevo "¿Olvidaste tu contraseña?".');
+      setError(t('login.typeEmail'));
       return;
     }
     setError('');
     try { await sendPasswordResetEmail(auth, email.trim()); } catch { /* mismo mensaje */ }
     AppAlert.alert(
-      'Revisa tu correo',
-      'Si hay una cuenta con ese correo, te hemos enviado un enlace para crear una contraseña nueva. Mira también en la carpeta de spam.',
+      t('login.resetTitle'),
+      t('login.resetBody'),
     );
   };
 
@@ -75,26 +78,26 @@ export default function LoginScreen() {
               <Image source={require('@/assets/images/logo-mark.png')} style={styles.logoMark} resizeMode="contain" />
             )}
             <Text style={styles.logoText}>immersa</Text>
-            <Text style={styles.tagline}>Bienvenido de nuevo</Text>
+            <Text style={styles.tagline}>{t('login.tagline')}</Text>
           </View>
 
           {/* Formulario */}
           <View style={styles.form}>
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-            <Text style={styles.label}>Correo electrónico</Text>
+            <Text style={styles.label}>{t('login.email')}</Text>
             <TextInput
               style={styles.input}
               value={email}
               onChangeText={setEmail}
-              placeholder="tu@correo.com"
+              placeholder={t('login.emailPlaceholder')}
               placeholderTextColor={Colors.textMuted}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
             />
 
-            <Text style={styles.label}>Contraseña</Text>
+            <Text style={styles.label}>{t('login.password')}</Text>
             <PasswordInput
               style={styles.input}
               value={password}
@@ -103,7 +106,7 @@ export default function LoginScreen() {
               placeholderTextColor={Colors.textMuted}
             />
             <TouchableOpacity onPress={handleForgotPassword} style={{ alignSelf: 'flex-end' }} hitSlop={8}>
-              <Text style={styles.footerLink}>¿Olvidaste tu contraseña?</Text>
+              <Text style={styles.footerLink}>{t('login.forgot')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -114,24 +117,26 @@ export default function LoginScreen() {
             >
               {loading
                 ? <ActivityIndicator color="#000" size="small" />
-                : <Text style={styles.btnText}>Iniciar sesión</Text>
+                : <Text style={styles.btnText}>{t('common.login')}</Text>
               }
             </TouchableOpacity>
           </View>
 
           {/* Pie */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>¿No tienes cuenta? </Text>
+            <Text style={styles.footerText}>{t('login.noAccount')}</Text>
             <TouchableOpacity onPress={() => router.push('/auth/register')}>
-              <Text style={styles.footerLink}>Regístrate</Text>
+              <Text style={styles.footerLink}>{t('login.signUp')}</Text>
             </TouchableOpacity>
           </View>
           {/* Web: también se puede explorar y leer sin cuenta */}
           {Platform.OS === 'web' && !IS_DEV_SITE && (
             <TouchableOpacity style={{ alignSelf: 'center', paddingVertical: 6 }} onPress={() => router.replace('/(tabs)')}>
-              <Text style={[styles.footerText, { textDecorationLine: 'underline' }]}>Explorar sin cuenta</Text>
+              <Text style={[styles.footerText, { textDecorationLine: 'underline' }]}>{t('login.guest')}</Text>
             </TouchableOpacity>
           )}
+          {/* Idioma de la web */}
+          <View style={{ marginTop: 22 }}><LanguagePicker compact /></View>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>

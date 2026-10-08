@@ -21,6 +21,7 @@ import { useNotifications } from '@/context/NotificationsContext';
 import { useAuth } from '@/context/AuthContext';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { tutorialTitle, tutorialZone } from '@/components/tutorial';
+import { statusLabel, useT } from '@/i18n';
 
 interface StoryCard {
   id: string;
@@ -68,6 +69,7 @@ const HSINGLE_W_CAPPED = Math.min(HSINGLE_W, 200);
 
 // ── Tarjeta VERTICAL (portrait) ───────────────────────────────────────────────
 function VerticalCard({ story, onPress }: { story: StoryCard; onPress: () => void }) {
+  useT();
   const fmtColor = Colors.formatColors[story.format as keyof typeof Colors.formatColors] ?? Colors.emerald;
   return (
     <TouchableOpacity style={styles.vCard} activeOpacity={0.8} onPress={onPress}>
@@ -86,7 +88,7 @@ function VerticalCard({ story, onPress }: { story: StoryCard; onPress: () => voi
         {/* Una línea: con dos no cabía y se cortaba sin puntos suspensivos */}
         <Text style={styles.vCardTitle} numberOfLines={1}>{story.title}</Text>
         <Text style={styles.vCardStatus} numberOfLines={1}>
-          {STATUS_LABELS[story.status] ?? story.status ?? 'En curso'}
+          {statusLabel(story.status)}
         </Text>
       </View>
     </TouchableOpacity>
@@ -99,6 +101,7 @@ function HorizontalCard({ story, onPress, single }: {
   onPress: () => void;
   single?: boolean;
 }) {
+  useT();
   const fmtColor = Colors.formatColors[story.format as keyof typeof Colors.formatColors] ?? Colors.emerald;
   const cardStyle = single ? styles.hCardSingle : styles.hCard;
   return (
@@ -138,6 +141,7 @@ function StoryRow({ stories, loading, onPress }: {
   loading: boolean;
   onPress: (s: StoryCard) => void;
 }) {
+  const t = useT();
   const isDesktop = useIsDesktop();
   if (loading) {
     return <View style={styles.rowLoader}><ActivityIndicator color={Colors.emerald} /></View>;
@@ -146,7 +150,7 @@ function StoryRow({ stories, loading, onPress }: {
     return (
       // En escritorio va a la izquierda, bajo el título de su sección
       <View style={[styles.rowEmpty, isDesktop && { alignItems: 'flex-start' }]}>
-        <Text style={styles.rowEmptyText}>Nada por aquí todavía…</Text>
+        <Text style={styles.rowEmptyText}>{t('home.empty')}</Text>
       </View>
     );
   }
@@ -194,6 +198,7 @@ function StoryRow({ stories, loading, onPress }: {
 
 // ── Pantalla principal ────────────────────────────────────────────────────────
 export default function DiscoverScreen() {
+  const t = useT();
   const isDesktop = useIsDesktop();
   const router = useRouter();
 
@@ -284,28 +289,28 @@ export default function DiscoverScreen() {
 
         {popular.length > 0 && (
           <View style={styles.section} nativeID={tutorialZone('popular')}>
-            <SectionHeader zone="popular" title="Más populares" color="#FF69B4" />
+            <SectionHeader zone="popular" title={t('home.popular')} color="#FF69B4" />
             <StoryRow stories={popular} loading={false} onPress={handleStoryPress} />
           </View>
         )}
 
         <View style={styles.section} nativeID={tutorialZone('moderno')}>
-          <SectionHeader zone="moderno" title="Novelas Modernas" color={Colors.formatColors.Moderno} />
+          <SectionHeader zone="moderno" title={t('home.moderno')} color={Colors.formatColors.Moderno} />
           <StoryRow stories={modernoAll} loading={loadingFeed} onPress={handleStoryPress} />
         </View>
 
         <View style={styles.section} nativeID={tutorialZone('webnovel')}>
-          <SectionHeader zone="webnovel" title="Webnovels" color={Colors.formatColors.Webnovel} />
+          <SectionHeader zone="webnovel" title={t('home.webnovel')} color={Colors.formatColors.Webnovel} />
           <StoryRow stories={webnovelAll} loading={loadingFeed} onPress={handleStoryPress} />
         </View>
 
         <View style={styles.section} nativeID={tutorialZone('modernoNew')}>
-          <SectionHeader zone="modernoNew" title="Nuevas Novelas Modernas" color={Colors.formatColors.Moderno} />
+          <SectionHeader zone="modernoNew" title={t('home.modernoNew')} color={Colors.formatColors.Moderno} />
           <StoryRow stories={modernoNew} loading={loadingFeed} onPress={handleStoryPress} />
         </View>
 
         <View style={[styles.section, { marginBottom: 32 }]} nativeID={tutorialZone('webnovelNew')}>
-          <SectionHeader zone="webnovelNew" title="Nuevos Webnovels" color={Colors.formatColors.Webnovel} />
+          <SectionHeader zone="webnovelNew" title={t('home.webnovelNew')} color={Colors.formatColors.Webnovel} />
           <StoryRow stories={webnovelNew} loading={loadingFeed} onPress={handleStoryPress} />
         </View>
 

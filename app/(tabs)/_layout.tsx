@@ -7,6 +7,7 @@ import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
+import { useT } from '@/i18n';
 
 // Escritorio: Descubrir ocupa todo el ancho; el resto de secciones van en una columna centrada.
 // La columna se consigue con márgenes interiores y no estrechando la pantalla: la
@@ -17,6 +18,7 @@ const WEB_COLUMN = {
 } as any;
 
 export default function TabLayout() {
+  const t = useT();
   const insets = useSafeAreaInsets();
   const isDesktop = useIsDesktop();
 
@@ -48,7 +50,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Descubrir',
+          title: t('tabs.discover'),
           tabBarIcon: ({ color }) => <IconSymbol size={24} name="house.fill" color={color} />,
         }}
       />
@@ -56,7 +58,7 @@ export default function TabLayout() {
         name="explore"
         options={{
           sceneStyle: isDesktop ? WEB_COLUMN : undefined,
-          title: 'Biblioteca',
+          title: t('tabs.library'),
           tabBarIcon: ({ color }) => <IconSymbol size={24} name="book.fill" color={color} />,
         }}
       />
@@ -64,7 +66,7 @@ export default function TabLayout() {
         name="write"
         options={{
           sceneStyle: isDesktop ? WEB_COLUMN : undefined,
-          title: 'Escribir',
+          title: t('tabs.write'),
           tabBarButtonTestID: 'tut-write', // el tutorial señala este botón (components/tutorial.tsx)
           tabBarIcon: ({ color }) => <IconSymbol size={24} name="pencil" color={color} />,
         }}
@@ -73,7 +75,7 @@ export default function TabLayout() {
         name="profile"
         options={{
           sceneStyle: isDesktop ? WEB_COLUMN : undefined,
-          title: 'Perfil',
+          title: t('tabs.profile'),
           tabBarIcon: ({ color }) => <IconSymbol size={24} name="person.fill" color={color} />,
         }}
       />

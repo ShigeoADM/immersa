@@ -9,6 +9,7 @@ import { tutorialZone } from '@/components/tutorial';
 import { useNotifications } from '@/context/NotificationsContext';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/config/firebase';
+import { LANGUAGES, setLang, useLang, useT } from '@/i18n';
 
 // Barra superior de la versión web. Sustituye a las pestañas de abajo de la app:
 // en una página web la navegación va arriba. A la derecha: buscar, escribir y la foto
@@ -20,27 +21,30 @@ export function WebTopBar() {
   const { user, publicName, publicAvatar, can } = useAuth();
   const { unreadCount } = useNotifications();
   const [menuOpen, setMenuOpen] = useState(false);
+  const t = useT();
+  const lang = useLang();
+  const [langOpen, setLangOpen] = useState(false);
 
   // `t` cambia en cada pulsación para que Escribir reaccione aunque ya esté abierto
   const openWrite = (tab: 'new' | 'books') =>
     router.navigate({ pathname: '/(tabs)/write', params: { tab, t: String(Date.now()) } } as unknown as Href);
 
   const items: { icon: IconName; label: string; badge?: number; onPress: () => void }[] = [
-    { icon: 'person',        label: 'Mi Perfil',      onPress: () => router.navigate('/(tabs)/profile' as Href) },
-    { icon: 'notifications', label: 'Notificaciones', badge: unreadCount, onPress: () => router.push('/notifications') },
-    { icon: 'menu-book',     label: 'Biblioteca',     onPress: () => router.navigate('/(tabs)/explore' as Href) },
-    { icon: 'edit',          label: 'Escribir',       onPress: () => openWrite('new') },
-    { icon: 'library-books', label: 'Mis Libros',     onPress: () => openWrite('books') },
+    { icon: 'person',        label: t('nav.profile'), onPress: () => router.navigate('/(tabs)/profile' as Href) },
+    { icon: 'notifications', label: t('nav.notifications'), badge: unreadCount, onPress: () => router.push('/notifications') },
+    { icon: 'menu-book',     label: t('nav.library'), onPress: () => router.navigate('/(tabs)/explore' as Href) },
+    { icon: 'edit',          label: t('nav.write'), onPress: () => openWrite('new') },
+    { icon: 'library-books', label: t('nav.myBooks'), onPress: () => openWrite('books') },
     // Solo con el permiso de desarrollo: la pantalla privada donde se prueban las novedades
-    ...(can('developer') ? [{ icon: 'science' as IconName, label: 'Desarrollo', onPress: () => router.push('/dev' as Href) }] : []),
+    ...(can('developer') ? [{ icon: 'science' as IconName, label: t('nav.dev'), onPress: () => router.push('/dev' as Href) }] : []),
   ];
 
   // Las dos cierran la sesión actual y llevan a la pantalla de inicio de sesión: la app
   // guarda una sola sesión, así que cambiar de cuenta es entrar con otra.
   const leave = () => { signOut(auth).catch(e => console.error('Error cerrando sesión:', e)); };
   const sessionItems: { icon: IconName; label: string; danger?: boolean }[] = [
-    { icon: 'switch-account', label: 'Cambiar de cuenta' },
-    { icon: 'logout',         label: 'Cerrar sesión', danger: true },
+    { icon: 'switch-account', label: t('nav.switchAccount') },
+    { icon: 'logout',         label: t('nav.logout'), danger: true },
   ];
 
   return (
@@ -51,6 +55,14 @@ export function WebTopBar() {
         </TouchableOpacity>
 
         <View style={styles.actions}>
+          {/* Idioma de la web */}
+          <TouchableOpacity
+            style={styles.langBtn} activeOpacity={0.8}
+            onPress={() => { setMenuOpen(false); setLangOpen(v => !v); }}
+          >
+            <MaterialIcons name="language" size={18} color="#000" />
+            <Text style={styles.langBtnText}>{LANGUAGES.find(l => l.key === lang)?.short}</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.btn} activeOpacity={0.8} onPress={() => router.push('/search' as Href)}>
             <MaterialIcons name="search" size={24} color={Colors.emerald} />
           </TouchableOpacity>
@@ -59,7 +71,7 @@ export function WebTopBar() {
               <TouchableOpacity style={styles.btn} activeOpacity={0.8} onPress={() => openWrite('books')} testID={tutorialZone('write')}>
                 <MaterialIcons name="edit" size={22} color={Colors.emerald} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.avatarBtn} activeOpacity={0.8} onPress={() => setMenuOpen(v => !v)}>
+              <TouchableOpacity style={styles.avatarBtn} activeOpacity={0.8} onPress={() => { setLangOpen(false); setMenuOpen(v => !v); }}>
                 {publicAvatar
                   ? <Image source={{ uri: publicAvatar }} style={styles.avatar} contentFit="cover" />
                   : <Text style={styles.avatarInitial}>{(publicName || '?').charAt(0).toUpperCase()}</Text>}
@@ -70,15 +82,33 @@ export function WebTopBar() {
             // Invitado: en vez de escribir y el perfil, entrar o crear una cuenta
             <>
               <TouchableOpacity style={styles.guestBtn} activeOpacity={0.8} onPress={() => router.push('/auth/login')}>
-                <Text style={styles.guestBtnText}>Iniciar sesión</Text>
+                <Text style={styles.guestBtnText}>{t('common.login')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.guestBtn, styles.guestBtnAlt]} activeOpacity={0.8} onPress={() => router.push('/auth/register')}>
-                <Text style={[styles.guestBtnText, styles.guestBtnAltText]}>Registrarse</Text>
+                <Text style={[styles.guestBtnText, styles.guestBtnAltText]}>{t('common.register')}</Text>
               </TouchableOpacity>
             </>
           )}
         </View>
       </View>
+
+      {langOpen && (
+        <>
+          <Pressable style={styles.backdrop} onPress={() => setLangOpen(false)} />
+          <View style={[styles.menu, { minWidth: 170 }]}>
+            {LANGUAGES.map(l => (
+              <Pressable
+                key={l.key}
+                style={({ hovered }: any) => [styles.menuItem, hovered && styles.menuItemHover]}
+                onPress={() => { setLangOpen(false); setLang(l.key); }}
+              >
+                <Text style={styles.menuLabel}>{l.label}</Text>
+                {l.key === lang && <MaterialIcons name="check" size={18} color={Colors.emerald} />}
+              </Pressable>
+            ))}
+          </View>
+        </>
+      )}
 
       {menuOpen && (
         <>
@@ -144,6 +174,11 @@ const styles = StyleSheet.create({
     width: BTN, height: BTN, borderRadius: 8, backgroundColor: '#000',
     alignItems: 'center', justifyContent: 'center',
   },
+  langBtn: {
+    height: BTN, paddingHorizontal: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderWidth: 2, borderColor: '#000',
+  },
+  langBtnText: { color: '#000', fontSize: 13, fontWeight: '700' },
   guestBtn: {
     height: BTN, paddingHorizontal: 18, borderRadius: 8, backgroundColor: '#000',
     alignItems: 'center', justifyContent: 'center',

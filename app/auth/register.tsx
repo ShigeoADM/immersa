@@ -23,8 +23,10 @@ import { MIN_AGE, ageOf, buildBirthDate } from '@/constants/age';
 import { BirthDateInput, EMPTY_BIRTH_DATE } from '@/components/birth-date-input';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { PasswordInput } from '@/components/password-input';
+import { useT } from '@/i18n';
 
 export default function RegisterScreen() {
+  const t = useT();
   const isDesktop = useIsDesktop();
   const router = useRouter();
   const [username, setUsername] = useState('');
@@ -42,24 +44,24 @@ export default function RegisterScreen() {
       return;
     }
     if (password !== confirm) {
-      setError('Las contraseñas no coinciden.');
+      setError(t('register.mismatch'));
       return;
     }
     if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres.');
+      setError(t('register.short'));
       return;
     }
     const birthDate = buildBirthDate(birth.day, birth.month, birth.year);
     if (!birthDate) {
-      setError('Introduce una fecha de nacimiento válida.');
+      setError(t('register.birthInvalid'));
       return;
     }
     if (ageOf(birthDate) < MIN_AGE) {
-      setError(`Debes tener al menos ${MIN_AGE} años para crear una cuenta.`);
+      setError(t('register.minAge', { n: MIN_AGE }));
       return;
     }
     if (!accepted) {
-      setError('Tienes que aceptar los términos de uso y la política de privacidad.');
+      setError(t('register.mustAccept'));
       return;
     }
     setError('');
@@ -81,9 +83,9 @@ export default function RegisterScreen() {
       router.replace('/(tabs)');
     } catch (e: any) {
       if (e.code === 'auth/email-already-in-use') {
-        setError('Ese correo ya está registrado.');
+        setError(t('register.emailTaken'));
       } else {
-        setError('Error al crear la cuenta. Inténtalo de nuevo.');
+        setError(t('register.error'));
       }
     } finally {
       setLoading(false);
@@ -109,59 +111,59 @@ export default function RegisterScreen() {
                 <Image source={require('@/assets/images/logo-mark.png')} style={styles.logoMark} resizeMode="contain" />
               )}
               <Text style={styles.logoText}>immersa</Text>
-              <Text style={styles.tagline}>Crea tu cuenta</Text>
+              <Text style={styles.tagline}>{t('register.tagline')}</Text>
             </View>
 
             {/* Formulario */}
             <View style={styles.form}>
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-              <Text style={styles.label}>Nombre de usuario</Text>
+              <Text style={styles.label}>{t('register.username')}</Text>
               <TextInput
                 style={styles.input}
                 value={username}
                 onChangeText={setUsername}
-                placeholder="tu_nombre"
+                placeholder={t('register.usernamePlaceholder')}
                 placeholderTextColor={Colors.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
                 maxLength={30}
               />
 
-              <Text style={styles.label}>Correo electrónico</Text>
+              <Text style={styles.label}>{t('login.email')}</Text>
               <TextInput
                 style={styles.input}
                 value={email}
                 onChangeText={setEmail}
-                placeholder="tu@correo.com"
+                placeholder={t('login.emailPlaceholder')}
                 placeholderTextColor={Colors.textMuted}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
               />
 
-              <Text style={styles.label}>Contraseña</Text>
+              <Text style={styles.label}>{t('login.password')}</Text>
               <PasswordInput
                 style={styles.input}
                 value={password}
                 onChangeText={setPassword}
-                placeholder="Mínimo 6 caracteres"
+                placeholder={t('register.passwordPlaceholder')}
                 placeholderTextColor={Colors.textMuted}
               />
 
-              <Text style={styles.label}>Confirmar contraseña</Text>
+              <Text style={styles.label}>{t('register.confirm')}</Text>
               <PasswordInput
                 style={styles.input}
                 value={confirm}
                 onChangeText={setConfirm}
-                placeholder="Repite tu contraseña"
+                placeholder={t('register.confirmPlaceholder')}
                 placeholderTextColor={Colors.textMuted}
               />
 
-              <Text style={styles.label}>Fecha de nacimiento</Text>
+              <Text style={styles.label}>{t('register.birth')}</Text>
               <BirthDateInput value={birth} onChange={setBirth} />
               <Text style={styles.hint}>
-                No se muestra a nadie. Se usa para el contenido +18 y no se puede cambiar después.
+                {t('register.birthHint')}
               </Text>
 
               {/* Aceptación de los textos legales */}
@@ -174,15 +176,15 @@ export default function RegisterScreen() {
                   />
                 </TouchableOpacity>
                 <Text style={styles.acceptText}>
-                  Acepto los{' '}
+                  {t('register.accept1')}
                   <Text style={styles.footerLink} onPress={() => router.push('/auth/legal?doc=terms' as Href)}>
-                    términos de uso
+                    {t('register.terms')}
                   </Text>
-                  {' '}y la{' '}
+                  {t('register.accept2')}
                   <Text style={styles.footerLink} onPress={() => router.push('/auth/legal?doc=privacy' as Href)}>
-                    política de privacidad
+                    {t('register.privacy')}
                   </Text>
-                  .
+                  {t('register.accept3')}
                 </Text>
               </View>
 
@@ -194,16 +196,16 @@ export default function RegisterScreen() {
               >
                 {loading
                   ? <ActivityIndicator color="#000" size="small" />
-                  : <Text style={styles.btnText}>Crear cuenta</Text>
+                  : <Text style={styles.btnText}>{t('register.submit')}</Text>
                 }
               </TouchableOpacity>
             </View>
 
             {/* Pie */}
             <View style={styles.footer}>
-              <Text style={styles.footerText}>¿Ya tienes cuenta? </Text>
+              <Text style={styles.footerText}>{t('register.haveAccount')}</Text>
               <TouchableOpacity onPress={() => router.back()}>
-                <Text style={styles.footerLink}>Inicia sesión</Text>
+                <Text style={styles.footerLink}>{t('register.signIn')}</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>

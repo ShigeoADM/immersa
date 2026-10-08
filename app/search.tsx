@@ -12,6 +12,7 @@ import { Colors } from '@/constants/theme';
 import { AppHeader } from '@/components/app-header';
 import { GENRES } from '@/constants/story-meta';
 import { useAuth } from '@/context/AuthContext';
+import { useT } from '@/i18n';
 
 interface SearchStory {
   id: string;
@@ -37,6 +38,7 @@ const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-�
 // historias publicadas una vez y se filtran en el móvil (título, autor, formato,
 // géneros y +18).
 export default function SearchScreen() {
+  const t = useT();
   const router = useRouter();
 
   const [stories, setStories] = useState<SearchStory[]>([]);
@@ -99,7 +101,7 @@ export default function SearchScreen() {
             style={styles.input}
             value={text}
             onChangeText={setText}
-            placeholder="Título o autor…"
+            placeholder={t('search.placeholder')}
             placeholderTextColor={Colors.textMuted}
             autoFocus
             autoCorrect={false}
@@ -136,7 +138,7 @@ export default function SearchScreen() {
               onPress={() => setHideAdult(v => !v)}
               activeOpacity={0.8}
             >
-              <Text style={[styles.chipText, hideAdult && { color: '#000' }]}>Sin +18</Text>
+              <Text style={[styles.chipText, hideAdult && { color: '#000' }]}>{t('search.noAdult')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -167,12 +169,12 @@ export default function SearchScreen() {
           contentContainerStyle={styles.list}
           ListHeaderComponent={
             <Text style={styles.count}>
-              {results.length} {results.length === 1 ? 'historia' : 'historias'}
+              {t(results.length === 1 ? 'search.countOne' : 'search.countMany', { n: results.length })}
             </Text>
           }
           ListEmptyComponent={
             <Text style={styles.empty}>
-              {hasFilters ? 'Ninguna historia coincide con la búsqueda.' : 'Todavía no hay historias publicadas.'}
+              {hasFilters ? t('search.noMatch') : t('search.noStories')}
             </Text>
           }
           renderItem={({ item: s }) => {

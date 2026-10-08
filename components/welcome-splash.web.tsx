@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, Text, StyleSheet } from 'react-native';
+import { useT } from '@/i18n';
 
 // Bienvenida de la versión web. Al abrir la página se ve el fondo de la app con la
 // palabra "Bienvenido" en verde: entra con un barrido de arriba abajo, se queda un
@@ -19,6 +20,7 @@ function alreadyShown(): boolean {
 }
 
 export function WelcomeSplash() {
+  const t = useT();
   const [phase, setPhase] = useState<Phase>(() => (alreadyShown() ? 'done' : 'ready'));
 
   useEffect(() => {
@@ -83,7 +85,7 @@ export function WelcomeSplash() {
           } as any,
         ]}
       >
-        Bienvenido
+        {t('splash.welcome')}
       </Text>
     </Pressable>
   );

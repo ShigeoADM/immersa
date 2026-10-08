@@ -31,11 +31,14 @@ import {
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { DesktopColumn } from '@/components/desktop-column';
 import { PasswordInput } from '@/components/password-input';
+import { useT } from '@/i18n';
+import { LanguagePicker } from '@/components/language-picker';
 
 export default function SettingsScreen() {
   const isDesktop = useIsDesktop();
   const router  = useRouter();
   const { user } = useAuth();
+  const t = useT();
 
   const [displayName,    setDisplayName]    = useState('');
   const [bio,            setBio]            = useState('');
@@ -345,6 +348,14 @@ export default function SettingsScreen() {
           <Text style={styles.blockedText}>Usuarios bloqueados</Text>
           <MaterialIcons name="chevron-right" size={20} color={Colors.textMuted} />
         </TouchableOpacity>
+
+        {/* ── Idioma de la web ── */}
+        <View style={{ marginTop: 26, gap: 10 }}>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.textMuted, letterSpacing: 1, textTransform: 'uppercase' }}>
+            {t('common.language')}
+          </Text>
+          <LanguagePicker />
+        </View>
 
         {/* ── Textos legales ── */}
         <View style={styles.legalRow}>
