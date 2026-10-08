@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Colors } from '@/constants/theme';
+import { ts, useT } from '@/i18n';
 
 // Diálogos con la estética de la app, en lugar de los nativos (blancos en Android).
 // Se usa igual que Alert.alert:
@@ -58,7 +59,7 @@ export const AppAlert = {
       id: nextId++,
       title,
       message,
-      buttons: buttons && buttons.length > 0 ? buttons : [{ text: 'Aceptar' }],
+      buttons: buttons && buttons.length > 0 ? buttons : [{ text: ts('Aceptar') }],
       cancelable: options?.cancelable ?? true,
       accent: accentStack[accentStack.length - 1] ?? Colors.emerald,
     }];
@@ -136,7 +137,7 @@ export function AppDialogHost() {
                         ]}
                         numberOfLines={1}
                       >
-                        {b.text ?? 'Aceptar'}
+                        {b.text ?? ts('Aceptar')}
                       </Text>
                     </TouchableOpacity>
                   );

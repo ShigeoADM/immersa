@@ -7,6 +7,7 @@ import { Colors } from '@/constants/theme';
 import {
   REPORT_DETAILS_MAX, REPORT_REASONS, type ReportReason, type ReportTarget, sendReport,
 } from '@/services/reports';
+import { ts, useT } from '@/i18n';
 
 // Diálogo para denunciar una historia o un comentario: motivo + detalles opcionales.
 // `target` a null lo cierra.
@@ -31,10 +32,10 @@ export function ReportModal({ target, onClose }: {
     try {
       const sent = await sendReport(target, reason, details);
       setResult(sent
-        ? 'Gracias. El equipo de moderación revisará tu denuncia.'
-        : 'Ya habías denunciado este contenido. El equipo de moderación lo revisará.');
+        ? ts('Gracias. El equipo de moderación revisará tu denuncia.')
+        : ts('Ya habías denunciado este contenido. El equipo de moderación lo revisará.'));
     } catch (e: any) {
-      setResult(e?.message ?? 'No se pudo enviar la denuncia. Inténtalo de nuevo.');
+      setResult(e?.message ?? ts('No se pudo enviar la denuncia. Inténtalo de nuevo.'));
     } finally {
       setSending(false);
     }
@@ -52,7 +53,7 @@ export function ReportModal({ target, onClose }: {
       <View style={styles.overlay}>
         <View style={styles.box}>
           <Text style={styles.title}>
-            {target?.type === 'comment' ? 'Denunciar comentario' : 'Denunciar historia'}
+            {target?.type === 'comment' ? ts('Denunciar comentario') : ts('Denunciar historia')}
           </Text>
 
           {result ? (
@@ -60,7 +61,7 @@ export function ReportModal({ target, onClose }: {
               <Text style={styles.text}>{result}</Text>
               <View style={styles.actions}>
                 <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={onClose} activeOpacity={0.8}>
-                  <Text style={[styles.btnText, { color: '#000' }]}>Cerrar</Text>
+                  <Text style={[styles.btnText, { color: '#000' }]}>{ts('Cerrar')}</Text>
                 </TouchableOpacity>
               </View>
             </>
@@ -69,7 +70,7 @@ export function ReportModal({ target, onClose }: {
               {target?.type === 'comment' && (
                 <Text style={styles.quote} numberOfLines={3}>"{target.commentText}"</Text>
               )}
-              <Text style={styles.text}>¿Por qué lo denuncias?</Text>
+              <Text style={styles.text}>{ts('¿Por qué lo denuncias?')}</Text>
               {REPORT_REASONS.map(r => (
                 <TouchableOpacity key={r.key} style={styles.reason} onPress={() => setReason(r.key)} activeOpacity={0.7}>
                   <MaterialIcons
@@ -77,14 +78,14 @@ export function ReportModal({ target, onClose }: {
                     size={18}
                     color={reason === r.key ? Colors.emerald : Colors.textMuted}
                   />
-                  <Text style={styles.reasonText}>{r.label}</Text>
+                  <Text style={styles.reasonText}>{ts(r.label)}</Text>
                 </TouchableOpacity>
               ))}
               <TextInput
                 style={styles.input}
                 value={details}
                 onChangeText={setDetails}
-                placeholder="Detalles (opcional)"
+                placeholder={ts('Detalles (opcional)')}
                 placeholderTextColor={Colors.textMuted}
                 multiline
                 textAlignVertical="top"
@@ -92,7 +93,7 @@ export function ReportModal({ target, onClose }: {
               />
               <View style={styles.actions}>
                 <TouchableOpacity style={styles.btn} onPress={onClose} disabled={sending} activeOpacity={0.8}>
-                  <Text style={styles.btnText}>Cancelar</Text>
+                  <Text style={styles.btnText}>{ts('Cancelar')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.btn, styles.btnDanger, (!reason || sending) && { opacity: 0.4 }]}
@@ -102,7 +103,7 @@ export function ReportModal({ target, onClose }: {
                 >
                   {sending
                     ? <ActivityIndicator size="small" color="#fff" />
-                    : <Text style={[styles.btnText, { color: '#fff' }]}>Denunciar</Text>}
+                    : <Text style={[styles.btnText, { color: '#fff' }]}>{ts('Denunciar')}</Text>}
                 </TouchableOpacity>
               </View>
             </>

@@ -6,6 +6,7 @@ import { Colors } from '@/constants/theme';
 import type { Role } from '@/constants/permissions';
 import type { StoryComment } from '@/services/comments';
 import { RoleBadge } from '@/components/role-badge';
+import { ts, useT } from '@/i18n';
 
 // Un comentario: avatar a la izquierda, nombre arriba a la izquierda,
 // "Cap. 1 · Pág. 3" arriba a la derecha y el texto debajo.

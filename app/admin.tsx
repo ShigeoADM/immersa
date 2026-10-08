@@ -27,6 +27,7 @@ import { type Report, dismissReport, listReports, reportReasonLabel } from '@/se
 import { deleteComment } from '@/services/comments';
 import { adminDeleteUserData } from '@/services/moderation';
 import { DesktopColumn } from '@/components/desktop-column';
+import { ts, useT } from '@/i18n';
 
 const TYPES: { value: AnnouncementType; label: string; icon: string }[] = [
   { value: 'news',  label: 'Noticia',                 icon: 'campaign' },
@@ -34,6 +35,7 @@ const TYPES: { value: AnnouncementType; label: string; icon: string }[] = [
 ];
 
 export default function AdminScreen() {
+  useT();
   const router = useRouter();
   const { user, staff, isStaff, can, loading: authLoading } = useAuth();
   const canAnnounce = can('announcements');
@@ -92,14 +94,14 @@ export default function AdminScreen() {
     try {
       await dismissReport(r.id);
       setReports(prev => prev.filter(x => x.id !== r.id));
-    } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo cerrar la denuncia.'); }
+    } catch (e: any) { AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo cerrar la denuncia.')); }
   };
 
   const handleDeleteReportedComment = (r: Report) => {
-    AppAlert.alert('Borrar comentario', 'Se borrará el comentario denunciado y se cerrará la denuncia.', [
-      { text: 'Cancelar', style: 'cancel' },
+    AppAlert.alert(ts('Borrar comentario'), ts('Se borrará el comentario denunciado y se cerrará la denuncia.'), [
+      { text: ts('Cancelar'), style: 'cancel' },
       {
-        text: 'Borrar', style: 'destructive',
+        text: ts('Borrar'), style: 'destructive',
         onPress: async () => {
           try {
             if (r.commentId) await deleteComment(r.storyId, r.commentId);
@@ -107,7 +109,7 @@ export default function AdminScreen() {
             const same = reports.filter(x => x.type === 'comment' && x.commentId === r.commentId);
             await Promise.all(same.map(x => dismissReport(x.id)));
             setReports(prev => prev.filter(x => !same.includes(x)));
-          } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo borrar el comentario.'); }
+          } catch (e: any) { AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo borrar el comentario.')); }
         },
       },
     ]);
@@ -121,24 +123,24 @@ export default function AdminScreen() {
       await publishAnnouncement(type, title, body);
       setTitle(''); setBody('');
       await load();
-      AppAlert.alert('Publicado', 'Los usuarios lo recibirán como notificación la próxima vez que abran la app.');
+      AppAlert.alert(ts('Publicado'), ts('Los usuarios lo recibirán como notificación la próxima vez que abran la app.'));
     } catch (e: any) {
-      AppAlert.alert('Error', e?.message ?? 'No se pudo publicar el aviso.');
+      AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo publicar el aviso.'));
     } finally {
       setPublishing(false);
     }
   };
 
   const handleDeleteAnnouncement = (a: Announcement) => {
-    AppAlert.alert('Retirar aviso', `"${a.title}" dejará de enviarse. Quien ya lo recibió lo conserva.`, [
-      { text: 'Cancelar', style: 'cancel' },
+    AppAlert.alert(ts('Retirar aviso'), ts('"{title}" dejará de enviarse. Quien ya lo recibió lo conserva.', { title: a.title }), [
+      { text: ts('Cancelar'), style: 'cancel' },
       {
-        text: 'Retirar', style: 'destructive',
+        text: ts('Retirar'), style: 'destructive',
         onPress: async () => {
           try {
             await deleteAnnouncement(a.id);
             setAnnouncements(prev => prev.filter(x => x.id !== a.id));
-          } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo retirar el aviso.'); }
+          } catch (e: any) { AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo retirar el aviso.')); }
         },
       },
     ]);
@@ -151,32 +153,32 @@ export default function AdminScreen() {
     try {
       const found = await findUserByEmail(email);
       if (!found) {
-        AppAlert.alert('Usuario no encontrado', 'No hay ninguna cuenta registrada con ese correo.');
+        AppAlert.alert(ts('Usuario no encontrado'), ts('No hay ninguna cuenta registrada con ese correo.'));
         return;
       }
       if (found.role) {
-        AppAlert.alert('Ya está en el equipo', `${found.name} ya es ${ROLE_LABELS[found.role].toLowerCase()}.`);
+        AppAlert.alert(ts('Ya está en el equipo'), ts('{name} ya forma parte del equipo.', { name: found.name }));
         return;
       }
       AppAlert.alert(
-        'Nombrar administrador',
-        `${found.name} (${found.email}) entrará sin ningún permiso. Después podrás concederle los que quieras.`,
+        ts('Nombrar administrador'),
+        ts('{name} ({email}) entrará sin ningún permiso. Después podrás concederle los que quieras.', { name: found.name, email: found.email }),
         [
-          { text: 'Cancelar', style: 'cancel' },
+          { text: ts('Cancelar'), style: 'cancel' },
           {
-            text: 'Nombrar',
+            text: ts('Nombrar'),
             onPress: async () => {
               try {
                 await addAdmin(found.uid);
                 setTeam(prev => [...prev, { ...found, role: 'admin', permissions: [] }]);
                 setEmail('');
-              } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo nombrar al administrador.'); }
+              } catch (e: any) { AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo nombrar al administrador.')); }
             },
           },
         ],
       );
     } catch (e: any) {
-      AppAlert.alert('Error', e?.message ?? 'No se pudo buscar al usuario.');
+      AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo buscar al usuario.'));
     } finally {
       setAdding(false);
     }
@@ -193,22 +195,22 @@ export default function AdminScreen() {
         permissions: granted ? [...m.permissions, permission] : m.permissions.filter(p => p !== permission),
       }));
     } catch (e: any) {
-      AppAlert.alert('Error', e?.message ?? 'No se pudo cambiar el permiso.');
+      AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo cambiar el permiso.'));
     } finally {
       setBusyUid(null);
     }
   };
 
   const handleRemoveAdmin = (member: AdminUser) => {
-    AppAlert.alert('Quitar administrador', `${member.name} perderá todos sus permisos de administración.`, [
-      { text: 'Cancelar', style: 'cancel' },
+    AppAlert.alert(ts('Quitar administrador'), ts('{name} perderá todos sus permisos de administración.', { name: member.name }), [
+      { text: ts('Cancelar'), style: 'cancel' },
       {
-        text: 'Quitar', style: 'destructive',
+        text: ts('Quitar'), style: 'destructive',
         onPress: async () => {
           try {
             await removeAdmin(member.uid);
             setTeam(prev => prev.filter(m => m.uid !== member.uid));
-          } catch (e: any) { AppAlert.alert('Error', e?.message ?? 'No se pudo quitar al administrador.'); }
+          } catch (e: any) { AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo quitar al administrador.')); }
         },
       },
     ]);
@@ -220,31 +222,31 @@ export default function AdminScreen() {
     try {
       const found = await findUserByEmail(purgeEmail);
       if (!found) {
-        AppAlert.alert('Usuario no encontrado', 'No hay ninguna cuenta registrada con ese correo.');
+        AppAlert.alert(ts('Usuario no encontrado'), ts('No hay ninguna cuenta registrada con ese correo.'));
         return;
       }
       if (found.uid === user?.uid || found.role) {
-        AppAlert.alert('No permitido', 'No se pueden borrar desde aquí tus propios datos ni los de un miembro del equipo.');
+        AppAlert.alert(ts('No permitido'), ts('No se pueden borrar desde aquí tus propios datos ni los de un miembro del equipo.'));
         return;
       }
       AppAlert.alert(
-        'Borrar datos del usuario',
-        `Se borrarán para siempre el perfil, las historias, la biblioteca y las notificaciones de ${found.name} (${found.email}). Sus lectores recibirán un aviso. No se puede deshacer.`,
+        ts('Borrar datos del usuario'),
+        ts('Se borrarán para siempre el perfil, las historias, la biblioteca y las notificaciones de {name} ({email}). Sus lectores recibirán un aviso. No se puede deshacer.', { name: found.name, email: found.email }),
         [
-          { text: 'Cancelar', style: 'cancel' },
+          { text: ts('Cancelar'), style: 'cancel' },
           {
-            text: 'Borrar todo', style: 'destructive',
+            text: ts('Borrar todo'), style: 'destructive',
             onPress: async () => {
               setPurging(true);
               try {
                 await adminDeleteUserData(found.uid);
                 setPurgeEmail('');
                 AppAlert.alert(
-                  'Datos borrados',
-                  `Falta un paso que solo se puede hacer en la consola de Firebase: en Authentication → Users, busca ${found.email} y elimina la cuenta. Hasta entonces podría volver a iniciar sesión.`,
+                  ts('Datos borrados'),
+                  ts('Falta un paso que solo se puede hacer en la consola de Firebase: en Authentication → Users, busca {email} y elimina la cuenta. Hasta entonces podría volver a iniciar sesión.', { email: found.email }),
                 );
               } catch (e: any) {
-                AppAlert.alert('Error', e?.message ?? 'No se pudieron borrar los datos.');
+                AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudieron borrar los datos.'));
               } finally {
                 setPurging(false);
               }
@@ -253,7 +255,7 @@ export default function AdminScreen() {
         ],
       );
     } catch (e: any) {
-      AppAlert.alert('Error', e?.message ?? 'No se pudo buscar al usuario.');
+      AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo buscar al usuario.'));
     } finally {
       setPurging(false);
     }
@@ -264,7 +266,7 @@ export default function AdminScreen() {
       <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
         <MaterialIcons name="arrow-back" size={22} color={Colors.textPrimary} />
       </TouchableOpacity>
-      <Text style={styles.headerTitle}>Administración</Text>
+      <Text style={styles.headerTitle}>{ts('Administración')}</Text>
       <View style={styles.backBtn} />
     </SafeAreaView>
   );
@@ -277,7 +279,7 @@ export default function AdminScreen() {
         <View style={styles.centered}>
           {authLoading
             ? <ActivityIndicator color={Colors.emerald} />
-            : <Text style={styles.muted}>No tienes permisos de administración.</Text>}
+            : <Text style={styles.muted}>{ts('No tienes permisos de administración.')}</Text>}
         </View>
       </View>
     );
@@ -297,13 +299,13 @@ export default function AdminScreen() {
         <View style={styles.roleCard}>
           <MaterialIcons name={staff.role === 'owner' ? 'verified-user' : 'shield'} size={22} color={Colors.emerald} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.rowTitle}>{staff.role ? ROLE_LABELS[staff.role] : ''}</Text>
+            <Text style={styles.rowTitle}>{staff.role ? ts(ROLE_LABELS[staff.role]) : ''}</Text>
             <Text style={styles.rowSub}>
               {staff.role === 'owner'
-                ? 'Tienes todos los permisos.'
+                ? ts('Tienes todos los permisos.')
                 : myPermissions.length > 0
                   ? myPermissions.map(p => p.label).join(' · ')
-                  : 'Todavía no tienes ningún permiso asignado.'}
+                  : ts('Todavía no tienes ningún permiso asignado.')}
             </Text>
           </View>
         </View>
@@ -312,24 +314,24 @@ export default function AdminScreen() {
         {canModerate && (
           <>
             <Text style={styles.sectionTitle}>
-              Denuncias{reports.length > 0 ? ` · ${reports.length}` : ''}
+              {ts('Denuncias')}{reports.length > 0 ? ` · ${reports.length}` : ''}
             </Text>
             <Text style={styles.hint}>
-              Para eliminar una historia, ábrela: verás el botón de moderación (mazo) arriba a la derecha.
+              {ts('Para eliminar una historia, ábrela: verás el botón de moderación (mazo) arriba a la derecha.')}
             </Text>
             {loading ? (
               <ActivityIndicator color={Colors.emerald} style={{ marginVertical: 12 }} />
             ) : reports.length === 0 ? (
-              <Text style={styles.muted}>No hay denuncias pendientes.</Text>
+              <Text style={styles.muted}>{ts('No hay denuncias pendientes.')}</Text>
             ) : reports.map(r => (
               <View key={r.id} style={styles.memberCard}>
                 <View style={styles.memberHeader}>
                   <MaterialIcons name={r.type === 'comment' ? 'chat-bubble' : 'menu-book'} size={16} color="#FF6B6B" />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rowTitle} numberOfLines={1}>
-                      {r.type === 'comment' ? 'Comentario en ' : ''}{r.storyTitle || 'Historia'}
+                      {r.type === 'comment' ? ts('Comentario en ') : ''}{r.storyTitle || ts('Historia')}
                     </Text>
-                    <Text style={styles.rowSub}>{reportReasonLabel(r.reason)}</Text>
+                    <Text style={styles.rowSub}>{ts(reportReasonLabel(r.reason))}</Text>
                   </View>
                   <Text style={styles.rowDate}>{new Date(r.createdAt).toLocaleDateString()}</Text>
                 </View>
@@ -338,17 +340,17 @@ export default function AdminScreen() {
                 <View style={styles.permRow}>
                   <TouchableOpacity style={styles.permChip} onPress={() => router.push(`/story/${r.storyId}`)} activeOpacity={0.8}>
                     <MaterialIcons name="open-in-new" size={13} color={Colors.textSecondary} />
-                    <Text style={styles.permChipText}>Abrir historia</Text>
+                    <Text style={styles.permChipText}>{ts('Abrir historia')}</Text>
                   </TouchableOpacity>
                   {r.type === 'comment' && (
                     <TouchableOpacity style={styles.permChip} onPress={() => handleDeleteReportedComment(r)} activeOpacity={0.8}>
                       <MaterialIcons name="delete-outline" size={13} color="#FF6B6B" />
-                      <Text style={[styles.permChipText, { color: '#FF6B6B' }]}>Borrar comentario</Text>
+                      <Text style={[styles.permChipText, { color: '#FF6B6B' }]}>{ts('Borrar comentario')}</Text>
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity style={styles.permChip} onPress={() => closeReport(r)} activeOpacity={0.8}>
                     <MaterialIcons name="check" size={13} color={Colors.textSecondary} />
-                    <Text style={styles.permChipText}>Cerrar</Text>
+                    <Text style={styles.permChipText}>{ts('Cerrar')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -359,8 +361,8 @@ export default function AdminScreen() {
         {/* ── Avisos ── */}
         {canAnnounce && (
           <>
-            <Text style={styles.sectionTitle}>Publicar aviso</Text>
-            <Text style={styles.hint}>Llega a todos los usuarios como notificación.</Text>
+            <Text style={styles.sectionTitle}>{ts('Publicar aviso')}</Text>
+            <Text style={styles.hint}>{ts('Llega a todos los usuarios como notificación.')}</Text>
             <View style={styles.typeRow}>
               {TYPES.map(t => (
                 <TouchableOpacity
@@ -370,7 +372,7 @@ export default function AdminScreen() {
                   activeOpacity={0.8}
                 >
                   <MaterialIcons name={t.icon as any} size={15} color={type === t.value ? '#000' : Colors.textSecondary} />
-                  <Text style={[styles.typeBtnText, type === t.value && { color: '#000' }]}>{t.label}</Text>
+                  <Text style={[styles.typeBtnText, type === t.value && { color: '#000' }]}>{ts(t.label)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -378,7 +380,7 @@ export default function AdminScreen() {
               style={styles.input}
               value={title}
               onChangeText={setTitle}
-              placeholder="Título"
+              placeholder={ts('Título')}
               placeholderTextColor={Colors.textMuted}
               maxLength={80}
             />
@@ -386,7 +388,7 @@ export default function AdminScreen() {
               style={[styles.input, styles.inputMultiline]}
               value={body}
               onChangeText={setBody}
-              placeholder="Mensaje"
+              placeholder={ts('Mensaje')}
               placeholderTextColor={Colors.textMuted}
               multiline
               textAlignVertical="top"
@@ -400,14 +402,14 @@ export default function AdminScreen() {
             >
               {publishing
                 ? <ActivityIndicator size="small" color="#000" />
-                : <Text style={styles.primaryBtnText}>Publicar</Text>}
+                : <Text style={styles.primaryBtnText}>{ts('Publicar')}</Text>}
             </TouchableOpacity>
 
-            <Text style={styles.sectionTitle}>Últimos avisos</Text>
+            <Text style={styles.sectionTitle}>{ts('Últimos avisos')}</Text>
             {loading ? (
               <ActivityIndicator color={Colors.emerald} style={{ marginVertical: 12 }} />
             ) : announcements.length === 0 ? (
-              <Text style={styles.muted}>Todavía no se ha publicado ningún aviso.</Text>
+              <Text style={styles.muted}>{ts('Todavía no se ha publicado ningún aviso.')}</Text>
             ) : announcements.map(a => (
               <View key={a.id} style={styles.row}>
                 <MaterialIcons
@@ -431,11 +433,11 @@ export default function AdminScreen() {
         {/* ── Equipo y permisos ── */}
         {canManageAdmins && (
           <>
-            <Text style={styles.sectionTitle}>Equipo y permisos</Text>
+            <Text style={styles.sectionTitle}>{ts('Equipo y permisos')}</Text>
             <Text style={styles.hint}>
               {staff.role === 'owner'
-                ? 'Toca un permiso para concederlo o retirarlo.'
-                : 'Puedes conceder los permisos que tú tienes, salvo el de gestionar administradores.'}
+                ? ts('Toca un permiso para concederlo o retirarlo.')
+                : ts('Puedes conceder los permisos que tú tienes, salvo el de gestionar administradores.')}
             </Text>
             {loading ? (
               <ActivityIndicator color={Colors.emerald} style={{ marginVertical: 12 }} />
@@ -463,7 +465,7 @@ export default function AdminScreen() {
                     )}
                   </View>
                   {member.role === 'owner' ? (
-                    <Text style={styles.rowDate}>Dueño · todos los permisos</Text>
+                    <Text style={styles.rowDate}>{ts('Dueño · todos los permisos')}</Text>
                   ) : (
                     <View style={styles.permRow}>
                       {PERMISSIONS.map(p => {
@@ -482,7 +484,7 @@ export default function AdminScreen() {
                               size={13}
                               color={on ? '#000' : Colors.textSecondary}
                             />
-                            <Text style={[styles.permChipText, on && { color: '#000' }]}>{p.label}</Text>
+                            <Text style={[styles.permChipText, on && { color: '#000' }]}>{ts(p.label)}</Text>
                           </TouchableOpacity>
                         );
                       })}
@@ -497,7 +499,7 @@ export default function AdminScreen() {
                 style={[styles.input, { flex: 1, marginBottom: 0 }]}
                 value={email}
                 onChangeText={setEmail}
-                placeholder="Correo del nuevo administrador"
+                placeholder={ts('Correo del nuevo administrador')}
                 placeholderTextColor={Colors.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -519,7 +521,7 @@ export default function AdminScreen() {
         {/* ── Borrar los datos de un usuario (solo el dueño) ── */}
         {isOwner && (
           <>
-            <Text style={styles.sectionTitle}>Borrar los datos de un usuario</Text>
+            <Text style={styles.sectionTitle}>{ts('Borrar los datos de un usuario')}</Text>
             <Text style={styles.hint}>
               Para peticiones de borrado de cuenta que lleguen por correo. Borra su perfil, sus historias,
               su biblioteca y sus notificaciones. Después hay que eliminar su acceso en la consola de Firebase.
@@ -529,7 +531,7 @@ export default function AdminScreen() {
                 style={[styles.input, { flex: 1, marginBottom: 0 }]}
                 value={purgeEmail}
                 onChangeText={setPurgeEmail}
-                placeholder="Correo de la cuenta a borrar"
+                placeholder={ts('Correo de la cuenta a borrar')}
                 placeholderTextColor={Colors.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}

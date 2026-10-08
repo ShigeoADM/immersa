@@ -8,6 +8,7 @@ import { Colors } from '@/constants/theme';
 import { DesktopColumn } from '@/components/desktop-column';
 import { BUILD_LABEL } from '@/constants/site';
 import { startTutorial } from '@/components/tutorial';
+import { ts, useT } from '@/i18n';
 
 // Desarrollo: pantalla privada, solo para cuentas con el permiso 'developer'.
 //
@@ -34,6 +35,7 @@ const EXPERIMENTS: Experiment[] = [
 ];
 
 export default function DevScreen() {
+  useT();
   const router = useRouter();
   const { user, loading, staffReady, can } = useAuth();
   const checking = loading || (!!user && !staffReady);
@@ -46,7 +48,7 @@ export default function DevScreen() {
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
           <MaterialIcons name="arrow-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Desarrollo</Text>
+        <Text style={styles.headerTitle}>{ts('Desarrollo')}</Text>
         <View style={styles.backBtn} />
       </SafeAreaView>
 
@@ -54,26 +56,25 @@ export default function DevScreen() {
         {checking ? null : !allowed ? (
           <View style={styles.centered}>
             <MaterialIcons name="lock" size={32} color={Colors.textMuted} />
-            <Text style={styles.empty}>Esta sección es solo para el equipo de desarrollo.</Text>
+            <Text style={styles.empty}>{ts('Esta sección es solo para el equipo de desarrollo.')}</Text>
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.content}>
             <Text style={styles.intro}>
-              Lo que se está construyendo se prueba aquí antes de que lo vea nadie más. Solo ven esta pantalla
-              las cuentas con el permiso de desarrollo.
+              {ts('Lo que se está construyendo se prueba aquí antes de que lo vea nadie más. Solo ven esta pantalla las cuentas con el permiso de desarrollo.')}
             </Text>
             {EXPERIMENTS.length === 0 ? (
               <View style={styles.emptyBox}>
                 <MaterialIcons name="science" size={30} color={Colors.textMuted} />
-                <Text style={styles.empty}>Ahora mismo no hay nada en pruebas.</Text>
+                <Text style={styles.empty}>{ts('Ahora mismo no hay nada en pruebas.')}</Text>
               </View>
             ) : (
               EXPERIMENTS.map(e => (
                 <TouchableOpacity key={e.title} style={styles.card} onPress={() => e.run(router)} activeOpacity={0.8}>
                   <MaterialIcons name={e.icon} size={24} color={Colors.emerald} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.cardTitle}>{e.title}</Text>
-                    <Text style={styles.cardText}>{e.description}</Text>
+                    <Text style={styles.cardTitle}>{ts(e.title)}</Text>
+                    <Text style={styles.cardText}>{ts(e.description)}</Text>
                   </View>
                   <MaterialIcons name="chevron-right" size={22} color={Colors.textMuted} />
                 </TouchableOpacity>

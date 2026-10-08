@@ -5,6 +5,7 @@ import { auth } from '@/config/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { BUILD_LABEL, IS_DEV_SITE, PROD_SITE_URL } from '@/constants/site';
+import { ts, useT } from '@/i18n';
 
 // Web de desarrollo: una etiqueta fija para no confundirla con la pública y, para quien
 // entra sin el permiso de desarrollo, una pantalla que le corta el paso.
@@ -26,20 +27,19 @@ export function DevSiteOverlay() {
         <View style={styles.wall}>
           {checking ? <ActivityIndicator color={Colors.emerald} /> : (
             <View style={styles.card}>
-              <Text style={styles.title}>Zona de desarrollo</Text>
+              <Text style={styles.title}>{ts('Zona de desarrollo')}</Text>
               <Text style={styles.text}>
-                Esta es la versión de pruebas de Immersa y tu cuenta no tiene acceso. La web de siempre está en
-                immersa.web.app.
+                {ts('Esta es la versión de pruebas de Immersa y tu cuenta no tiene acceso. La web de siempre está en immersa.web.app.')}
               </Text>
               <TouchableOpacity
                 style={styles.primary}
                 activeOpacity={0.8}
                 onPress={() => { (globalThis as any).location.href = PROD_SITE_URL; }}
               >
-                <Text style={styles.primaryText}>Ir a Immersa</Text>
+                <Text style={styles.primaryText}>{ts('Ir a Immersa')}</Text>
               </TouchableOpacity>
               <TouchableOpacity activeOpacity={0.7} onPress={() => { signOut(auth).catch(() => {}); }}>
-                <Text style={styles.link}>Entrar con otra cuenta</Text>
+                <Text style={styles.link}>{ts('Entrar con otra cuenta')}</Text>
               </TouchableOpacity>
             </View>
           )}

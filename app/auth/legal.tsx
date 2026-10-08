@@ -5,6 +5,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors } from '@/constants/theme';
 import { LEGAL_DOCS, LEGAL_UPDATED_AT, type LegalDoc } from '@/constants/legal';
+import { ts, useT } from '@/i18n';
 
 // Términos de uso y política de privacidad. Está bajo /auth para poder leerse sin
 // haber iniciado sesión (desde el registro).
