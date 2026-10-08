@@ -18,6 +18,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   AppState,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -671,6 +672,23 @@ export default function PageModernoReaderScreen() {
   const introSoundRef = useRef<Audio.Sound | null>(null);
   const introLeavingRef = useRef(false);
   const introDismissRef = useRef<(() => void) | null>(null);
+
+  // ── Web en el móvil: las novelas Moderno se leen en horizontal ────────────
+  // La app gira la pantalla sola; una página web no puede (salvo a pantalla completa, y
+  // no en todos los móviles). Con el móvil en vertical se pide girarlo, y mientras tanto
+  // no empieza nada: ni música, ni efectos, ni la transición del capítulo.
+  const windowSize = useWindowDimensions();
+  const mustRotate = Platform.OS === 'web'
+    && windowSize.height > windowSize.width
+    && ((globalThis as any).navigator?.maxTouchPoints ?? 0) > 0;
+  // Pantalla completa en horizontal: funciona en Android; en iPhone hay que girarlo a mano
+  const forceLandscape = async () => {
+    const g = globalThis as any;
+    try {
+      await g.document.documentElement.requestFullscreen?.();
+      await g.screen?.orientation?.lock?.('landscape');
+    } catch { /* el navegador no lo permite: queda girar el móvil */ }
+  };
   const [isAuthor, setIsAuthor] = useState(false);
   // Me gusta del capítulo
   const [chapterLiked, setChapterLiked]         = useState(false);
@@ -1232,7 +1250,7 @@ export default function PageModernoReaderScreen() {
   // define música. Si la página actual pone una pista que empieza en un párrafo
   // posterior, hasta llegar a él vale lo de antes (la música anterior) o el silencio.
   const effectiveMusic = useMemo(() => {
-    if (intro) return null; // transición de capítulo: la música de las páginas espera
+    if (intro || mustRotate) return null; // transición de capítulo, o móvil sin girar: la música espera
     const here = pages[current];
     let chain = inheritChain;
     if (here && typeof here.musicUrl === 'string' && here.musicUrl
@@ -1247,7 +1265,7 @@ export default function PageModernoReaderScreen() {
     return source.musicUrl
       ? { url: source.musicUrl, volume: musicPlaybackVolume(source.musicVolume) }
       : null;
-  }, [pages, current, inheritChain, paraIndex, baseMusic, intro]);
+  }, [pages, current, inheritChain, paraIndex, baseMusic, intro, mustRotate]);
 
   // ── Silencio momentáneo ───────────────────────────────────────────────────
   // Entre los párrafos que indique la página, la música baja hasta callarse sin
@@ -1315,7 +1333,7 @@ export default function PageModernoReaderScreen() {
     };
   }, [current, pages]);
   useEffect(() => {
-    if (intro) return; // transición de capítulo: los efectos suenan al entrar en la página
+    if (intro || mustRotate) return; // transición de capítulo, o móvil sin girar: los efectos esperan
     const cues = pageSfxCues(pages[current]).filter(c => c.paragraph - 1 === paraIndex);
     if (cues.length === 0) return;
     let cancelled = false;
@@ -1331,13 +1349,13 @@ export default function PageModernoReaderScreen() {
         .catch(e => console.error('Error reproduciendo efecto de sonido:', e));
     });
     return () => { cancelled = true; };
-  }, [current, pages, paraIndex, !!intro]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [current, pages, paraIndex, !!intro, mustRotate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Transición de capítulo ────────────────────────────────────────────────
   // Aparece con un fundido; si tiene pista, suena una vez. Al tocar, se funde a negro
   // y entra la primera página, con la pista apagándose.
   useEffect(() => {
-    if (!intro) return;
+    if (!intro || mustRotate) return;
     introLeavingRef.current = false;
     introOpacity.setValue(1);
     let cancelled = false;
@@ -1355,7 +1373,7 @@ export default function PageModernoReaderScreen() {
       introSoundRef.current = null;
       s?.unloadAsync().catch(() => {});
     };
-  }, [intro?.image]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [intro?.image, mustRotate]); // eslint-disable-line react-hooks/exhaustive-deps
   const dismissIntro = () => {
     if (!intro || introLeavingRef.current) return;
     introLeavingRef.current = true;
@@ -2181,6 +2199,25 @@ export default function PageModernoReaderScreen() {
     );
   }
 
+  // Móvil en vertical (web): se pide girarlo
+  if (mustRotate) {
+    return (
+      <View style={[styles.container, styles.rotateScreen]}>
+        <StatusBar hidden />
+        <MaterialIcons name="screen-rotation" size={44} color={accentColor} />
+        <Text style={styles.rotateTitle}>Gira el móvil</Text>
+        <Text style={styles.rotateText}>Las novelas Moderno se leen en horizontal.</Text>
+        <TouchableOpacity style={[styles.rotateBtn, { borderColor: accentColor }]} onPress={forceLandscape} activeOpacity={0.8}>
+          <MaterialIcons name="fullscreen" size={18} color={accentColor} />
+          <Text style={[styles.rotateBtnText, { color: accentColor }]}>Ponerlo en horizontal</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.introClose} onPress={() => router.back()} activeOpacity={0.75}>
+          <MaterialIcons name="close" size={18} color="rgba(255,255,255,0.85)" />
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   // Transición de capítulo: la ilustración a pantalla completa, con el título
   if (intro) {
     return (
@@ -2664,6 +2701,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  rotateScreen: { alignItems: 'center', justifyContent: 'center', gap: 12, padding: 28 },
+  rotateTitle: { fontSize: 20, fontWeight: '800', color: '#fff', marginTop: 6 },
+  rotateText: { fontSize: 14, color: 'rgba(255,255,255,0.7)', textAlign: 'center' },
+  rotateBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14,
+    paddingVertical: 11, paddingHorizontal: 18, borderRadius: 8, borderWidth: 1,
+  },
+  rotateBtnText: { fontSize: 14, fontWeight: '700' },
   introClose: {
     position: 'absolute', top: 16, left: 16, width: 34, height: 34, borderRadius: 17,
     backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center',
