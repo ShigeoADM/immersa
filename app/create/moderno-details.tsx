@@ -25,7 +25,7 @@ import { DesktopColumn } from '@/components/desktop-column';
 import { uploadImage, deleteStoredFile } from '@/services/media';
 import { coverUsedByAnotherStory } from '@/services/stories';
 import { withUploadNotice } from '@/components/upload-notice';
-import { tutorialZone } from '@/components/tutorial';
+import { tutorialEvent, tutorialIntercept, tutorialZone } from '@/components/tutorial';
 
 const LANGUAGES = ['Español', 'English', 'Português', 'Français', 'Deutsch', 'Otro'];
 
@@ -213,6 +213,7 @@ export default function ModernoDetailsScreen() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
+        tutorialEvent('storyCreated'); // el tutorial esperaba esto para seguir
         router.replace(`/create/editor-moderno?storyId=${docRef.id}&title=${encodeURIComponent(title.trim())}&format=${format}`);
       }
     } catch (e) {
@@ -239,7 +240,8 @@ export default function ModernoDetailsScreen() {
       {/* Header */}
       <SafeAreaView edges={['top']} style={{ backgroundColor: Colors.bg }}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          {/* (durante el tutorial no se sale sin crear la historia: sale su aviso) */}
+          <TouchableOpacity onPress={() => { if (!tutorialIntercept()) router.back(); }} style={styles.backBtn}>
             <MaterialIcons name="arrow-back" size={22} color={Colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>

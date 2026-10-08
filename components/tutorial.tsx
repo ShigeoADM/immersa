@@ -14,7 +14,8 @@ import { TEXT_BOX } from '@/constants/reader-layout';
 // El estado vive fuera de React para poder arrancarlo desde cualquier pantalla y que la
 // capa (montada una sola vez, en la raíz) lo siga aunque se cambie de pantalla.
 
-type TutorialState = { step: number } | null;
+// nag: en un paso libre, se está enseñando el aviso de "termina esto antes de salir"
+type TutorialState = { step: number; nag?: boolean } | null;
 
 let state: TutorialState = null;
 const listeners = new Set<() => void>();
@@ -25,6 +26,28 @@ export const startTutorial = () => setState({ step: 0 });
 export const stopTutorial = () => setState(null);
 // Solo en el servidor local de desarrollo: poder arrancarlo desde la consola del navegador
 if (__DEV__) (globalThis as any).__startTutorial = (step = 0) => setState({ step });
+
+// ── Lo que las pantallas le cuentan al tutorial ─────────────────────────────
+// Hay pasos "libres": el tutorial se aparta y deja hacer algo (rellenar un formulario,
+// por ejemplo) hasta que la pantalla avisa de que ya está hecho.
+
+// La pantalla avisa de que ha pasado algo ('storyCreated'…). Si el paso libre actual
+// esperaba justo eso, el tutorial sigue.
+export function tutorialEvent(name: string) {
+  if (!state) return;
+  const step = STEPS[state.step];
+  if (!step?.free || step.until !== name) return;
+  if (state.step + 1 < STEPS.length) setState({ step: state.step + 1 });
+  else stopTutorial();
+}
+
+// La pantalla pregunta antes de dejar salir (flecha de volver). En un paso libre el
+// tutorial no deja: devuelve true y enseña su aviso.
+export function tutorialIntercept(): boolean {
+  if (!state || !STEPS[state.step]?.free) return false;
+  if (!state.nag) setState({ step: state.step, nag: true });
+  return true;
+}
 
 // Las pantallas marcan las zonas que el tutorial señala con estos identificadores
 // (nativeID): `tutorialZone(x)` en la zona entera y `tutorialTitle(x)` en su título.
@@ -43,6 +66,8 @@ type Piece = { t: string; italic?: boolean };
 //     momento para aparecer antes de darlo por ausente.
 //   · unless: si esa otra zona está a la vista, el paso no procede y se salta sin esperar
 //     (por ejemplo: quien no tiene libros no ve "Mis libros", ve ya los formatos).
+//   · free: paso libre. No hay cuadro ni oscuridad: se deja usar la pantalla hasta que
+//     esta avise con tutorialEvent(until). Si se intenta salir antes, sale el aviso `nag`.
 //   · boxAt: en zonas sin título, dónde va el cuadro: encima o debajo de la zona.
 //   · shape 'rect': el botón que hay que pulsar es grande (una tarjeta): se ilumina su
 //     rectángulo en vez de rodearlo con un círculo.
@@ -50,6 +75,7 @@ type Piece = { t: string; italic?: boolean };
 type Step = {
   pieces: Piece[]; target?: string; sameBox?: boolean; action?: boolean; arrives?: boolean; unless?: string;
   boxAt?: 'above' | 'below'; shape?: 'rect'; morph?: boolean;
+  free?: boolean; until?: string; nag?: Piece[];
 };
 const STEPS: Step[] = [
   {
@@ -101,6 +127,10 @@ const STEPS: Step[] = [
         + 'Eso vale para el texto. Las imágenes no pueden mostrar desnudos, actos sexuales ni violencia real, ni siquiera con la casilla marcada. '
         + 'La violencia en ilustraciones que son claramente ficción sí está permitida.',
     }],
+  },
+  {
+    free: true, until: 'storyCreated', pieces: [],
+    nag: [{ t: 'Rellena lo básico de la ficha, por favor. No tiene por qué ir en serio: esto es solo una prueba. Si quieres salir del tutorial, pulsa la tecla Escape.' }],
   },
 ];
 // Los pasos encadenados con sameBox comparten cuadro: este es el primero de su cadena
@@ -255,7 +285,8 @@ function measureTarget(step: Step, winWidth: number): Placement | null {
 export function TutorialOverlay() {
   const current = useSyncExternalStore(subscribe, () => state, () => state);
   const step = current ? STEPS[current.step] : undefined;
-  const pieces = step?.pieces;
+  const nagging = !!step?.free && !!current?.nag;
+  const pieces = step?.free ? (nagging ? step.nag : []) : step?.pieces;
   const total = pieces ? pieces.reduce((n, p) => n + p.t.length, 0) : 0;
   const win = useWindowDimensions();
 
@@ -268,6 +299,12 @@ export function TutorialOverlay() {
   const [typed, setTyped] = useState(0);                 // letras escritas
   const [typing, setTyping] = useState(false);           // el cuadro está abierto y escribiendo (o ya escrito)
   const [boxHeight, setBoxHeight] = useState(0);         // altura del cuadro abierto
+  const [idle, setIdle] = useState(false);               // paso libre: el tutorial está apartado
+  const idleRef = useRef(false);
+  idleRef.current = idle;
+  // Tras un paso libre la pantalla quedó clara: el siguiente paso tiene que oscurecerla
+  const dimmedRef = useRef(true);
+  if (idle) dimmedRef.current = false;
   const [place, setPlace] = useState<Placement | null>(null);
   const [ringOn, setRingOn] = useState(false);           // círculo dibujado
   const morph = useRef(new Animated.Value(1)).current;   // luz encogiéndose de una zona a otra
@@ -330,6 +367,30 @@ export function TutorialOverlay() {
     };
     setTyped(0);
     (async () => {
+      // Paso libre: la pantalla se aclara y el tutorial se aparta; o, si se intentó salir,
+      // se oscurece otra vez y sale el aviso
+      if (s.free) {
+        setPlace(null);
+        setBoxHeight(0);
+        if (!state?.nag) {
+          setTyping(false);
+          open.setValue(0);
+          await run(dim, 0, DIM_MS, true);
+          if (!cancelled) setIdle(true);
+          return;
+        }
+        setIdle(false);
+        setTyping(false);
+        await run(dim, 1, DIM_MS, true);
+        if (cancelled) return;
+        await run(open, 1, OPEN_MS);
+        startTyping();
+        return;
+      }
+      setIdle(false);
+      if (dimmedRef.current === false) { run(dim, 1, DIM_MS, true); }
+      dimmedRef.current = true;
+
       // Mismo cuadro: solo se escribe el texto nuevo
       if (s.sameBox) { startTyping(); return; }
 
@@ -397,7 +458,7 @@ export function TutorialOverlay() {
       startTyping();
     })();
     return () => { cancelled = true; clearInterval(typingRef.current); };
-  }, [stepIndex, shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [stepIndex, shown, nagging]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Si cambia el tamaño de la ventana, la luz y el cuadro se recolocan
   useEffect(() => {
@@ -428,6 +489,15 @@ export function TutorialOverlay() {
     if (!current || !shown || !typing || busyRef.current) return;
     if (!done) { play(sfxTextRef); setTyped(total); return; }
     if (step?.action) return; // aquí no se avanza tocando: hay que pulsar el botón señalado
+    if (step?.free) {
+      // Aviso leído: el cuadro se cierra y se vuelve al formulario
+      play(sfxBoxRef);
+      busyRef.current = true;
+      await run(open, 0, CLOSE_MS);
+      busyRef.current = false;
+      if (state?.step === current.step) setState({ step: current.step });
+      return;
+    }
     const next = current.step + 1;
     if (next < STEPS.length && STEPS[next].sameBox) { play(sfxTextRef); setState({ step: next }); return; }
     play(sfxBoxRef);
@@ -474,6 +544,8 @@ export function TutorialOverlay() {
     if (!active || !WEB) return;
     const w = globalThis as any;
     const onKey = (e: any) => {
+      // Paso libre: el teclado es del formulario (solo Escape sigue cerrando el tutorial)
+      if (idleRef.current) { if (e.key === 'Escape') stopTutorial(); return; }
       if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') { e.preventDefault(); advanceRef.current(); }
       else if (e.key === 'Escape') closeRef.current();
     };
@@ -481,7 +553,7 @@ export function TutorialOverlay() {
     return () => w.removeEventListener('keydown', onKey);
   }, [active]);
 
-  if (!current || !step || !pieces || !shown) return null;
+  if (!current || !step || !pieces || !shown || idle) return null;
 
   // Los trozos del texto hasta la letra `count`
   const renderPieces = (count: number) => {
