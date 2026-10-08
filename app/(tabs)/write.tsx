@@ -24,6 +24,7 @@ import { deleteStoryWithCascade, importStory } from '@/services/stories';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { tutorialZone } from '@/components/tutorial';
 import { BACKUP_EXTENSION, decodeBackup } from '@/services/backup-file';
+import { statusLabel, useT } from '@/i18n';
 
 const FORMATS = [
   {
@@ -56,6 +57,7 @@ interface Story {
 }
 
 export default function WriteScreen() {
+  const t = useT();
   const isDesktop = useIsDesktop();
   const router = useRouter();
   const { user, suspended } = useAuth();
@@ -63,7 +65,7 @@ export default function WriteScreen() {
   // Una cuenta suspendida no puede crear historias (las reglas también lo impiden)
   const startStory = (format: string) => {
     if (suspended) {
-      AppAlert.alert('Cuenta suspendida', 'Tu cuenta está suspendida: no puedes publicar ni editar historias.');
+      AppAlert.alert(t('write.suspendedTitle'), t('write.suspendedBody'));
       return;
     }
     router.push(`/create/moderno-details?format=${format}`);
@@ -87,12 +89,12 @@ export default function WriteScreen() {
       } catch (e: any) {
         // Los avisos propios (navegador antiguo, copia más nueva) se enseñan tal cual
         if (e instanceof Error && /navegador|versión/.test(e.message)) throw e;
-        throw new Error('Ese archivo no se puede leer. Tiene que ser el .immersa que descarga "Exportar".');
+        throw new Error(t('write.importBadFile'));
       }
       const created = await importStory(data, user.uid);
       router.push(`/create/editor-moderno?storyId=${created.id}&title=${encodeURIComponent(created.title)}&format=${created.format}`);
     } catch (e: any) {
-      AppAlert.alert('No se pudo importar', e?.message ?? 'Inténtalo de nuevo.');
+      AppAlert.alert(t('write.importFailed'), e?.message ?? t('common.tryAgain'));
     } finally {
       setImporting(false);
     }
@@ -103,7 +105,7 @@ export default function WriteScreen() {
         ? <ActivityIndicator size="small" color={Colors.textMuted} />
         : <MaterialIcons name="file-upload" size={16} color={Colors.textMuted} />}
       <Text style={styles.importLinkText}>
-        {importing ? 'Importando…' : 'Importar una copia de seguridad (.immersa)'}
+        {importing ? t('write.importing') : t('write.import')}
       </Text>
     </TouchableOpacity>
   );
@@ -162,12 +164,12 @@ export default function WriteScreen() {
 
   const handleDeleteStory = (story: Story) => {
     AppAlert.alert(
-      'Borrar libro',
-      `¿Seguro que quieres borrar "${story.title}"? Se borrarán también todos sus capítulos y páginas.`,
+      t('write.deleteTitle'),
+      t('write.deleteBody', { title: story.title }),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Borrar',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -212,8 +214,8 @@ export default function WriteScreen() {
         <StatusBar barStyle="dark-content" backgroundColor={Colors.emerald} />
         <Header />
         <Animated.View style={[styles.newHeader, { opacity: titleAnim.opacity, transform: [{ translateY: titleAnim.translateY }] }]}>
-          <Text style={styles.sectionTitle}>Nueva historia</Text>
-          <Text style={styles.sectionSubtitle}>Elige el formato</Text>
+          <Text style={styles.sectionTitle}>{t('write.newStory')}</Text>
+          <Text style={styles.sectionSubtitle}>{t('write.chooseFormat')}</Text>
         </Animated.View>
         <View style={styles.formatList} nativeID={tutorialZone('formats')}>
           {FORMATS.map((f, i) => (
@@ -227,7 +229,7 @@ export default function WriteScreen() {
                 <View style={[styles.cardTopBevel, { backgroundColor: f.color }]} />
                 <View style={styles.formatInfo}>
                   <Text style={[styles.formatLabel, { color: f.color }]}>{f.label}</Text>
-                  <Text style={styles.formatDesc}>{f.description}</Text>
+                  <Text style={styles.formatDesc}>{t(f.key === 'Webnovel' ? 'write.webnovelDesc' : 'write.modernoDesc')}</Text>
                 </View>
               </TouchableOpacity>
             </Animated.View>
@@ -245,11 +247,11 @@ export default function WriteScreen() {
 
       <View style={styles.tabRow}>
         <TouchableOpacity style={styles.tabBtn} activeOpacity={0.7} onPress={() => setActiveTab('books')}>
-          <Text style={[styles.tabText, activeTab === 'books' && styles.tabTextActive]}>Mis libros</Text>
+          <Text style={[styles.tabText, activeTab === 'books' && styles.tabTextActive]}>{t('write.myBooks')}</Text>
           {activeTab === 'books' && <View style={styles.tabUnderline} />}
         </TouchableOpacity>
         <TouchableOpacity style={styles.tabBtn} activeOpacity={0.7} onPress={() => setActiveTab('new')} testID={tutorialZone('newBook')}>
-          <Text style={[styles.tabText, activeTab === 'new' && styles.tabTextActive]}>Nuevo Libro</Text>
+          <Text style={[styles.tabText, activeTab === 'new' && styles.tabTextActive]}>{t('write.newBook')}</Text>
           {activeTab === 'new' && <View style={styles.tabUnderline} />}
         </TouchableOpacity>
       </View>
@@ -273,7 +275,7 @@ export default function WriteScreen() {
                       <Text style={[styles.storyFormat, { color: fmtColor }]}>{story.format}</Text>
                       <Text style={styles.storyDot}>·</Text>
                       <Text style={styles.storyStatus}>
-                        {story.published ? 'Publicada' : (STATUS_LABELS[story.status] ?? story.status)}
+                        {story.published ? t('write.published') : statusLabel(story.status)}
                       </Text>
                     </View>
                   </View>
@@ -289,8 +291,8 @@ export default function WriteScreen() {
       ) : (
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <Animated.View style={[styles.newHeader, { opacity: titleAnim.opacity, transform: [{ translateY: titleAnim.translateY }] }]}>
-            <Text style={styles.sectionTitle}>Nueva historia</Text>
-            <Text style={styles.sectionSubtitle}>Elige el formato</Text>
+            <Text style={styles.sectionTitle}>{t('write.newStory')}</Text>
+            <Text style={styles.sectionSubtitle}>{t('write.chooseFormat')}</Text>
           </Animated.View>
           <View style={styles.formatList} nativeID={tutorialZone('formats')}>
             {FORMATS.map((f, i) => (
@@ -304,7 +306,7 @@ export default function WriteScreen() {
                   <View style={[styles.cardTopBevel, { backgroundColor: f.color }]} />
                   <View style={styles.formatInfo}>
                     <Text style={[styles.formatLabel, { color: f.color }]}>{f.label}</Text>
-                    <Text style={styles.formatDesc}>{f.description}</Text>
+                    <Text style={styles.formatDesc}>{t(f.key === 'Webnovel' ? 'write.webnovelDesc' : 'write.modernoDesc')}</Text>
                   </View>
                 </TouchableOpacity>
               </Animated.View>

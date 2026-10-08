@@ -19,15 +19,17 @@ import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { AppAlert, useDialogAccent } from '@/components/app-dialog';
-import { ADULT_AUDIENCES, ADULT_CONTENT, AUDIENCES, GENRES } from '@/constants/story-meta';
+import { ADULT_AUDIENCES, ADULT_CONTENT, AUDIENCES, GENRES, adultContentLabel, audienceLabel } from '@/constants/story-meta';
 import { useAuth } from '@/context/AuthContext';
 import { DesktopColumn } from '@/components/desktop-column';
 import { uploadImage, deleteStoredFile } from '@/services/media';
 import { coverUsedByAnotherStory } from '@/services/stories';
 import { withUploadNotice } from '@/components/upload-notice';
 import { tutorialEvent, tutorialIntercept, tutorialZone } from '@/components/tutorial';
+import { genreLabel, statusLabel, useT } from '@/i18n';
 
-const LANGUAGES = ['Español', 'English', 'Português', 'Français', 'Deutsch', 'Otro'];
+// Idioma en que está escrita la historia (se guarda tal cual; 'Otro' se enseña traducido)
+const LANGUAGES = ['Español', 'English', '日本語', 'Português', 'Français', 'Deutsch', 'Otro'];
 
 const STATUSES = [
   { key: 'ongoing',   label: 'En curso' },
@@ -47,6 +49,7 @@ const UI_DETAIL_COLORS: { hex: string; label: string }[] = [
 ];
 
 export default function ModernoDetailsScreen() {
+  const t = useT();
   const router = useRouter();
   const { storyId, format: formatParam } = useLocalSearchParams<{ storyId?: string; format?: string }>();
   const isEditing = !!storyId;
@@ -130,7 +133,7 @@ export default function ModernoDetailsScreen() {
   const pickCover = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      AppAlert.alert('Permiso denegado', 'Necesitamos acceso a tu galería para añadir la portada.');
+      AppAlert.alert(t('common.permissionDenied'), t('details.galleryNeeded'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -147,7 +150,7 @@ export default function ModernoDetailsScreen() {
         setCoverUri(url);
       } catch (e: any) {
         console.error('Error subiendo portada:', e);
-        AppAlert.alert('Error al subir portada', e?.message ?? 'Inténtalo de nuevo.');
+        AppAlert.alert(t('details.coverUploadFailed'), e?.message ?? t('common.tryAgain'));
         setCoverUri(null);
         setCoverUrl('');
       } finally {
@@ -218,7 +221,7 @@ export default function ModernoDetailsScreen() {
       }
     } catch (e) {
       console.error('Error guardando historia:', e);
-      AppAlert.alert('Error', 'No se pudieron guardar los cambios. Inténtalo de nuevo.');
+      AppAlert.alert(t('common.error'), t('details.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -245,7 +248,7 @@ export default function ModernoDetailsScreen() {
             <MaterialIcons name="arrow-back" size={22} color={Colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
-            {isEditing ? 'Editar detalles' : 'Detalles de la historia'}
+            {isEditing ? t('details.editTitle') : t('details.newTitle')}
           </Text>
           <TouchableOpacity
             style={[styles.nextBtn, (!canContinue || saving) && styles.nextBtnDisabled]}
@@ -256,7 +259,7 @@ export default function ModernoDetailsScreen() {
             {saving
               ? <ActivityIndicator size="small" color="#000" />
               : <Text style={[styles.nextBtnText, !canContinue && styles.nextBtnTextDisabled]}>
-                  {isEditing ? 'Guardar' : 'Siguiente'}
+                  {isEditing ? t('common.save') : t('common.next')}
                 </Text>
             }
           </TouchableOpacity>
@@ -272,7 +275,7 @@ export default function ModernoDetailsScreen() {
       >
 
         {/* ─── PORTADA ─── */}
-        <Text style={styles.sectionLabel}>Portada</Text>
+        <Text style={styles.sectionLabel}>{t('details.cover')}</Text>
         <View style={styles.coverSection}>
           {/* Selector de orientación */}
           <View style={styles.orientationRow}>
@@ -283,7 +286,7 @@ export default function ModernoDetailsScreen() {
                 onPress={() => setCoverOrientation(o)}
               >
                 <Text style={[styles.orientationText, coverOrientation === o && styles.orientationTextActive]}>
-                  {o === 'vertical' ? 'Vertical' : 'Horizontal'}
+                  {o === 'vertical' ? t('details.vertical') : t('details.horizontal')}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -310,54 +313,54 @@ export default function ModernoDetailsScreen() {
                 {!uploadingCover && (
                   <View style={styles.coverChangeOverlay}>
                     <MaterialIcons name="edit" size={18} color="#fff" />
-                    <Text style={styles.coverChangeText}>Cambiar portada</Text>
+                    <Text style={styles.coverChangeText}>{t('details.changeCover')}</Text>
                   </View>
                 )}
               </>
             ) : (
               <>
                 <MaterialIcons name="add-photo-alternate" size={32} color={Colors.textMuted} />
-                <Text style={styles.coverPlaceholderText}>Añadir portada</Text>
+                <Text style={styles.coverPlaceholderText}>{t('details.addCover')}</Text>
               </>
             )}
             {uploadingCover && (
               <View style={[StyleSheet.absoluteFill, styles.coverUploadingOverlay]}>
                 <ActivityIndicator color={accent} />
-                <Text style={styles.coverUploadingText}>Subiendo…</Text>
+                <Text style={styles.coverUploadingText}>{t('common.uploading')}</Text>
               </View>
             )}
           </TouchableOpacity>
         </View>
 
         {/* ─── INFORMACIÓN ─── */}
-        <Text style={styles.sectionLabel}>Información</Text>
+        <Text style={styles.sectionLabel}>{t('details.info')}</Text>
 
-        <Text style={styles.fieldLabel}>Título <Text style={styles.required}>*</Text></Text>
+        <Text style={styles.fieldLabel}>{t('details.title')} <Text style={styles.required}>*</Text></Text>
         <TextInput
           style={styles.input}
           value={title}
           onChangeText={setTitle}
-          placeholder="Título de la historia"
+          placeholder={t('details.titlePlaceholder')}
           placeholderTextColor={Colors.textMuted}
           maxLength={80}
         />
 
-        <Text style={styles.fieldLabel}>Subtítulo <Text style={styles.optional}>(opcional)</Text></Text>
+        <Text style={styles.fieldLabel}>{t('details.subtitle')} <Text style={styles.optional}>{t('common.optional')}</Text></Text>
         <TextInput
           style={styles.input}
           value={subtitle}
           onChangeText={setSubtitle}
-          placeholder="Subtítulo"
+          placeholder={t('details.subtitle')}
           placeholderTextColor={Colors.textMuted}
           maxLength={80}
         />
 
-        <Text style={styles.fieldLabel}>Sinopsis <Text style={styles.required}>*</Text></Text>
+        <Text style={styles.fieldLabel}>{t('details.synopsis')} <Text style={styles.required}>*</Text></Text>
         <TextInput
           style={[styles.input, styles.inputMultiline]}
           value={synopsis}
           onChangeText={setSynopsis}
-          placeholder="Describe tu historia..."
+          placeholder={t('details.synopsisPlaceholder')}
           placeholderTextColor={Colors.textMuted}
           multiline
           numberOfLines={4}
@@ -366,12 +369,12 @@ export default function ModernoDetailsScreen() {
         />
         <Text style={styles.charCount}>{synopsis.length}/500</Text>
 
-        <Text style={styles.fieldLabel}>Créditos <Text style={styles.optional}>(opcional)</Text></Text>
+        <Text style={styles.fieldLabel}>{t('details.credits')} <Text style={styles.optional}>{t('common.optional')}</Text></Text>
         <TextInput
           style={[styles.input, styles.inputMultiline]}
           value={credits}
           onChangeText={setCredits}
-          placeholder={'De quién es la música, las imágenes o la portada.\nEj.: Música: «Título» de Autor (sitio.com)'}
+          placeholder={t('details.creditsPlaceholder')}
           placeholderTextColor={Colors.textMuted}
           multiline
           numberOfLines={4}
@@ -381,7 +384,7 @@ export default function ModernoDetailsScreen() {
         <Text style={styles.charCount}>{credits.length}/1000</Text>
 
         {/* ─── CLASIFICACIÓN ─── */}
-        <Text style={styles.sectionLabel}>Clasificación</Text>
+        <Text style={styles.sectionLabel}>{t('details.classification')}</Text>
 
         {/* Idioma — desplegable */}
         <TouchableOpacity
@@ -390,8 +393,8 @@ export default function ModernoDetailsScreen() {
           activeOpacity={0.8}
         >
           <View>
-            <Text style={styles.dropdownLabel}>Idioma</Text>
-            <Text style={styles.dropdownValue}>{language}</Text>
+            <Text style={styles.dropdownLabel}>{t('details.language')}</Text>
+            <Text style={styles.dropdownValue}>{language === 'Otro' ? t('details.langOther') : language}</Text>
           </View>
           <MaterialIcons
             name={langOpen ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
@@ -408,7 +411,7 @@ export default function ModernoDetailsScreen() {
                 onPress={() => { setLanguage(l); setLangOpen(false); }}
               >
                 <Text style={[styles.dropdownRowText, language === l && styles.dropdownRowTextActive]}>
-                  {l}
+                  {l === 'Otro' ? t('details.langOther') : l}
                 </Text>
                 {language === l && (
                   <MaterialIcons name="check" size={16} color={accent} />
@@ -426,12 +429,12 @@ export default function ModernoDetailsScreen() {
         >
           <View style={{ flex: 1 }}>
             <Text style={styles.dropdownLabel}>
-              Género <Text style={styles.required}>*</Text>
+              {t('details.genre')} <Text style={styles.required}>*</Text>
             </Text>
             <Text style={styles.dropdownValue} numberOfLines={1}>
               {genres.length === 0
-                ? 'Seleccionar géneros'
-                : genres.join(', ')}
+                ? t('details.selectGenres')
+                : genres.map(genreLabel).join(', ')}
             </Text>
           </View>
           <MaterialIcons
@@ -450,7 +453,7 @@ export default function ModernoDetailsScreen() {
                   onPress={() => toggleGenre(g)}
                 >
                   <Text style={[styles.chipText, genres.includes(g) && styles.chipTextActive]}>
-                    {g}
+                    {genreLabel(g)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -458,7 +461,7 @@ export default function ModernoDetailsScreen() {
           </View>
         )}
 
-        <Text style={styles.fieldLabel}>Público dirigido <Text style={styles.required}>*</Text></Text>
+        <Text style={styles.fieldLabel}>{t('details.audience')} <Text style={styles.required}>*</Text></Text>
         {AUDIENCES.map(a => {
           const blocked = isAdult && !ADULT_AUDIENCES.includes(a.key);
           return (
@@ -471,25 +474,25 @@ export default function ModernoDetailsScreen() {
               <View style={[styles.radio, audience === a.key && styles.radioActive]}>
                 {audience === a.key && <View style={styles.radioDot} />}
               </View>
-              <Text style={styles.radioLabel}>{a.label}</Text>
+              <Text style={styles.radioLabel}>{audienceLabel(a.key)}</Text>
               {blocked && <MaterialIcons name="lock" size={14} color={Colors.textMuted} />}
             </TouchableOpacity>
           );
         })}
         {isAdult && (
           <Text style={styles.toggleDesc}>
-            Con contenido +18 solo puede dirigirse a mayores de 18 años.
+            {t('details.adultAudience')}
           </Text>
         )}
 
         {/* ─── CONTENIDO +18 ─── */}
-        <Text style={styles.sectionLabel}>Contenido</Text>
+        <Text style={styles.sectionLabel}>{t('details.content')}</Text>
 
         <View style={styles.toggleRow} nativeID={tutorialZone('adult')}>
           <View style={styles.toggleInfo}>
-            <Text style={styles.toggleTitle}>Contenido +18</Text>
+            <Text style={styles.toggleTitle}>{t('details.adultToggle')}</Text>
             <Text style={styles.toggleDesc}>
-              Activa esto si tu historia contiene material adulto.
+              {t('details.adultToggleDesc')}
             </Text>
           </View>
           <Switch
@@ -513,7 +516,7 @@ export default function ModernoDetailsScreen() {
                     <MaterialIcons name="check" size={12} color="#000" />
                   )}
                 </View>
-                <Text style={styles.checkLabel}>{c.label}</Text>
+                <Text style={styles.checkLabel}>{adultContentLabel(c.key)}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -522,10 +525,10 @@ export default function ModernoDetailsScreen() {
         {/* ─── COLOR DE INTERFAZ RECOMENDADO (solo formato Moderno) ─── */}
         {format === 'Moderno' && (
         <>
-        <Text style={styles.sectionLabel}>Color de interfaz</Text>
+        <Text style={styles.sectionLabel}>{t('details.uiColor')}</Text>
         <Text style={styles.fieldLabel}>
-          Recomienda un color de acento para el lector{' '}
-          <Text style={styles.optional}>(opcional)</Text>
+          {t('details.uiColorHint')}{' '}
+          <Text style={styles.optional}>{t('common.optional')}</Text>
         </Text>
         <View style={styles.uiColorRow}>
           {/* Opción "Sin recomendación" */}
@@ -536,7 +539,7 @@ export default function ModernoDetailsScreen() {
           >
             <MaterialIcons name="block" size={14} color={recommendedUiColor === null ? accent : Colors.textMuted} />
             <Text style={[styles.uiColorNoneText, recommendedUiColor === null && { color: accent }]}>
-              Ninguno
+              {t('details.uiColorNone')}
             </Text>
           </TouchableOpacity>
           {/* Paleta de colores */}
@@ -555,14 +558,14 @@ export default function ModernoDetailsScreen() {
         </View>
         {recommendedUiColor && (
           <Text style={[styles.uiColorHint, { color: recommendedUiColor }]}>
-            ● Los lectores verán la interfaz en este color por defecto
+            {t('details.uiColorNote')}
           </Text>
         )}
         </>
         )}
 
         {/* ─── ESTADO ─── */}
-        <Text style={styles.sectionLabel}>Estado</Text>
+        <Text style={styles.sectionLabel}>{t('details.status')}</Text>
         {STATUSES.map(s => (
           <TouchableOpacity
             key={s.key}
@@ -572,7 +575,7 @@ export default function ModernoDetailsScreen() {
             <View style={[styles.radio, status === s.key && styles.radioActive]}>
               {status === s.key && <View style={styles.radioDot} />}
             </View>
-            <Text style={styles.radioLabel}>{s.label}</Text>
+            <Text style={styles.radioLabel}>{statusLabel(s.key)}</Text>
           </TouchableOpacity>
         ))}
 
