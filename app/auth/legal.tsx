@@ -4,8 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors } from '@/constants/theme';
-import { LEGAL_DOCS, LEGAL_UPDATED_AT, type LegalDoc } from '@/constants/legal';
-import { ts, useT } from '@/i18n';
+import { type LegalDoc } from '@/constants/legal';
+import { LEGAL_TRANSLATION_NOTE, LEGAL_UPDATED, legalDocs } from '@/constants/legal-i18n';
+import { useLang } from '@/i18n';
 
 // Términos de uso y política de privacidad. Está bajo /auth para poder leerse sin
 // haber iniciado sesión (desde el registro).
@@ -13,7 +14,9 @@ export default function LegalScreen() {
   const router = useRouter();
   const { doc } = useLocalSearchParams<{ doc?: string }>();
   const key: LegalDoc = doc === 'privacy' || doc === 'uploads' ? doc : 'terms';
-  const { title, sections } = LEGAL_DOCS[key];
+  const lang = useLang();
+  const { title, sections } = legalDocs(lang)[key];
+  const note = LEGAL_TRANSLATION_NOTE[lang];
 
   return (
     <View style={styles.container}>
@@ -27,7 +30,8 @@ export default function LegalScreen() {
       </SafeAreaView>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.updated}>Última actualización: {LEGAL_UPDATED_AT}</Text>
+        <Text style={styles.updated}>{LEGAL_UPDATED[lang]}</Text>
+        {note ? <Text style={styles.updated}>{note}</Text> : null}
         {sections.map(s => (
           <View key={s.title} style={styles.section}>
             <Text style={styles.sectionTitle}>{s.title}</Text>

@@ -38,6 +38,8 @@ const isLang = (v: unknown): v is Lang => v === 'es' || v === 'en' || v === 'ja'
 // Idioma del navegador (o del sistema): el primero de sus preferidos que tengamos
 function detect(): Lang {
   const nav = (globalThis as any).navigator;
+  // Los buscadores leen la web en español, que es como está escrita la página de entrada
+  if (/bot|crawl|spider|slurp|facebookexternalhit|whatsapp|discord|telegram/i.test(String(nav?.userAgent ?? ''))) return 'es';
   const wanted: string[] = [...(nav?.languages ?? []), nav?.language].filter(Boolean);
   for (const w of wanted) {
     const code = String(w).toLowerCase().split('-')[0];
@@ -60,8 +62,20 @@ let lang: Lang = initial();
 const listeners = new Set<() => void>();
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 
+// Título de la pestaña en la página de entrada (las historias ponen el suyo)
+const SITE_TITLES: Record<Lang, string> = {
+  es: 'Immersa — Novelas visuales, novelas ligeras y webnovels',
+  en: 'Immersa — Visual novels, light novels and webnovels',
+  ja: 'Immersa — ビジュアルノベル・ライトノベル・ウェブ小説',
+};
+
 const applyToDocument = () => {
-  if (Platform.OS === 'web') { try { (globalThis as any).document.documentElement.lang = lang; } catch { /* nada */ } }
+  if (Platform.OS !== 'web') return;
+  try {
+    const d = (globalThis as any).document;
+    d.documentElement.lang = lang;
+    if (Object.values(SITE_TITLES).includes(d.title)) d.title = SITE_TITLES[lang];
+  } catch { /* nada */ }
 };
 applyToDocument();
 
