@@ -13,11 +13,13 @@ import type { PublicProfile } from '@/services/profiles';
 import { type LikedStory, listFollowing, listLikedStories } from '@/services/social';
 import { type BlockedUser, listBlocked, unblockUser } from '@/services/moderation';
 import { DesktopColumn } from '@/components/desktop-column';
+import { useT } from '@/i18n';
 
 type Tab = 'following' | 'liked' | 'blocked';
 
 // Listas del propio usuario: autores que sigue e historias que le gustan.
 export default function ProfileListsScreen() {
+  const t = useT();
   const router = useRouter();
   const { user } = useAuth();
   const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
@@ -52,9 +54,9 @@ export default function ProfileListsScreen() {
   }, [user]));
 
   const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: 'following', label: 'Siguiendo', count: following.length },
-    { key: 'liked',     label: 'Me gusta',  count: liked.length },
-    { key: 'blocked',   label: 'Bloqueados', count: blockedUsers.length },
+    { key: 'following', label: t('lists.following'), count: following.length },
+    { key: 'liked',     label: t('lists.liked'), count: liked.length },
+    { key: 'blocked',   label: t('lists.blocked'), count: blockedUsers.length },
   ];
 
   const handleUnblock = async (b: BlockedUser) => {
@@ -100,7 +102,7 @@ export default function ProfileListsScreen() {
           keyExtractor={p => p.uid}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
-            <Text style={styles.empty}>Todavía no sigues a ningún autor. Puedes seguirlos desde su perfil.</Text>
+            <Text style={styles.empty}>{t('lists.followingEmpty')}</Text>
           }
           renderItem={({ item: p }) => (
             <TouchableOpacity
@@ -131,7 +133,7 @@ export default function ProfileListsScreen() {
           keyExtractor={b => b.uid}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
-            <Text style={styles.empty}>No has bloqueado a nadie. Puedes bloquear a alguien desde su perfil.</Text>
+            <Text style={styles.empty}>{t('lists.blockedEmpty')}</Text>
           }
           renderItem={({ item: b }) => (
             <View style={styles.row}>
@@ -142,7 +144,7 @@ export default function ProfileListsScreen() {
                 <Text style={styles.rowTitle} numberOfLines={1}>{b.name}</Text>
               </View>
               <TouchableOpacity style={styles.unblockBtn} onPress={() => handleUnblock(b)} activeOpacity={0.8}>
-                <Text style={styles.unblockText}>Desbloquear</Text>
+                <Text style={styles.unblockText}>{t('lists.unblock')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -153,7 +155,7 @@ export default function ProfileListsScreen() {
           keyExtractor={s => s.storyId}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
-            <Text style={styles.empty}>Todavía no le has dado me gusta a ninguna historia.</Text>
+            <Text style={styles.empty}>{t('lists.likedEmpty')}</Text>
           }
           renderItem={({ item: s }) => {
             const fmtColor = Colors.formatColors[s.format as keyof typeof Colors.formatColors] ?? Colors.emerald;

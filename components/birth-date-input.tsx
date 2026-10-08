@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { Colors } from '@/constants/theme';
+import { useT } from '@/i18n';
 
 export type BirthDateParts = { day: string; month: string; year: string };
 export const EMPTY_BIRTH_DATE: BirthDateParts = { day: '', month: '', year: '' };
@@ -11,6 +12,7 @@ export function BirthDateInput({ value, onChange }: {
   value: BirthDateParts;
   onChange: (v: BirthDateParts) => void;
 }) {
+  const t = useT();
   const monthRef = useRef<TextInput>(null);
   const yearRef  = useRef<TextInput>(null);
   const digits = (s: string) => s.replace(/[^0-9]/g, '');
@@ -25,7 +27,7 @@ export function BirthDateInput({ value, onChange }: {
           onChange({ ...value, day });
           if (day.length === 2) monthRef.current?.focus();
         }}
-        placeholder="DD"
+        placeholder={t('birth.day')}
         placeholderTextColor={Colors.textMuted}
         keyboardType="number-pad"
         maxLength={2}
@@ -40,7 +42,7 @@ export function BirthDateInput({ value, onChange }: {
           onChange({ ...value, month });
           if (month.length === 2) yearRef.current?.focus();
         }}
-        placeholder="MM"
+        placeholder={t('birth.month')}
         placeholderTextColor={Colors.textMuted}
         keyboardType="number-pad"
         maxLength={2}
@@ -51,7 +53,7 @@ export function BirthDateInput({ value, onChange }: {
         style={[styles.input, styles.long]}
         value={value.year}
         onChangeText={t => onChange({ ...value, year: digits(t) })}
-        placeholder="AAAA"
+        placeholder={t('birth.year')}
         placeholderTextColor={Colors.textMuted}
         keyboardType="number-pad"
         maxLength={4}

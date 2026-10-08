@@ -8,11 +8,13 @@ import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { ADULT_AGE, buildBirthDate } from '@/constants/age';
 import { BirthDateInput, EMPTY_BIRTH_DATE } from '@/components/birth-date-input';
+import { useT } from '@/i18n';
 
 // Pantalla que sustituye a una historia +18 cuando el lector no puede verla:
 //   · menor de edad → aviso de que no está disponible;
 //   · sin fecha de nacimiento (cuentas antiguas) → se le pide una vez y se guarda.
 export function AdultGate({ onBack }: { onBack: () => void }) {
+  const t = useT();
   const { user, isAdult } = useAuth();
   const [birth, setBirth]   = useState(EMPTY_BIRTH_DATE);
   const [error, setError]   = useState('');
@@ -21,14 +23,14 @@ export function AdultGate({ onBack }: { onBack: () => void }) {
   const handleSave = async () => {
     if (!user || saving) return;
     const birthDate = buildBirthDate(birth.day, birth.month, birth.year);
-    if (!birthDate) { setError('Introduce una fecha de nacimiento válida.'); return; }
+    if (!birthDate) { setError(t('register.birthInvalid')); return; }
     setError('');
     setSaving(true);
     try {
       // AuthContext escucha este documento: al guardarla, la pantalla se actualiza sola
       await setDoc(doc(db, 'users', user.uid), { birthDate }, { merge: true });
     } catch (e: any) {
-      setError(e?.message ?? 'No se pudo guardar la fecha.');
+      setError(e?.message ?? t('adult.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -45,21 +47,20 @@ export function AdultGate({ onBack }: { onBack: () => void }) {
 
       <View style={styles.body}>
         <View style={styles.badge}><Text style={styles.badgeText}>+18</Text></View>
-        <Text style={styles.title}>Contenido para adultos</Text>
+        <Text style={styles.title}>{t('story.adult')}</Text>
 
         {!user ? (
           <Text style={styles.text}>
-            Esta historia es para mayores de {ADULT_AGE} años. Inicia sesión con tu cuenta para verla.
+            {t('adult.needLogin', { n: ADULT_AGE })}
           </Text>
         ) : isAdult === false ? (
           <Text style={styles.text}>
-            Esta historia solo está disponible para mayores de {ADULT_AGE} años.
+            {t('adult.onlyAdults', { n: ADULT_AGE })}
           </Text>
         ) : (
           <>
             <Text style={styles.text}>
-              Esta historia es para mayores de {ADULT_AGE} años. Indica tu fecha de nacimiento para continuar.
-              Solo se te pedirá una vez, no se muestra a nadie y no se puede cambiar después.
+              {t('adult.askBirth', { n: ADULT_AGE })}
             </Text>
             <BirthDateInput value={birth} onChange={setBirth} />
             {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -71,7 +72,7 @@ export function AdultGate({ onBack }: { onBack: () => void }) {
             >
               {saving
                 ? <ActivityIndicator size="small" color="#000" />
-                : <Text style={styles.btnText}>Continuar</Text>}
+                : <Text style={styles.btnText}>{t('common.continue')}</Text>}
             </TouchableOpacity>
           </>
         )}

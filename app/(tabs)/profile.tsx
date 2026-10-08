@@ -21,6 +21,7 @@ import { Colors } from '@/constants/theme';
 import { RoleBadge } from '@/components/role-badge';
 import { getFollowerCount, getFollowingCount, getLikedCount } from '@/services/social';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
+import { statusLabel, useT } from '@/i18n';
 
 interface UserProfile {
   displayName?: string;
@@ -45,6 +46,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 // ── Tarjeta de libro publicado ────────────────────────────────────────────────
 function StoryCard({ story, onPress }: { story: StoryCard; onPress: () => void }) {
+  useT();
   const fmtColor = Colors.formatColors[story.format as keyof typeof Colors.formatColors] ?? Colors.emerald;
   const isHoriz = story.coverOrientation === 'horizontal';
   return (
@@ -71,7 +73,7 @@ function StoryCard({ story, onPress }: { story: StoryCard; onPress: () => void }
         <View style={styles.storyCardInfo}>
           <Text style={styles.storyCardTitle} numberOfLines={2}>{story.title}</Text>
           <Text style={styles.storyCardStatus}>
-            {STATUS_LABELS[story.status] ?? 'En curso'}
+            {statusLabel(story.status)}
           </Text>
         </View>
       )}
@@ -81,6 +83,7 @@ function StoryCard({ story, onPress }: { story: StoryCard; onPress: () => void }
 
 // ── Pantalla principal ────────────────────────────────────────────────────────
 export default function ProfileScreen() {
+  const t = useT();
   const isDesktop = useIsDesktop();
   const { user, loading: authLoading, isStaff, staff, can } = useAuth();
   const router = useRouter();
@@ -148,16 +151,16 @@ export default function ProfileScreen() {
           <View style={styles.guestAvatar}>
             <MaterialIcons name="person" size={36} color={Colors.textMuted} />
           </View>
-          <Text style={styles.guestTitle}>No has iniciado sesión</Text>
+          <Text style={styles.guestTitle}>{t('profile.guestTitle')}</Text>
           <Text style={styles.guestText}>
-            Inicia sesión para ver tu perfil, guardar historias y seguir a tus autores favoritos.
+            {t('profile.guestBody')}
           </Text>
           <TouchableOpacity
             style={styles.loginBtn}
             activeOpacity={0.85}
             onPress={() => router.push('/auth/login')}
           >
-            <Text style={styles.loginBtnText}>Iniciar sesión</Text>
+            <Text style={styles.loginBtnText}>{t('common.login')}</Text>
           </TouchableOpacity>
         </SafeAreaView>
       </View>
@@ -165,7 +168,7 @@ export default function ProfileScreen() {
   }
 
   // ── Perfil ────────────────────────────────────────────────────────────────
-  const displayName = profile.displayName || user.displayName || 'Sin nombre';
+  const displayName = profile.displayName || user.displayName || t('reader.noName');
   const email       = user.email ?? '';
   const avatarUrl   = profile.avatarUrl || user.photoURL;
   const initials    = displayName.trim().charAt(0).toUpperCase() || '?';
@@ -232,7 +235,7 @@ export default function ProfileScreen() {
               onPress={() => router.push('/profile/settings')}
               activeOpacity={0.7}
             >
-              <Text style={styles.bioEmpty}>Añade una descripción en ajustes…</Text>
+              <Text style={styles.bioEmpty}>{t('profile.bioEmpty')}</Text>
             </TouchableOpacity>
           )}
 
@@ -244,7 +247,7 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.stat}>
               <Text style={styles.statNum}>{social.followers}</Text>
-              <Text style={styles.statLabel}>{social.followers === 1 ? 'seguidor' : 'seguidores'}</Text>
+              <Text style={styles.statLabel}>{social.followers === 1 ? t('profile.follower') : t('profile.followers')}</Text>
             </View>
             {/* Estas dos abren la lista correspondiente */}
             <TouchableOpacity
@@ -253,7 +256,7 @@ export default function ProfileScreen() {
               onPress={() => router.push('/profile/lists?tab=following' as Href)}
             >
               <Text style={[styles.statNum, styles.statLink]}>{social.following}</Text>
-              <Text style={styles.statLabel}>siguiendo</Text>
+              <Text style={styles.statLabel}>{t('profile.following')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.stat}
@@ -261,7 +264,7 @@ export default function ProfileScreen() {
               onPress={() => router.push('/profile/lists?tab=liked' as Href)}
             >
               <Text style={[styles.statNum, styles.statLink]}>{social.liked}</Text>
-              <Text style={styles.statLabel}>me gusta</Text>
+              <Text style={styles.statLabel}>{t('profile.likes')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -270,7 +273,7 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionAccent, { backgroundColor: Colors.emerald }]} />
-            <Text style={styles.sectionTitle}>Libros publicados</Text>
+            <Text style={styles.sectionTitle}>{t('profile.published')}</Text>
           </View>
 
           {loading ? (
@@ -280,7 +283,7 @@ export default function ProfileScreen() {
           ) : stories.length === 0 ? (
             <View style={styles.sectionEmpty}>
               <Text style={styles.sectionEmptyText}>
-                Aún no has publicado ningún libro.
+                {t('profile.noBooks')}
               </Text>
               <TouchableOpacity
                 onPress={() => router.push('/(tabs)/write')}
@@ -288,7 +291,7 @@ export default function ProfileScreen() {
                 activeOpacity={0.8}
               >
                 <MaterialIcons name="edit" size={15} color="#000" />
-                <Text style={styles.writeBtnText}>Empezar a escribir</Text>
+                <Text style={styles.writeBtnText}>{t('profile.startWriting')}</Text>
               </TouchableOpacity>
             </View>
           ) : (

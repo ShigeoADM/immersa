@@ -23,6 +23,7 @@ import { Colors } from '@/constants/theme';
 import { AppHeader } from '@/components/app-header';
 import { cleanupDeletedStories } from '@/services/notifications';
 import { setSaved } from '@/services/social';
+import { statusLabel, useT } from '@/i18n';
 
 interface LibraryEntry {
   storyId: string;
@@ -60,6 +61,7 @@ function BookCard({
   onRemove: () => void;
   showProgress: boolean;
 }) {
+  const t = useT();
   const fmtColor =
     Colors.formatColors[entry.format as keyof typeof Colors.formatColors] ?? Colors.emerald;
 
@@ -84,7 +86,7 @@ function BookCard({
           <Text style={styles.cardTitle} numberOfLines={2}>{entry.title}</Text>
           {entry.status ? (
             <Text style={styles.cardStatus}>
-              {STATUS_LABELS[entry.status] ?? entry.status}
+              {statusLabel(entry.status)}
             </Text>
           ) : null}
           {showProgress && entry.lastChapterTitle ? (
@@ -102,7 +104,7 @@ function BookCard({
           {showProgress && onContinue ? (
             <TouchableOpacity style={styles.continueBtn} onPress={onContinue} activeOpacity={0.8}>
               <MaterialIcons name="play-arrow" size={14} color="#000" />
-              <Text style={styles.continueBtnText}>Continuar</Text>
+              <Text style={styles.continueBtnText}>{t('common.continue')}</Text>
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity style={styles.removeBtn} onPress={onRemove} activeOpacity={0.7}>
@@ -136,6 +138,7 @@ function Section({
 
 // ── Pantalla principal ────────────────────────────────────────────────────────
 export default function BibliotecaScreen() {
+  const t = useT();
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
@@ -224,16 +227,16 @@ export default function BibliotecaScreen() {
           <View style={styles.guestIcon}>
             <MaterialIcons name="library-books" size={36} color={Colors.textMuted} />
           </View>
-          <Text style={styles.guestTitle}>Tu biblioteca está vacía</Text>
+          <Text style={styles.guestTitle}>{t('library.emptyTitle')}</Text>
           <Text style={styles.guestText}>
-            Inicia sesión para guardar libros y llevar el control de tu lectura.
+            {t('library.emptyBody')}
           </Text>
           <TouchableOpacity
             style={styles.loginBtn}
             activeOpacity={0.85}
             onPress={() => router.push('/auth/login')}
           >
-            <Text style={styles.loginBtnText}>Iniciar sesión</Text>
+            <Text style={styles.loginBtnText}>{t('common.login')}</Text>
           </TouchableOpacity>
         </SafeAreaView>
       </View>
@@ -253,7 +256,7 @@ export default function BibliotecaScreen() {
 
       <AppHeader />
       <View style={styles.headerWrap}>
-        <Text style={styles.headerTitle}>Biblioteca</Text>
+        <Text style={styles.headerTitle}>{t('library.title')}</Text>
       </View>
 
       {loading ? (
@@ -265,11 +268,11 @@ export default function BibliotecaScreen() {
 
           {/* ── Seguir leyendo ── */}
           <Section
-            title="Seguir leyendo"
+            title={t('library.reading')}
             accentColor={Colors.emerald}
             empty={
               <Text style={styles.emptyText}>
-                Los libros que empieces a leer aparecerán aquí automáticamente.
+                {t('library.readingEmpty')}
               </Text>
             }
           >
@@ -295,11 +298,11 @@ export default function BibliotecaScreen() {
 
           {/* ── Leer más tarde ── */}
           <Section
-            title="Leer más tarde"
+            title={t('library.later')}
             accentColor={Colors.aqua}
             empty={
               <Text style={styles.emptyText}>
-                Guarda libros que quieras leer más adelante desde su ficha.
+                {t('library.laterEmpty')}
               </Text>
             }
           >
