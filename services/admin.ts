@@ -2,6 +2,7 @@
 // (constants/permissions.ts), pero quien las autoriza de verdad son las reglas de
 // Firestore (firestore.rules).
 
+import { ts } from '@/i18n';
 import {
   addDoc, arrayRemove, arrayUnion, collection, deleteDoc, deleteField, doc, getDoc, getDocs,
   limit, orderBy, query, setDoc, updateDoc, where,
@@ -32,7 +33,7 @@ const toAdminUser = (uid: string, d: any): AdminUser => {
   const role: Role | null = d?.role === 'owner' || d?.role === 'admin' ? d.role : null;
   return {
     uid,
-    name: d?.displayName || d?.username || 'Sin nombre',
+    name: d?.displayName || d?.username || ts('Sin nombre'),
     email: d?.email ?? '',
     role,
     permissions: role && Array.isArray(d?.permissions) ? d.permissions : [],
@@ -121,6 +122,13 @@ export async function adminDeleteStory(storyId: string, reason: string) {
       type: 'admin',
       title: 'Tu novela ha sido eliminada',
       body: `Tu novela "${title ?? ''}" ha sido eliminada por un administrador.${motive}`,
+      tx: {
+        title: 'Tu novela ha sido eliminada',
+        body: reason.trim()
+          ? 'Tu novela "{story}" ha sido eliminada por un administrador. Motivo: {reason}'
+          : 'Tu novela "{story}" ha sido eliminada por un administrador.',
+        p: { story: title ?? '', reason: reason.trim() },
+      },
       createdAt: new Date().toISOString(),
       read: false,
       storyId,

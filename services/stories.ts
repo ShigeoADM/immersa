@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { belongsToStory, deleteStoredFile, isStoredFile } from '@/services/media';
-import { formatNumber, t } from '@/i18n';
+import { formatNumber, t, ts } from '@/i18n';
 
 export type DeletedBy = 'author' | 'admin';
 
@@ -155,7 +155,7 @@ export async function duplicatePage(storyId: string, chapterId: string, pageId: 
   await migrateChapterRefsToIds(storyId, chapterId);
   const pages = await orderedPages(storyId, chapterId);
   const idx = pages.findIndex(p => p.id === pageId);
-  if (idx < 0) throw new Error('La página ya no existe');
+  if (idx < 0) throw new Error(ts('La página ya no existe'));
 
   const batch = writeBatch(db);
   const copyRef = doc(collection(db, pagesPath(storyId, chapterId)));
@@ -253,7 +253,7 @@ export async function coverUsedByAnotherStory(uid: string | undefined | null, co
 // historia nueva apunta a los mismos archivos.
 export async function importStory(data: any, uid: string): Promise<{ id: string; title: string; format: string }> {
   if (!data || data.app !== 'Immersa' || typeof data.story !== 'object' || !Array.isArray(data.chapters)) {
-    throw new Error('Ese archivo no es una copia de seguridad de Immersa.');
+    throw new Error(ts('Ese archivo no es una copia de seguridad de Immersa.'));
   }
   const now = new Date().toISOString();
   const {

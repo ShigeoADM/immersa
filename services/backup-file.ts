@@ -1,3 +1,8 @@
+import { ts } from '@/i18n';
+
+// Avisos pensados para enseñarse tal cual a quien importa una copia
+export class BackupError extends Error { name = 'BackupError'; }
+
 // Archivo de copia de seguridad de una historia (.immersa).
 //
 // Por dentro son los mismos datos que antes se exportaban en .json, pero comprimidos y
@@ -59,11 +64,11 @@ export async function decodeBackup(buffer: ArrayBuffer): Promise<any> {
   let body = scramble(bytes.subarray(MAGIC.length + 1));
   if (version === 1) {
     if (typeof g.DecompressionStream !== 'function') {
-      throw new Error('Este navegador no puede abrir la copia. Prueba con uno más reciente.');
+      throw new BackupError(ts('Este navegador no puede abrir la copia. Prueba con uno más reciente.'));
     }
     body = await pipe(body, new g.DecompressionStream('gzip'));
   } else if (version !== 2) {
-    throw new Error('Esta copia es de una versión más nueva de Immersa.');
+    throw new BackupError(ts('Esta copia es de una versión más nueva de Immersa.'));
   }
   return JSON.parse(new g.TextDecoder().decode(body));
 }

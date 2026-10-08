@@ -1283,7 +1283,7 @@ export default function PageEditorScreen() {
       const discard = () => { clearDraft(); draftResolvedRef.current = true; };
       const message = ts('Hay cambios de esta página que no llegaste a guardar. ¿Quieres recuperarlos?');
       if (Platform.OS === 'web') {
-        if ((window as any).confirm(`Borrador sin guardar\n\n${message}`)) restore(); else discard();
+        if ((window as any).confirm(`${ts('Borrador sin guardar')}\n\n${message}`)) restore(); else discard();
       } else {
         AppAlert.alert(ts('Borrador sin guardar'), message, [
           { text: ts('Descartar'), style: 'destructive', onPress: discard },
@@ -1794,7 +1794,7 @@ export default function PageEditorScreen() {
             <Text style={[styles.sectionLabel, { flex: 1 }]}>{ts('Animación al pasar esta página')}</Text>
             <View style={styles.foldValue}>
               <MaterialIcons name={transitionOption.icon as any} size={13} color={Colors.emerald} />
-              <Text style={styles.foldValueText}>{transitionOption.label}</Text>
+              <Text style={styles.foldValueText}>{ts(transitionOption.label)}</Text>
             </View>
             <MaterialIcons name={transitionOpen ? 'expand-less' : 'expand-more'} size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
@@ -2942,8 +2942,10 @@ export default function PageEditorScreen() {
           {jumpEnabled && (
             <Text style={styles.nextPageHint}>
               {chapterPageIds[parseInt(nextPageInput, 10) - 1]
-                ? `Al pasar esta página el lector saltará a la página ${nextPageInput}`
-                : `El capítulo tiene ${chapterPageIds.length} página${chapterPageIds.length === 1 ? '' : 's'}: elige una de ellas`}
+                ? ts('Al pasar esta página el lector saltará a la página {n}', { n: nextPageInput })
+                : (chapterPageIds.length === 1
+                    ? ts('El capítulo tiene 1 página: elige una de ellas')
+                    : ts('El capítulo tiene {n} páginas: elige una de ellas', { n: chapterPageIds.length }))}
             </Text>
           )}
         </View>

@@ -47,7 +47,7 @@ export function CommentItem({ comment, role, showLocation = true, canDelete, onD
             {showLocation && (
               // Webnovel no tiene páginas: los comentarios son del capítulo
               <Text style={styles.location}>
-                Cap. {comment.chapterNumber}{comment.pageNumber > 0 ? ` · Pág. ${comment.pageNumber}` : ''}
+                {ts('Cap. {n}', { n: comment.chapterNumber })}{comment.pageNumber > 0 ? ts(' · Pág. {n}', { n: comment.pageNumber }) : ''}
               </Text>
             )}
             {onReport && (

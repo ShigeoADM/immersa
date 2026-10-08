@@ -1,5 +1,6 @@
 // Eliminar la cuenta del usuario y sus datos.
 
+import { ts } from '@/i18n';
 import { EmailAuthProvider, deleteUser, reauthenticateWithCredential } from 'firebase/auth';
 import { collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
@@ -18,7 +19,7 @@ async function clearCollection(path: string) {
 // Los comentarios dejados en historias de otras personas no se borran.
 export async function deleteAccount(password: string) {
   const user = auth.currentUser;
-  if (!user || !user.email) throw new Error('No hay ninguna sesión iniciada.');
+  if (!user || !user.email) throw new Error(ts('No hay ninguna sesión iniciada.'));
   await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
 
   const uid = user.uid;

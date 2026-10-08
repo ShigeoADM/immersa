@@ -20,7 +20,7 @@ import { AppAlert } from '@/components/app-dialog';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { PasswordInput } from '@/components/password-input';
 import { IS_DEV_SITE } from '@/constants/site';
-import { useT } from '@/i18n';
+import { useT, ts } from '@/i18n';
 import { LanguagePicker } from '@/components/language-picker';
 
 export default function LoginScreen() {
@@ -34,7 +34,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      setError('Rellena todos los campos.');
+      setError(ts('Rellena todos los campos.'));
       return;
     }
     setError('');

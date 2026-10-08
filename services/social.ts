@@ -78,6 +78,7 @@ export async function setChapterLike(
       type: 'like',
       title: 'Nuevo me gusta',
       body: `A ${me.name} le gusta un capítulo de "${story.title ?? 'tu novela'}".`,
+      tx: { title: 'Nuevo me gusta', body: 'A {name} le gusta un capítulo de "{story}".', p: { name: me.name, story: story.title ?? '' } },
       storyId,
     });
   }
@@ -122,6 +123,7 @@ export async function setLike(
       type: 'like',
       title: 'Nuevo me gusta',
       body: `A ${me.name} le gusta "${story.title ?? 'tu novela'}".`,
+      tx: { title: 'Nuevo me gusta', body: 'A {name} le gusta "{story}".', p: { name: me.name, story: story.title ?? '' } },
       storyId,
     });
   }
@@ -156,6 +158,7 @@ export async function setFollow(me: Me, authorUid: string, follow: boolean) {
       type: 'follow',
       title: 'Nuevo seguidor',
       body: `${me.name} ha empezado a seguirte.`,
+      tx: { title: 'Nuevo seguidor', body: '{name} ha empezado a seguirte.', p: { name: me.name } },
     });
   }
 }

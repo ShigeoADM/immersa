@@ -454,7 +454,7 @@ export default function AdminScreen() {
                     />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.rowTitle} numberOfLines={1}>
-                        {member.name}{isMe ? ' (tú)' : ''}
+                        {member.name}{isMe ? ts(' (tú)') : ''}
                       </Text>
                       <Text style={styles.rowSub} numberOfLines={1}>{member.email}</Text>
                     </View>

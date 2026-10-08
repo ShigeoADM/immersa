@@ -1,3 +1,4 @@
+import { ts } from '@/i18n';
 import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { Platform } from 'react-native';
 import { storage } from '@/config/firebase';
@@ -8,8 +9,8 @@ function readLocalFile(localUri: string, timeoutMs: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.onload    = () => resolve(xhr.response);
-    xhr.onerror   = () => reject(new Error('No se pudo leer el archivo'));
-    xhr.ontimeout = () => reject(new Error('Tiempo de espera agotado al leer el archivo'));
+    xhr.onerror   = () => reject(new Error(ts('No se pudo leer el archivo')));
+    xhr.ontimeout = () => reject(new Error(ts('Tiempo de espera agotado al leer el archivo')));
     xhr.responseType = 'blob';
     xhr.timeout = timeoutMs;
     xhr.open('GET', localUri, true);

@@ -1,3 +1,4 @@
+import { ts } from '@/i18n';
 import React, { useState } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet, type TextInputProps } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -25,7 +26,7 @@ export function PasswordInput({ style, ...props }: TextInputProps) {
         activeOpacity={0.7}
         hitSlop={6}
         accessibilityRole="button"
-        accessibilityLabel={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+        accessibilityLabel={visible ? ts('Ocultar contraseña') : ts('Mostrar contraseña')}
       >
         <MaterialIcons name={visible ? 'visibility-off' : 'visibility'} size={20} color={Colors.textMuted} />
       </TouchableOpacity>

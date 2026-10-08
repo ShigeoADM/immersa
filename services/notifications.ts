@@ -32,6 +32,10 @@ export type NotificationType =
   | 'like' | 'comment' | 'follow'               // de otros usuarios hacia ti
   | 'news' | 'admin';                           // del equipo
 
+// Plantilla (en español, con {huecos}) de los avisos que escribe la app: la pantalla de
+// notificaciones la traduce al idioma de quien lo lee. title/body quedan como respaldo.
+export type NotificationTx = { title?: string; body?: string; p?: Record<string, string | number> };
+
 export interface AppNotification {
   id: string;
   type: NotificationType;
@@ -41,6 +45,7 @@ export interface AppNotification {
   read: boolean;
   storyId?: string;
   fromUid?: string;
+  tx?: NotificationTx;
 }
 
 export const BACKGROUND_SYNC_TASK = 'immersa-notifications-sync';
@@ -100,6 +105,11 @@ async function notifyNewChapter(
     type: 'chapter',
     title: 'Nuevo capítulo',
     body: `"${story.title ?? entry.title ?? ''}" tiene un capítulo nuevo${chapterTitle}.`,
+    tx: {
+      title: 'Nuevo capítulo',
+      body: story.lastChapterTitle ? '"{story}" tiene un capítulo nuevo: {chapter}.' : '"{story}" tiene un capítulo nuevo.',
+      p: { story: story.title ?? entry.title ?? '', chapter: story.lastChapterTitle ?? '' },
+    },
     createdAt: new Date().toISOString(),
     read: false,
     storyId,
@@ -136,6 +146,11 @@ async function syncFollowing(uid: string): Promise<number> {
           type: 'new_story',
           title: 'Nueva historia',
           body: `${d.authorName ?? 'Un autor que sigues'} ha publicado "${d.title ?? ''}".`,
+          tx: {
+            title: 'Nueva historia',
+            body: d.authorName ? '{author} ha publicado "{story}".' : 'Un autor que sigues ha publicado "{story}".',
+            p: { author: d.authorName ?? '', story: d.title ?? '' },
+          },
           createdAt: new Date().toISOString(),
           read: false,
           storyId: s.id,
@@ -192,6 +207,7 @@ async function cleanupDeletedStoriesImpl(uid: string): Promise<number> {
           type: 'story_deleted',
           title: 'Novela eliminada',
           body: `La novela "${title}" ${where_} ha sido eliminada${by}.`,
+          tx: { title: 'Novela eliminada', body: `La novela "{story}" ${where_} ha sido eliminada${by}.`, p: { story: title } },
           createdAt: new Date().toISOString(),
           read: false,
           storyId,
@@ -342,7 +358,7 @@ export async function markAllNotificationsRead(uid: string) {
 // notificaciones de otro usuario, y con fromUid = quien lo envía.
 export async function notifyUser(
   toUid: string,
-  n: { type: 'like' | 'comment' | 'follow'; title: string; body: string; storyId?: string },
+  n: { type: 'like' | 'comment' | 'follow'; title: string; body: string; storyId?: string; tx?: NotificationTx },
 ) {
   const me = auth.currentUser;
   if (!me || me.uid === toUid) return;

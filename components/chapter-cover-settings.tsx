@@ -449,14 +449,14 @@ function IntroStyleEditor({ image, value, onChange, number, title }: {
       </View>
 
       <LineEditor
-        label="Primera línea" auto={ts('«Capítulo {n}»', { n: number })} text={value.line1} hidden={value.hide1}
+        label={ts('Primera línea')} auto={ts('«Capítulo {n}»', { n: number })} text={value.line1} hidden={value.hide1}
         onChange={p => onChange({ ...value, line1: p.text, hide1: p.hidden })}
       />
       <Text style={styles.sublabel}>{ts('Color')}</Text>
       <ColorPicker value={value.color1} onPick={hex => set({ color1: hex })} auto />
 
       <LineEditor
-        label="Segunda línea" auto="El título del capítulo" text={value.line2} hidden={value.hide2}
+        label={ts('Segunda línea')} auto={ts('El título del capítulo')} text={value.line2} hidden={value.hide2}
         onChange={p => onChange({ ...value, line2: p.text, hide2: p.hidden })}
       />
       <Text style={styles.sublabel}>{ts('Color')}</Text>

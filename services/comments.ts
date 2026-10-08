@@ -53,6 +53,7 @@ export async function addComment(
     notifyUser(story.authorUid, {
       type: 'comment',
       title: `Nuevo comentario en "${story.title ?? 'tu novela'}"`,
+      tx: { title: 'Nuevo comentario en "{story}"', p: { story: story.title ?? '' } },
       body: `${data.userName}: ${data.text.length > 90 ? data.text.slice(0, 90) + '…' : data.text}`,
       storyId,
     }).catch(e => console.error('Error avisando al autor del comentario:', e));

@@ -88,7 +88,7 @@ export default function WriteScreen() {
         data = await decodeBackup(await (await fetch(result.assets[0].uri)).arrayBuffer());
       } catch (e: any) {
         // Los avisos propios (navegador antiguo, copia más nueva) se enseñan tal cual
-        if (e instanceof Error && /navegador|versión/.test(e.message)) throw e;
+        if (e?.name === 'BackupError') throw e;
         throw new Error(t('write.importBadFile'));
       }
       const created = await importStory(data, user.uid);

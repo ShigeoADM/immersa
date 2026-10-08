@@ -2,6 +2,7 @@
 // Las crea cualquier usuario; las ve y resuelve el equipo de moderación (permiso
 // 'deleteStories') desde el panel de administración.
 
+import { ts } from '@/i18n';
 import { collection, deleteDoc, doc, getDocs, limit, orderBy, query, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
 
@@ -42,7 +43,7 @@ export interface Report {
 // Devuelve false si ese usuario ya lo había denunciado.
 export async function sendReport(target: ReportTarget, reason: ReportReason, details: string): Promise<boolean> {
   const uid = auth.currentUser?.uid;
-  if (!uid) throw new Error('Inicia sesión para denunciar.');
+  if (!uid) throw new Error(ts('Inicia sesión para denunciar.'));
   const targetId = target.type === 'comment' ? target.commentId : target.storyId;
   try {
     await setDoc(doc(db, 'reports', `${target.type}_${targetId}_${uid}`), {

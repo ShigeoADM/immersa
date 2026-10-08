@@ -16,7 +16,7 @@ import {
   type AppNotification, type NotificationType,
   deleteNotification, markAllNotificationsRead, markNotificationRead,
 } from '@/services/notifications';
-import { t, useT } from '@/i18n';
+import { t, useT, ts } from '@/i18n';
 
 const TYPE_ICON: Record<NotificationType, { icon: string; color: string }> = {
   story_deleted: { icon: 'delete-outline',   color: '#FF6B6B' },
@@ -164,8 +164,8 @@ export default function NotificationsScreen() {
                   <MaterialIcons name={t.icon as any} size={20} color={t.color} />
                 </View>
                 <View style={styles.itemText}>
-                  <Text style={styles.itemTitle} numberOfLines={1}>{n.title}</Text>
-                  <Text style={styles.itemBody}>{n.body}</Text>
+                  <Text style={styles.itemTitle} numberOfLines={1}>{n.tx?.title ? ts(n.tx.title, n.tx.p) : ts(n.title)}</Text>
+                  <Text style={styles.itemBody}>{n.tx?.body ? ts(n.tx.body, n.tx.p) : n.body}</Text>
                   <Text style={styles.itemTime}>{timeAgo(n.createdAt)}</Text>
                 </View>
                 {!n.read && <View style={styles.unreadDot} />}

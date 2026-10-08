@@ -23,7 +23,7 @@ import { MIN_AGE, ageOf, buildBirthDate } from '@/constants/age';
 import { BirthDateInput, EMPTY_BIRTH_DATE } from '@/components/birth-date-input';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { PasswordInput } from '@/components/password-input';
-import { useT } from '@/i18n';
+import { useT, ts } from '@/i18n';
 
 export default function RegisterScreen() {
   const t = useT();
@@ -40,7 +40,7 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     if (!username.trim() || !email.trim() || !password || !confirm) {
-      setError('Rellena todos los campos.');
+      setError(ts('Rellena todos los campos.'));
       return;
     }
     if (password !== confirm) {

@@ -345,7 +345,7 @@ export default function ChapterEditorWebnovelScreen() {
               selectionRef.current = e.nativeEvent.selection;
               if (forcedSelection) setForcedSelection(undefined);
             }}
-            placeholder={'Escribe aquí el capítulo…\n\nSelecciona texto y pulsa los botones de arriba para ponerlo en negrita o cursiva.'}
+            placeholder={ts('Escribe aquí el capítulo…') + '\n\n' + ts('Selecciona texto y pulsa los botones de arriba para ponerlo en negrita o cursiva.')}
             placeholderTextColor={Colors.textMuted}
             multiline
             textAlignVertical="top"

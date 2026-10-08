@@ -7,6 +7,7 @@
 // Lo mantiene al día la app de cada usuario (AuthContext) cada vez que cambia su
 // documento. Las reglas solo aceptan un `role` que coincida con el real de users/{uid}.
 
+import { ts } from '@/i18n';
 import type { User } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { db } from '@/config/firebase';
@@ -23,7 +24,7 @@ export interface PublicProfile {
 
 const fromData = (uid: string, d: any): PublicProfile => ({
   uid,
-  displayName: d?.displayName || 'Sin nombre',
+  displayName: d?.displayName || ts('Sin nombre'),
   avatarUrl: d?.avatarUrl || '',
   bio: d?.bio || '',
   role: d?.role === 'owner' || d?.role === 'admin' ? d.role : null,

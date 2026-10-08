@@ -47,6 +47,9 @@ export async function setSuspended(uid: string, suspended: boolean) {
     body: suspended
       ? 'Tu cuenta ha sido suspendida por incumplir las normas. Puedes seguir leyendo, pero no publicar ni comentar.'
       : 'Se ha retirado la suspensión de tu cuenta. Ya puedes volver a publicar y comentar.',
+    tx: suspended
+      ? { title: 'Cuenta suspendida', body: 'Tu cuenta ha sido suspendida por incumplir las normas. Puedes seguir leyendo, pero no publicar ni comentar.' }
+      : { title: 'Suspensión retirada', body: 'Se ha retirado la suspensión de tu cuenta. Ya puedes volver a publicar y comentar.' },
     createdAt: new Date().toISOString(),
     read: false,
     fromUid: moderator,

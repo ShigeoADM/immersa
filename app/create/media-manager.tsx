@@ -74,14 +74,14 @@ export default function MediaManagerScreen() {
       rememberMediaNames(savedNames);
       const chapters = sortChapters(chaptersSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
       await Promise.all(chapters.map(async (ch, ci) => {
-        add(ch.coverUrl, 'image', `Cap. ${ci + 1} · ilustración`);
-        add(ch.introMusicUrl, 'music', `Cap. ${ci + 1} · transición`);
+        add(ch.coverUrl, 'image', ts('Cap. {n} · ilustración', { n: ci + 1 }));
+        add(ch.introMusicUrl, 'music', ts('Cap. {n} · transición', { n: ci + 1 }));
         const pages = await getDocs(query(
           collection(db, 'stories', storyId, 'chapters', ch.id, 'pages'), orderBy('order', 'asc'),
         ));
         pages.docs.forEach((p, pi) => {
           const d = p.data();
-          const where = `Cap. ${ci + 1} · pág. ${pi + 1}`;
+          const where = ts('Cap. {n} · pág. {p}', { n: ci + 1, p: pi + 1 });
           add(d.backgroundUrl, 'image', where);
           if (typeof d.musicUrl === 'string') add(d.musicUrl, 'music', where);
           pageSfxCues(d).forEach(c => add(c.url, 'sfx', where));
@@ -242,7 +242,7 @@ export default function MediaManagerScreen() {
             {isUnused
               ? (file.stored ? ts('No la usa ninguna página') : ts('Enlace externo sin usar'))
               : `${file.stored ? '' : ts('Enlace externo · ')}${file.uses.length > 6
-                  ? `${file.uses.slice(0, 6).join(', ')} y ${file.uses.length - 6} más`
+                  ? ts('{list} y {n} más', { list: file.uses.slice(0, 6).join(', '), n: file.uses.length - 6 })
                   : file.uses.join(', ')}`}
           </Text>
         </View>
@@ -299,7 +299,7 @@ export default function MediaManagerScreen() {
               if (list.length === 0) return null;
               return (
                 <View key={kind} style={styles.section}>
-                  <Text style={styles.sectionLabel}>{KIND_LABEL[kind]} · {list.length}</Text>
+                  <Text style={styles.sectionLabel}>{ts(KIND_LABEL[kind])} · {list.length}</Text>
                   {list.map(renderFile)}
                 </View>
               );

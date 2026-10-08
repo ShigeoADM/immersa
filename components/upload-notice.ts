@@ -1,3 +1,4 @@
+import { ts } from '@/i18n';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppAlert } from '@/components/app-dialog';
 import { UPLOAD_NOTICE } from '@/constants/legal';
@@ -14,12 +15,12 @@ AsyncStorage.getItem(KEY).then(v => { if (v) seen = true; }).catch(() => {});
 export function withUploadNotice(upload: () => void) {
   if (seen) { upload(); return; }
   AppAlert.alert(
-    'Antes de subir archivos',
-    UPLOAD_NOTICE.join('\n\n'),
+    ts('Antes de subir archivos'),
+    UPLOAD_NOTICE.map(x => ts(x)).join('\n\n'),
     [
-      { text: 'Cancelar', style: 'cancel' },
+      { text: ts('Cancelar'), style: 'cancel' },
       {
-        text: 'Entendido',
+        text: ts('Entendido'),
         onPress: () => {
           seen = true;
           AsyncStorage.setItem(KEY, '1').catch(() => {});
