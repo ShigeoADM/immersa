@@ -133,9 +133,8 @@ const STEPS: Step[] = [
   {
     target: 'adult', boxAt: 'above',
     pieces: [{
-      t: 'Marca esta casilla si tu novela tiene contenido para adultos: sexo explícito, gore, agresiones sexuales o violencia extrema.\n\n'
-        + 'Eso vale para el texto. Las imágenes no pueden mostrar desnudos, actos sexuales ni violencia real, ni siquiera con la casilla marcada. '
-        + 'La violencia en ilustraciones que son claramente ficción sí está permitida.',
+      t: 'Marca esta casilla si tu novela tiene contenido para adultos: sexo explícito, gore, agresiones sexuales o violencia extrema en el texto, o ilustraciones con desnudo parcial.\n\n'
+        + 'Las imágenes tienen un límite que la casilla no cambia: nunca pueden mostrar actos sexuales ni genitales a la vista. Las normas completas están en los Términos de uso.',
     }],
   },
   {

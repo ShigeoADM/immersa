@@ -15,7 +15,7 @@ export const LEGAL_OWNER_NAME = 'Enrique Echevarría Pérez';
 // Correo de contacto para cuestiones legales y de privacidad.
 export const LEGAL_CONTACT_EMAIL = 'elcodemh@gmail.com';
 
-export const LEGAL_UPDATED_AT = '3 de octubre de 2026';
+export const LEGAL_UPDATED_AT = '8 de octubre de 2026';
 
 const CONTACT = LEGAL_CONTACT_EMAIL
   ? `escribiendo a ${LEGAL_CONTACT_EMAIL}`
@@ -50,13 +50,25 @@ export const LEGAL_DOCS: Record<LegalDoc, { title: string; sections: LegalSectio
       },
       {
         title: '4. Contenido para adultos',
-        body: `Si una historia contiene material sexual explícito, gore o violencia extrema, debes marcarla como contenido +18 e indicar el motivo. Ese contenido solo se muestra a usuarios de ${ADULT_AGE} años o más. Marcar mal una historia puede suponer su retirada.
+        body: `Si una historia contiene material sexual explícito, gore, violencia extrema o ilustraciones con desnudo parcial, debes marcarla como contenido +18 e indicar el motivo. Ese contenido solo se muestra a usuarios de ${ADULT_AGE} años o más. Marcar mal una historia puede suponer su retirada.
 
-Esto se refiere al texto de la historia. Las imágenes (portadas, fondos y fotos de perfil) nunca pueden mostrar desnudos, actos sexuales ni violencia real, tampoco en historias +18.`,
+Eso se refiere al texto de la historia. Las imágenes (portadas, fondos e ilustraciones) tienen sus propias normas:
+
+· Nunca pueden mostrar actos sexuales ni contenido sexual, tampoco en historias +18.
+
+· No se permiten fotografías ni imágenes realistas de desnudos, ni violencia real.
+
+· En ilustraciones (dibujos) se permite el desnudo parcial sin intención sexual, como pechos o nalgas, siempre que la imagen no se centre solo en eso. Una historia con ilustraciones así debe marcarse como +18.
+
+· Los genitales y el ano no pueden mostrarse nunca. Si aparecen en una escena que no es sexual (una situación cómica, por ejemplo), tienen que ir tapados o censurados, al estilo del manga y el anime. Así censurados no obligan a marcar la historia como +18.
+
+· Nunca, en ningún caso, se permiten desnudos de menores ni de personajes que lo sean o lo parezcan.
+
+· Las fotos de perfil no pueden contener desnudos.`,
       },
       {
         title: '5. Lo que no está permitido',
-        body: 'No se permite: contenido sexual con menores o que los sexualice; imágenes con desnudos, contenido sexual explícito o violencia real; incitación al odio, acoso o amenazas; contenido ilegal o que promueva actividades ilegales; plagio o infracción de derechos de autor; spam, engaños o suplantación de identidad; intentar manipular estadísticas, acceder a cuentas ajenas o dañar el servicio.',
+        body: 'No se permite: contenido sexual con menores o que los sexualice; imágenes con contenido sexual, con genitales a la vista, con desnudos fotográficos o realistas, o con violencia real; cualquier desnudo de menores o de personajes que lo parezcan; incitación al odio, acoso o amenazas; contenido ilegal o que promueva actividades ilegales; plagio o infracción de derechos de autor; spam, engaños o suplantación de identidad; intentar manipular estadísticas, acceder a cuentas ajenas o dañar el servicio.',
       },
       {
         title: '6. Moderación y denuncias',

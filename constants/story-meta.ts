@@ -21,6 +21,7 @@ export const ADULT_CONTENT = [
   { key: 'sexual',    label: 'Contenido sexual' },
   { key: 'gore',      label: 'Gore' },
   { key: 'violence',  label: 'Violencia extrema' },
+  { key: 'nudity',    label: 'Desnudo parcial en ilustraciones' },
 ];
 
 export const audienceLabel = (key?: string) => AUDIENCES.find(a => a.key === key)?.label ?? null;
