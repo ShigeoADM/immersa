@@ -9,6 +9,9 @@ export const GENRES = [
   'Histórico', 'Sobrenatural', 'Slice of Life', 'Cyberpunk',
 ];
 
+// Idioma en que está escrita la historia (se guarda tal cual; 'Otro' se enseña traducido)
+export const STORY_LANGUAGES = ['Español', 'English', '日本語', 'Português', 'Français', 'Deutsch', 'Otro'];
+
 export const AUDIENCES = [
   { key: 'u15',   label: 'Menores de 15 años' },
   { key: '15-18', label: 'Entre 15 y 18 años' },

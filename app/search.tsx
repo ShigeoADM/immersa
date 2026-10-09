@@ -10,9 +10,9 @@ import { collection, getDocs, limit, query, where } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { AppHeader } from '@/components/app-header';
-import { GENRES } from '@/constants/story-meta';
+import { AUDIENCES, GENRES, STORY_LANGUAGES, audienceLabel } from '@/constants/story-meta';
 import { useAuth } from '@/context/AuthContext';
-import { genreLabel, useT, formatLabel } from '@/i18n';
+import { genreLabel, useT, formatLabel, ts } from '@/i18n';
 
 interface SearchStory {
   id: string;
@@ -23,6 +23,8 @@ interface SearchStory {
   authorName?: string;
   coverUrl?: string;
   genres?: string[];
+  language?: string;
+  audience?: string;
   isAdult?: boolean;
   likeCount?: number;
   publishedAt?: string;
@@ -36,7 +38,7 @@ const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-�
 
 // Buscador de historias. Firestore no tiene búsqueda de texto, así que se cargan las
 // historias publicadas una vez y se filtran en el móvil (título, autor, formato,
-// géneros y +18).
+// géneros, idioma, público y +18).
 export default function SearchScreen() {
   const t = useT();
   const router = useRouter();
@@ -47,6 +49,9 @@ export default function SearchScreen() {
   const [format, setFormat]   = useState<string | null>(null);
   const [genres, setGenres]   = useState<string[]>([]);
   const [hideAdult, setHideAdult] = useState(false);
+  const [languages, setLanguages] = useState<string[]>([]);
+  const [audiences, setAudiences] = useState<string[]>([]);
+  const [showMore, setShowMore]   = useState(false);
   const { isAdult, blocked } = useAuth();
   const isMinor = isAdult === false; // los menores nunca ven historias +18
 
@@ -74,6 +79,9 @@ export default function SearchScreen() {
         if (s.uid && blocked.has(s.uid)) return false; // autores bloqueados
         // La historia debe tener todos los géneros elegidos
         if (genres.length > 0 && !genres.every(g => s.genres?.includes(g))) return false;
+        // Idioma y público: vale cualquiera de los elegidos (sin idioma guardado es español)
+        if (languages.length > 0 && !languages.includes(s.language ?? 'Español')) return false;
+        if (audiences.length > 0 && !audiences.includes(s.audience ?? '')) return false;
         if (words.length === 0) return true;
         const haystack = normalize(`${s.title} ${s.subtitle ?? ''} ${s.authorName ?? ''}`);
         return words.every(w => haystack.includes(w));
@@ -81,12 +89,18 @@ export default function SearchScreen() {
       // Más gustadas primero; a igualdad, las más recientes
       .sort((a, b) =>
         (b.likeCount ?? 0) - (a.likeCount ?? 0) || (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
-  }, [stories, text, format, genres, hideAdult, isMinor, blocked]);
+  }, [stories, text, format, genres, languages, audiences, hideAdult, isMinor, blocked]);
 
   const toggleGenre = (g: string) =>
     setGenres(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
 
-  const hasFilters = !!format || genres.length > 0 || hideAdult || text.trim().length > 0;
+  const toggle = (set: React.Dispatch<React.SetStateAction<string[]>>) => (v: string) =>
+    set(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]);
+  const toggleLanguage = toggle(setLanguages);
+  const toggleAudience = toggle(setAudiences);
+  const moreCount = languages.length + audiences.length;
+
+  const hasFilters = !!format || genres.length > 0 || moreCount > 0 || hideAdult || text.trim().length > 0;
 
   return (
     <View style={styles.container}>
@@ -141,6 +155,16 @@ export default function SearchScreen() {
               <Text style={[styles.chipText, hideAdult && { color: '#000' }]}>{t('search.noAdult')}</Text>
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            style={[styles.chip, styles.moreChip, (showMore || moreCount > 0) && styles.moreChipOn]}
+            onPress={() => setShowMore(v => !v)}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="tune" size={13} color={showMore || moreCount > 0 ? Colors.emerald : Colors.textSecondary} />
+            <Text style={[styles.chipText, (showMore || moreCount > 0) && { color: Colors.emerald }]}>
+              {ts('Más filtros')}{moreCount > 0 ? ` · ${moreCount}` : ''}
+            </Text>
+          </TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.genreRow}>
           {GENRES.map(g => {
@@ -152,11 +176,37 @@ export default function SearchScreen() {
                 onPress={() => toggleGenre(g)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.chipText, on && { color: '#000' }]}>{g}</Text>
+                <Text style={[styles.chipText, on && { color: '#000' }]}>{genreLabel(g)}</Text>
               </TouchableOpacity>
             );
           })}
         </ScrollView>
+        {showMore && (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.genreRow}>
+              <Text style={styles.rowLabel}>{ts('Idioma')}</Text>
+              {STORY_LANGUAGES.map(l => {
+                const on = languages.includes(l);
+                return (
+                  <TouchableOpacity key={l} style={[styles.chip, on && styles.chipOn]} onPress={() => toggleLanguage(l)} activeOpacity={0.8}>
+                    <Text style={[styles.chipText, on && { color: '#000' }]}>{l === 'Otro' ? t('details.langOther') : l}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.genreRow}>
+              <Text style={styles.rowLabel}>{ts('Público')}</Text>
+              {AUDIENCES.map(a => {
+                const on = audiences.includes(a.key);
+                return (
+                  <TouchableOpacity key={a.key} style={[styles.chip, on && styles.chipOn]} onPress={() => toggleAudience(a.key)} activeOpacity={0.8}>
+                    <Text style={[styles.chipText, on && { color: '#000' }]}>{audienceLabel(a.key)}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </>
+        )}
       </View>
 
       {loading ? (
@@ -233,8 +283,11 @@ const styles = StyleSheet.create({
   },
   input:     { flex: 1, color: Colors.textPrimary, fontSize: 14, paddingVertical: 0 },
   filters:   { gap: 8, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  filterRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 16 },
-  genreRow:  { gap: 6, paddingHorizontal: 16 },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16 },
+  genreRow:  { gap: 6, paddingHorizontal: 16, alignItems: 'center' },
+  rowLabel:  { fontSize: 11, fontWeight: '700', color: Colors.textMuted, marginRight: 2 },
+  moreChip:  { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  moreChipOn: { borderColor: Colors.emerald },
   chip: {
     paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14,
     borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card,

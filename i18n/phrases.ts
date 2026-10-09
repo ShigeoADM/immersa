@@ -581,4 +581,9 @@ export const PHRASES: Record<string, { en: string; ja: string }> = {
   'Suspensión retirada': { en: 'Suspension lifted', ja: '停止が解除されました' },
   'Tu cuenta ha sido suspendida por incumplir las normas. Puedes seguir leyendo, pero no publicar ni comentar.': { en: 'Your account has been suspended for breaking the rules. You can keep reading, but not publish or comment.', ja: '規約違反のため、アカウントが停止されました。引き続き読むことはできますが、公開やコメントはできません。' },
   'Se ha retirado la suspensión de tu cuenta. Ya puedes volver a publicar y comentar.': { en: 'The suspension of your account has been lifted. You can publish and comment again.', ja: 'アカウントの停止が解除されました。再び公開やコメントができます。' },
+
+  // ── Buscador: más filtros ──
+  'Más filtros': { en: 'More filters', ja: 'その他の絞り込み' },
+  'Idioma': { en: 'Language', ja: '言語' },
+  'Público': { en: 'Audience', ja: '対象読者' },
 };

@@ -19,7 +19,7 @@ import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { AppAlert, useDialogAccent } from '@/components/app-dialog';
-import { ADULT_AUDIENCES, ADULT_CONTENT, AUDIENCES, GENRES, adultContentLabel, audienceLabel } from '@/constants/story-meta';
+import { ADULT_AUDIENCES, ADULT_CONTENT, AUDIENCES, GENRES, STORY_LANGUAGES, adultContentLabel, audienceLabel } from '@/constants/story-meta';
 import { useAuth } from '@/context/AuthContext';
 import { DesktopColumn } from '@/components/desktop-column';
 import { uploadImage, deleteStoredFile } from '@/services/media';
@@ -28,8 +28,6 @@ import { withUploadNotice } from '@/components/upload-notice';
 import { tutorialEvent, tutorialIntercept, tutorialZone } from '@/components/tutorial';
 import { genreLabel, statusLabel, useT } from '@/i18n';
 
-// Idioma en que está escrita la historia (se guarda tal cual; 'Otro' se enseña traducido)
-const LANGUAGES = ['Español', 'English', '日本語', 'Português', 'Français', 'Deutsch', 'Otro'];
 
 const STATUSES = [
   { key: 'ongoing',   label: 'En curso' },
@@ -404,7 +402,7 @@ export default function ModernoDetailsScreen() {
         </TouchableOpacity>
         {langOpen && (
           <View style={styles.dropdownBody}>
-            {LANGUAGES.map(l => (
+            {STORY_LANGUAGES.map(l => (
               <TouchableOpacity
                 key={l}
                 style={styles.dropdownRow}
