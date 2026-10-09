@@ -7,6 +7,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Image } from 'expo-image';
 import { useSafeKeepAwake } from '@/hooks/use-safe-keep-awake';
 import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import { db, auth } from '@/config/firebase';
@@ -52,6 +53,9 @@ export default function WebnovelReaderScreen() {
 
   const [loading, setLoading]   = useState(true);
   const [title, setTitle]       = useState('');
+  // Ilustración del capítulo, si el autor quiso enseñarla al abrirlo
+  const [cover, setCover]       = useState<string | null>(null);
+  const [coverRatio, setCoverRatio] = useState(16 / 9);
   const [content, setContent]   = useState('');
   // Me gusta del capítulo
   const [liked, setLiked]         = useState(false);
@@ -114,6 +118,8 @@ export default function WebnovelReaderScreen() {
         storyRef.current = storySnap.exists() ? storySnap.data() : null;
         if (chapterSnap.exists()) {
           setTitle(chapterSnap.data().title ?? '');
+          const cd = chapterSnap.data();
+          setCover(cd.coverUrl && cd.coverIntro === true ? cd.coverUrl : null);
           setContent(chapterSnap.data().content ?? '');
           setLikeCount(chapterSnap.data().likeCount ?? 0);
         }
@@ -355,6 +361,15 @@ export default function WebnovelReaderScreen() {
           onLayout={e => { viewportRef.current = e.nativeEvent.layout.height; }}
           onContentSizeChange={handleContentSizeChange}
         >
+          {cover && (
+            <Image
+              source={{ uri: cover }}
+              style={[styles.chapterCover, { aspectRatio: coverRatio }]}
+              contentFit="contain"
+              transition={200}
+              onLoad={e => { const { width, height } = e.source; if (width && height) setCoverRatio(width / height); }}
+            />
+          )}
           <Text style={[styles.chapterTitle, { color: theme.text, fontFamily: WEBNOVEL_FONT }]}>{title}</Text>
 
           {content.trim() ? (
@@ -494,6 +509,7 @@ const styles = StyleSheet.create({
   fontBtnLarge: { fontSize: 21, fontWeight: '700' },
   // Columna de lectura cómoda también en pantallas anchas
   content:      { paddingHorizontal: 22, paddingTop: 24, paddingBottom: 48, width: '100%', maxWidth: 720, alignSelf: 'center' },
+  chapterCover: { width: '100%', maxHeight: 560, alignSelf: 'center', borderRadius: 6, marginBottom: 24 },
   chapterTitle: { fontSize: 24, fontWeight: '700', lineHeight: 32, marginBottom: 24, textAlign: 'center' },
   empty:        { fontSize: 14, fontStyle: 'italic' },
   chapterNav:   { marginTop: 28, paddingTop: 20, borderTopWidth: 1, gap: 14 },

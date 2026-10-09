@@ -19,7 +19,8 @@ import {
 import { musicPlaybackVolume } from '@/constants/reader-layout';
 import { ts, useT } from '@/i18n';
 
-// Ilustración del capítulo (editor de capítulo, formato Moderno).
+// Ilustración del capítulo (editor de capítulo). En Webnovel no hay transición: la
+// ilustración, si el autor quiere, se enseña sobre el título al abrir el capítulo.
 //
 // La ilustración sale en la ficha de la novela, en la lista de capítulos, en lugar del
 // número. Además el autor puede hacer que se enseñe a pantalla completa al empezar el
@@ -29,7 +30,7 @@ import { ts, useT } from '@/i18n';
 //   coverUrl · coverIntro · introMusicUrl · introMusicVolume · introStyle (diseño de la
 //   transición: rótulo, posición, colores, tipografía y animaciones)
 
-export function ChapterCoverSettings({ storyId, chapterId }: { storyId: string; chapterId: string }) {
+export function ChapterCoverSettings({ storyId, chapterId, webnovel }: { storyId: string; chapterId: string; webnovel?: boolean }) {
   useT();
   const [open, setOpen]             = useState(false);
   const [coverUrl, setCoverUrl]     = useState<string | null>(null);
@@ -224,7 +225,7 @@ export function ChapterCoverSettings({ storyId, chapterId }: { storyId: string; 
             <>
               <Text style={styles.label}>{ts('Al empezar el capítulo')}</Text>
               <View style={styles.row}>
-                {([{ value: false, label: ts('No enseñarla') }, { value: true, label: ts('Enseñarla a pantalla completa') }] as const).map(opt => (
+                {([{ value: false, label: ts('No enseñarla') }, { value: true, label: webnovel ? ts('Enseñarla sobre el título') : ts('Enseñarla a pantalla completa') }] as const).map(opt => (
                   <TouchableOpacity
                     key={ts(opt.label)}
                     style={[styles.choice, intro === opt.value && styles.choiceActive]}
@@ -238,7 +239,7 @@ export function ChapterCoverSettings({ storyId, chapterId }: { storyId: string; 
             </>
           )}
 
-          {coverUrl && intro && (
+          {coverUrl && intro && !webnovel && (
             <>
               <Text style={styles.hint}>
                 {ts('El lector ve la ilustración con el título del capítulo y toca para empezar. La música que viniera sonando del capítulo anterior se apaga: este capítulo empieza de cero, con la música de sus páginas.')}

@@ -1,3 +1,4 @@
+import { ChapterCoverSettings } from '@/components/chapter-cover-settings';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -296,6 +297,8 @@ export default function ChapterEditorWebnovelScreen() {
           placeholderTextColor={Colors.textMuted}
           maxLength={TITLE_MAX}
         />
+
+        <ChapterCoverSettings storyId={storyId as string} chapterId={chapterId as string} webnovel />
 
         {/* Barra de formato */}
         <View style={styles.toolbar}>
