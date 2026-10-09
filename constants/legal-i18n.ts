@@ -18,8 +18,8 @@ export const LEGAL_TRANSLATION_NOTE: Record<Lang, string | null> = {
 
 export const LEGAL_UPDATED: Record<Lang, string> = {
   es: `Última actualización: ${LEGAL_UPDATED_AT}`,
-  en: 'Last updated: October 8, 2026',
-  ja: '最終更新日：2026年10月8日',
+  en: 'Last updated: October 9, 2026',
+  ja: '最終更新日：2026年10月9日',
 };
 
 const EN: Docs = {
@@ -36,7 +36,7 @@ const EN: Docs = {
       },
       {
         title: '3. The content you publish',
-        body: 'The stories, comments, images and audio you upload remain yours. By publishing them you give us permission to store them and show them to other users within the app, solely so that the service can work. You may only upload content that you created or have permission to use: do not upload works, images or music belonging to others without authorisation.',
+        body: 'The stories, comments, images and audio you upload remain yours. By publishing them you give us permission to store them and show them to other users within the app, solely so that the service can work. You may use images, music and sounds made by other people as long as they are not illegal, but you are responsible for what you upload: if the rights holder asks us to take something down, we will have to remove it, and we will let you know beforehand so you can replace it. The safest option is to use your own material or freely licensed material and to name its authors in the credits.',
       },
       {
         title: '4. Adult content',
@@ -58,7 +58,7 @@ That refers to the text of the story. Images (covers, backgrounds and illustrati
       },
       {
         title: '5. What is not allowed',
-        body: 'The following are not allowed: sexual content involving minors or that sexualises them; images with sexual content, with visible genitals, with photographic or realistic nudity, or with real violence; any nudity of minors or of characters who appear to be minors; incitement to hatred, harassment or threats; illegal content or content that promotes illegal activities; plagiarism or copyright infringement; spam, deception or impersonation; attempting to manipulate statistics, access other people\'s accounts or damage the service.',
+        body: 'The following are not allowed: sexual content involving minors or that sexualises them; images with sexual content, with visible genitals, with photographic or realistic nudity, or with real violence; any nudity of minors or of characters who appear to be minors; incitement to hatred, harassment or threats; illegal content or content that promotes illegal activities; plagiarism (presenting another person\'s story as your own); spam, deception or impersonation; attempting to manipulate statistics, access other people\'s accounts or damage the service.',
       },
       {
         title: '6. Moderation and reports',
@@ -161,7 +161,7 @@ const JA: Docs = {
       },
       {
         title: '3. 公開するコンテンツ',
-        body: 'アップロードした作品、コメント、画像、音声の権利は、引き続きあなたに帰属します。公開することで、サービスを機能させる目的に限り、それらを保存し、アプリ内で他のユーザーに表示することを当方に許可したものとします。アップロードできるのは、ご自身が作者であるもの、または使用許可を得ているものだけです。第三者の作品、画像、音楽を無断でアップロードしないでください。',
+        body: 'アップロードした作品、コメント、画像、音声の権利は、引き続きあなたに帰属します。公開することで、サービスを機能させる目的に限り、それらを保存し、アプリ内で他のユーザーに表示することを当方に許可したものとします。違法なものでなければ、他の人が作った画像・音楽・効果音を使用できますが、アップロードした内容の責任はご自身にあります。権利者から削除の依頼があった場合は取り除く必要があり、差し替えられるよう事前にお知らせします。自作の素材やフリーライセンスの素材を使い、クレジットに作者名を記載するのが最も安全です。',
       },
       {
         title: '4. 成人向けコンテンツ',
@@ -183,7 +183,7 @@ const JA: Docs = {
       },
       {
         title: '5. 禁止事項',
-        body: '次の行為・内容は禁止されています。未成年者を含む性的な内容、または未成年者を性的に描く内容。性的な内容を含む画像、性器が見える画像、写真や写実的な裸体の画像、現実の暴力を写した画像。未成年者または未成年に見えるキャラクターの裸体。憎悪の扇動、嫌がらせ、脅迫。違法な内容、または違法行為を助長する内容。盗作や著作権の侵害。スパム、詐欺、なりすまし。統計の不正操作、他人のアカウントへのアクセス、サービスに損害を与える行為。',
+        body: '次の行為・内容は禁止されています。未成年者を含む性的な内容、または未成年者を性的に描く内容。性的な内容を含む画像、性器が見える画像、写真や写実的な裸体の画像、現実の暴力を写した画像。未成年者または未成年に見えるキャラクターの裸体。憎悪の扇動、嫌がらせ、脅迫。違法な内容、または違法行為を助長する内容。盗作（他人の作品を自分のものとして公開すること）。スパム、詐欺、なりすまし。統計の不正操作、他人のアカウントへのアクセス、サービスに損害を与える行為。',
       },
       {
         title: '6. モデレーションと通報',

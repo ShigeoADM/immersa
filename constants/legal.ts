@@ -15,7 +15,7 @@ export const LEGAL_OWNER_NAME = 'Enrique Echevarría Pérez';
 // Correo de contacto para cuestiones legales y de privacidad.
 export const LEGAL_CONTACT_EMAIL = 'elcodemh@gmail.com';
 
-export const LEGAL_UPDATED_AT = '8 de octubre de 2026';
+export const LEGAL_UPDATED_AT = '9 de octubre de 2026';
 
 const CONTACT = LEGAL_CONTACT_EMAIL
   ? `escribiendo a ${LEGAL_CONTACT_EMAIL}`
@@ -46,7 +46,7 @@ export const LEGAL_DOCS: Record<LegalDoc, { title: string; sections: LegalSectio
       },
       {
         title: '3. El contenido que publicas',
-        body: 'Las historias, comentarios, imágenes y audios que subes siguen siendo tuyos. Al publicarlos nos das permiso para almacenarlos y mostrarlos a otros usuarios dentro de la app, únicamente para que el servicio funcione. Solo puedes subir contenido del que seas autor o para el que tengas permiso: no subas obras, imágenes o música de terceros sin autorización.',
+        body: 'Las historias, comentarios, imágenes y audios que subes siguen siendo tuyos. Al publicarlos nos das permiso para almacenarlos y mostrarlos a otros usuarios dentro de la app, únicamente para que el servicio funcione. Puedes usar imágenes, música y sonidos de otras personas siempre que no sean ilegales, pero la responsabilidad de lo que subes es tuya: si quien tiene sus derechos nos pide retirarlo, tendremos que quitarlo, y te avisaremos antes para que puedas cambiarlo. Lo más seguro es usar material propio o con licencia libre y nombrar a sus autores en los créditos.',
       },
       {
         title: '4. Contenido para adultos',
@@ -68,7 +68,7 @@ Eso se refiere al texto de la historia. Las imágenes (portadas, fondos e ilustr
       },
       {
         title: '5. Lo que no está permitido',
-        body: 'No se permite: contenido sexual con menores o que los sexualice; imágenes con contenido sexual, con genitales a la vista, con desnudos fotográficos o realistas, o con violencia real; cualquier desnudo de menores o de personajes que lo parezcan; incitación al odio, acoso o amenazas; contenido ilegal o que promueva actividades ilegales; plagio o infracción de derechos de autor; spam, engaños o suplantación de identidad; intentar manipular estadísticas, acceder a cuentas ajenas o dañar el servicio.',
+        body: 'No se permite: contenido sexual con menores o que los sexualice; imágenes con contenido sexual, con genitales a la vista, con desnudos fotográficos o realistas, o con violencia real; cualquier desnudo de menores o de personajes que lo parezcan; incitación al odio, acoso o amenazas; contenido ilegal o que promueva actividades ilegales; plagio (presentar como propia la historia de otra persona); spam, engaños o suplantación de identidad; intentar manipular estadísticas, acceder a cuentas ajenas o dañar el servicio.',
       },
       {
         title: '6. Moderación y denuncias',
