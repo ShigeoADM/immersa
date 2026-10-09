@@ -12,7 +12,7 @@ import { Colors } from '@/constants/theme';
 import { AppHeader } from '@/components/app-header';
 import { AUDIENCES, GENRES, STORY_LANGUAGES, audienceLabel } from '@/constants/story-meta';
 import { useAuth } from '@/context/AuthContext';
-import { genreLabel, useT, formatLabel, ts } from '@/i18n';
+import { genreLabel, getLang, useT, formatLabel, ts } from '@/i18n';
 
 interface SearchStory {
   id: string;
@@ -33,6 +33,9 @@ interface SearchStory {
 const FORMATS = ['Moderno', 'Webnovel'] as const;
 const MAX_STORIES = 500;
 
+// Idioma de las historias que corresponde al idioma en que se ve la web
+const READER_LANGUAGE = { es: 'Español', en: 'English', ja: '日本語' } as const;
+
 // Minúsculas y sin acentos, para que "cancion" encuentre "Canción"
 const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -49,7 +52,8 @@ export default function SearchScreen() {
   const [format, setFormat]   = useState<string | null>(null);
   const [genres, setGenres]   = useState<string[]>([]);
   const [hideAdult, setHideAdult] = useState(false);
-  const [languages, setLanguages] = useState<string[]>([]);
+  // De entrada, las historias escritas en el idioma del lector (se quita en Filtros)
+  const [languages, setLanguages] = useState<string[]>(() => [READER_LANGUAGE[getLang()]]);
   const [audiences, setAudiences] = useState<string[]>([]);
   const [showMore, setShowMore]   = useState(false);
   const { isAdult, blocked } = useAuth();
@@ -234,9 +238,16 @@ export default function SearchScreen() {
             </Text>
           }
           ListEmptyComponent={
-            <Text style={styles.empty}>
-              {hasFilters ? t('search.noMatch') : t('search.noStories')}
-            </Text>
+            <View>
+              <Text style={styles.empty}>
+                {hasFilters ? t('search.noMatch') : t('search.noStories')}
+              </Text>
+              {languages.length > 0 && (
+                <TouchableOpacity style={styles.allLanguages} onPress={() => setLanguages([])} activeOpacity={0.7}>
+                  <Text style={styles.clearText}>{ts('Ver historias en todos los idiomas')}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           }
           renderItem={({ item: s }) => {
             const fmtColor = Colors.formatColors[s.format as keyof typeof Colors.formatColors] ?? Colors.emerald;
@@ -299,6 +310,7 @@ const styles = StyleSheet.create({
   group:      { gap: 6 },
   groupLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', color: Colors.textMuted },
   groupChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  allLanguages: { alignSelf: 'center', paddingVertical: 12 },
   clear:      { alignSelf: 'flex-start', paddingVertical: 2 },
   clearText:  { fontSize: 12, fontWeight: '600', color: Colors.emerald, textDecorationLine: 'underline' },
   moreChip:  { flexDirection: 'row', alignItems: 'center', gap: 5 },

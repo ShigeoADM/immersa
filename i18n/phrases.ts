@@ -590,4 +590,5 @@ export const PHRASES: Record<string, { en: string; ja: string }> = {
   'Géneros': { en: 'Genres', ja: 'ジャンル' },
   'Quitar filtros': { en: 'Clear filters', ja: '絞り込みを解除' },
   'Enseñarla sobre el título': { en: 'Show it above the title', ja: 'タイトルの上に表示する' },
+  'Ver historias en todos los idiomas': { en: 'Show stories in every language', ja: 'すべての言語の作品を表示' },
 };
