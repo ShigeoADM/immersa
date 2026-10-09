@@ -228,7 +228,7 @@ export const ja: Record<TKey, string> = {
   'reader.speed.slow': 'ゆっくり',
   'reader.speed.normal': 'ふつう',
   'reader.speed.fast': 'はやい',
-  'reader.speed.instant': '一瞬',
+  'reader.speed.instant': '瞬時',
   'reader.size.sm': '小',
   'reader.size.md': '中',
   'reader.size.lg': '大',
