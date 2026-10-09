@@ -127,6 +127,13 @@ const GENRE_KEYS: Record<string, TKey> = {
   'Drama': 'genre.drama', 'Comedia': 'genre.comedia', 'Thriller': 'genre.thriller', 'Histórico': 'genre.historico',
   'Sobrenatural': 'genre.sobrenatural', 'Slice of Life': 'genre.sliceOfLife', 'Cyberpunk': 'genre.cyberpunk',
 };
+// Nombre de los dos formatos (en los datos siempre es 'Moderno' / 'Webnovel')
+const FORMAT_LABELS: Record<string, Record<Lang, string>> = {
+  Moderno:  { es: 'Moderno',  en: 'Modern',   ja: 'モダン' },
+  Webnovel: { es: 'Webnovel', en: 'Webnovel', ja: 'ウェブ小説' },
+};
+export const formatLabel = (format?: string | null) => (format ? FORMAT_LABELS[format]?.[lang] ?? format : '');
+
 export function genreLabel(genre: string): string {
   const key = GENRE_KEYS[genre];
   return key ? t(key) : genre;

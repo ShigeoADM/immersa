@@ -23,7 +23,7 @@ import { Colors } from '@/constants/theme';
 import { AppHeader } from '@/components/app-header';
 import { cleanupDeletedStories } from '@/services/notifications';
 import { setSaved } from '@/services/social';
-import { statusLabel, useT } from '@/i18n';
+import { statusLabel, useT, formatLabel } from '@/i18n';
 
 interface LibraryEntry {
   storyId: string;
@@ -76,7 +76,7 @@ function BookCard({
             </View>
         }
         <View style={[styles.fmtBadge, { backgroundColor: fmtColor + 'CC' }]}>
-          <Text style={styles.fmtBadgeText}>{entry.format}</Text>
+          <Text style={styles.fmtBadgeText}>{formatLabel(entry.format)}</Text>
         </View>
       </View>
 

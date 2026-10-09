@@ -21,7 +21,7 @@ import { useNotifications } from '@/context/NotificationsContext';
 import { useAuth } from '@/context/AuthContext';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { tutorialTitle, tutorialZone } from '@/components/tutorial';
-import { statusLabel, useT } from '@/i18n';
+import { statusLabel, useT, formatLabel } from '@/i18n';
 
 interface StoryCard {
   id: string;
@@ -81,7 +81,7 @@ function VerticalCard({ story, onPress }: { story: StoryCard; onPress: () => voi
             </View>
         }
         <View style={[styles.fmtBadge, { backgroundColor: fmtColor + 'CC' }]}>
-          <Text style={styles.fmtBadgeText}>{story.format}</Text>
+          <Text style={styles.fmtBadgeText}>{formatLabel(story.format)}</Text>
         </View>
       </View>
       <View style={styles.vCardInfo}>
@@ -113,7 +113,7 @@ function HorizontalCard({ story, onPress, single }: {
           </View>
       }
       <View style={[styles.fmtBadge, { backgroundColor: fmtColor + 'CC' }]}>
-        <Text style={styles.fmtBadgeText}>{story.format}</Text>
+        <Text style={styles.fmtBadgeText}>{formatLabel(story.format)}</Text>
       </View>
       <View style={styles.hCardTitleWrap}>
         <Text style={[styles.hCardTitle, single && styles.hCardTitleSingle]} numberOfLines={2}>

@@ -12,7 +12,7 @@ import { Colors } from '@/constants/theme';
 import { AppHeader } from '@/components/app-header';
 import { GENRES } from '@/constants/story-meta';
 import { useAuth } from '@/context/AuthContext';
-import { genreLabel, useT } from '@/i18n';
+import { genreLabel, useT, formatLabel } from '@/i18n';
 
 interface SearchStory {
   id: string;
@@ -128,7 +128,7 @@ export default function SearchScreen() {
                 onPress={() => setFormat(on ? null : f)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.chipText, on && { color: '#000' }]}>{f}</Text>
+                <Text style={[styles.chipText, on && { color: '#000' }]}>{formatLabel(f)}</Text>
               </TouchableOpacity>
             );
           })}
@@ -194,7 +194,7 @@ export default function SearchScreen() {
                   {s.authorName ? <Text style={styles.rowAuthor} numberOfLines={1}>{s.authorName}</Text> : null}
                   <View style={styles.rowMeta}>
                     <View style={[styles.fmtBadge, { backgroundColor: fmtColor + 'CC' }]}>
-                      <Text style={styles.fmtBadgeText}>{s.format}</Text>
+                      <Text style={styles.fmtBadgeText}>{formatLabel(s.format)}</Text>
                     </View>
                     {s.isAdult && (
                       <View style={styles.adultBadge}><Text style={styles.adultBadgeText}>+18</Text></View>

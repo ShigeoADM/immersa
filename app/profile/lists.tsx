@@ -13,7 +13,7 @@ import type { PublicProfile } from '@/services/profiles';
 import { type LikedStory, listFollowing, listLikedStories } from '@/services/social';
 import { type BlockedUser, listBlocked, unblockUser } from '@/services/moderation';
 import { DesktopColumn } from '@/components/desktop-column';
-import { useT } from '@/i18n';
+import { useT, formatLabel } from '@/i18n';
 
 type Tab = 'following' | 'liked' | 'blocked';
 
@@ -173,7 +173,7 @@ export default function ProfileListsScreen() {
                   <Text style={styles.rowTitle} numberOfLines={2}>{s.title}</Text>
                   {s.format ? (
                     <View style={[styles.fmtBadge, { backgroundColor: fmtColor + 'CC' }]}>
-                      <Text style={styles.fmtBadgeText}>{s.format}</Text>
+                      <Text style={styles.fmtBadgeText}>{formatLabel(s.format)}</Text>
                     </View>
                   ) : null}
                 </View>

@@ -21,7 +21,7 @@ import { Colors } from '@/constants/theme';
 import { RoleBadge } from '@/components/role-badge';
 import { getFollowerCount, getFollowingCount, getLikedCount } from '@/services/social';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
-import { statusLabel, useT } from '@/i18n';
+import { statusLabel, useT, formatLabel } from '@/i18n';
 
 interface UserProfile {
   displayName?: string;
@@ -62,7 +62,7 @@ function StoryCard({ story, onPress }: { story: StoryCard; onPress: () => void }
           </View>
       }
       <View style={[styles.fmtBadge, { backgroundColor: fmtColor + 'CC' }]}>
-        <Text style={styles.fmtBadgeText}>{story.format}</Text>
+        <Text style={styles.fmtBadgeText}>{formatLabel(story.format)}</Text>
       </View>
       {isHoriz && (
         <View style={styles.hTitleWrap}>

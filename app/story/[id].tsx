@@ -36,7 +36,7 @@ import { type StoryComment, deleteComment, listStoryComments } from '@/services/
 import { CommentItem } from '@/components/comment-item';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { promptLogin } from '@/components/login-prompt';
-import { genreLabel, statusLabel, useT } from '@/i18n';
+import { genreLabel, statusLabel, useT, formatLabel } from '@/i18n';
 
 interface Story {
   id: string;
@@ -452,7 +452,7 @@ export default function StoryDetailScreen() {
         ) : null}
         <View style={[styles.heroInfo, isDesktop && { flex: 1 }]}>
           <View style={[styles.formatBadge, { backgroundColor: fmtColor + 'CC' }]}>
-            <Text style={styles.formatBadgeText}>{story.format}</Text>
+            <Text style={styles.formatBadgeText}>{formatLabel(story.format)}</Text>
           </View>
           <Text style={styles.heroTitle}>{story.title}</Text>
           {story.uid ? (

@@ -24,7 +24,7 @@ import { deleteStoryWithCascade, importStory } from '@/services/stories';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { tutorialZone } from '@/components/tutorial';
 import { BACKUP_EXTENSION, decodeBackup } from '@/services/backup-file';
-import { statusLabel, useT } from '@/i18n';
+import { statusLabel, useT, formatLabel } from '@/i18n';
 
 const FORMATS = [
   {
@@ -228,7 +228,7 @@ export default function WriteScreen() {
               >
                 <View style={[styles.cardTopBevel, { backgroundColor: f.color }]} />
                 <View style={styles.formatInfo}>
-                  <Text style={[styles.formatLabel, { color: f.color }]}>{f.label}</Text>
+                  <Text style={[styles.formatLabel, { color: f.color }]}>{formatLabel(f.key)}</Text>
                   <Text style={styles.formatDesc}>{t(f.key === 'Webnovel' ? 'write.webnovelDesc' : 'write.modernoDesc')}</Text>
                 </View>
               </TouchableOpacity>
@@ -272,7 +272,7 @@ export default function WriteScreen() {
                   <View style={styles.storyInfo}>
                     <Text style={styles.storyTitle} numberOfLines={1}>{story.title}</Text>
                     <View style={styles.storyMeta}>
-                      <Text style={[styles.storyFormat, { color: fmtColor }]}>{story.format}</Text>
+                      <Text style={[styles.storyFormat, { color: fmtColor }]}>{formatLabel(story.format)}</Text>
                       <Text style={styles.storyDot}>·</Text>
                       <Text style={styles.storyStatus}>
                         {story.published ? t('write.published') : statusLabel(story.status)}
@@ -305,7 +305,7 @@ export default function WriteScreen() {
                 >
                   <View style={[styles.cardTopBevel, { backgroundColor: f.color }]} />
                   <View style={styles.formatInfo}>
-                    <Text style={[styles.formatLabel, { color: f.color }]}>{f.label}</Text>
+                    <Text style={[styles.formatLabel, { color: f.color }]}>{formatLabel(f.key)}</Text>
                     <Text style={styles.formatDesc}>{t(f.key === 'Webnovel' ? 'write.webnovelDesc' : 'write.modernoDesc')}</Text>
                   </View>
                 </TouchableOpacity>
