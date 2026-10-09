@@ -65,6 +65,13 @@
     <!-- Las ilustraciones de las novelas son de sus autores: se quita lo que permite
          guardarlas directamente (menú de "guardar imagen" con el botón derecho o al mantener
          pulsado, y arrastrarlas fuera). No impide una captura de pantalla; eso no se puede. -->
+    <!-- Android agranda el texto de las páginas según el "tamaño de letra" del sistema (y Chrome
+         según su ajuste de accesibilidad). En las novelas Moderno eso descuadra el texto
+         respecto a su cuadro, que el autor midió en el editor: aquí el tamaño lo decide la web. -->
+    <style id="immersa-text-size">
+      html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    </style>
+
     <style id="immersa-images">
       img {
         pointer-events: none;
