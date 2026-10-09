@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput, FlatList, ScrollView,
+  View, Text, StyleSheet, TouchableOpacity, TextInput, FlatList,
   ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -98,9 +98,9 @@ export default function SearchScreen() {
     set(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]);
   const toggleLanguage = toggle(setLanguages);
   const toggleAudience = toggle(setAudiences);
-  const moreCount = languages.length + audiences.length;
+  const moreCount = genres.length + languages.length + audiences.length;
 
-  const hasFilters = !!format || genres.length > 0 || moreCount > 0 || hideAdult || text.trim().length > 0;
+  const hasFilters = !!format || moreCount > 0 || hideAdult || text.trim().length > 0;
 
   return (
     <View style={styles.container}>
@@ -162,50 +162,61 @@ export default function SearchScreen() {
           >
             <MaterialIcons name="tune" size={13} color={showMore || moreCount > 0 ? Colors.emerald : Colors.textSecondary} />
             <Text style={[styles.chipText, (showMore || moreCount > 0) && { color: Colors.emerald }]}>
-              {ts('Más filtros')}{moreCount > 0 ? ` · ${moreCount}` : ''}
+              {ts('Filtros')}{moreCount > 0 ? ` · ${moreCount}` : ''}
             </Text>
           </TouchableOpacity>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.genreRow}>
-          {GENRES.map(g => {
-            const on = genres.includes(g);
-            return (
-              <TouchableOpacity
-                key={g}
-                style={[styles.chip, on && styles.chipOn]}
-                onPress={() => toggleGenre(g)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.chipText, on && { color: '#000' }]}>{genreLabel(g)}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
         {showMore && (
-          <>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.genreRow}>
-              <Text style={styles.rowLabel}>{ts('Idioma')}</Text>
-              {STORY_LANGUAGES.map(l => {
-                const on = languages.includes(l);
-                return (
-                  <TouchableOpacity key={l} style={[styles.chip, on && styles.chipOn]} onPress={() => toggleLanguage(l)} activeOpacity={0.8}>
-                    <Text style={[styles.chipText, on && { color: '#000' }]}>{l === 'Otro' ? t('details.langOther') : l}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.genreRow}>
-              <Text style={styles.rowLabel}>{ts('Público')}</Text>
-              {AUDIENCES.map(a => {
-                const on = audiences.includes(a.key);
-                return (
-                  <TouchableOpacity key={a.key} style={[styles.chip, on && styles.chipOn]} onPress={() => toggleAudience(a.key)} activeOpacity={0.8}>
-                    <Text style={[styles.chipText, on && { color: '#000' }]}>{audienceLabel(a.key)}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </>
+          <View style={styles.panel}>
+            <View style={styles.group}>
+              <Text style={styles.groupLabel}>{ts('Géneros')}</Text>
+              <View style={styles.groupChips}>
+                {GENRES.map(g => {
+                  const on = genres.includes(g);
+                  return (
+                    <TouchableOpacity key={g} style={[styles.chip, on && styles.chipOn]} onPress={() => toggleGenre(g)} activeOpacity={0.8}>
+                      <Text style={[styles.chipText, on && { color: '#000' }]}>{genreLabel(g)}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+            <View style={styles.group}>
+              <Text style={styles.groupLabel}>{ts('Idioma')}</Text>
+              <View style={styles.groupChips}>
+                {STORY_LANGUAGES.map(l => {
+                  const on = languages.includes(l);
+                  return (
+                    <TouchableOpacity key={l} style={[styles.chip, on && styles.chipOn]} onPress={() => toggleLanguage(l)} activeOpacity={0.8}>
+                      <Text style={[styles.chipText, on && { color: '#000' }]}>{l === 'Otro' ? t('details.langOther') : l}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+            <View style={styles.group}>
+              <Text style={styles.groupLabel}>{ts('Público')}</Text>
+              <View style={styles.groupChips}>
+                {AUDIENCES.map(a => {
+                  const on = audiences.includes(a.key);
+                  return (
+                    <TouchableOpacity key={a.key} style={[styles.chip, on && styles.chipOn]} onPress={() => toggleAudience(a.key)} activeOpacity={0.8}>
+                      <Text style={[styles.chipText, on && { color: '#000' }]}>{audienceLabel(a.key)}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+            {moreCount > 0 && (
+              <TouchableOpacity
+                style={styles.clear}
+                onPress={() => { setGenres([]); setLanguages([]); setAudiences([]); }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.clearText}>{ts('Quitar filtros')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         )}
       </View>
 
@@ -284,8 +295,12 @@ const styles = StyleSheet.create({
   input:     { flex: 1, color: Colors.textPrimary, fontSize: 14, paddingVertical: 0 },
   filters:   { gap: 8, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: Colors.border },
   filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16 },
-  genreRow:  { gap: 6, paddingHorizontal: 16, alignItems: 'center' },
-  rowLabel:  { fontSize: 11, fontWeight: '700', color: Colors.textMuted, marginRight: 2 },
+  panel:      { gap: 12, paddingHorizontal: 16, paddingTop: 4 },
+  group:      { gap: 6 },
+  groupLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', color: Colors.textMuted },
+  groupChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  clear:      { alignSelf: 'flex-start', paddingVertical: 2 },
+  clearText:  { fontSize: 12, fontWeight: '600', color: Colors.emerald, textDecorationLine: 'underline' },
   moreChip:  { flexDirection: 'row', alignItems: 'center', gap: 5 },
   moreChipOn: { borderColor: Colors.emerald },
   chip: {

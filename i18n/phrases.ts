@@ -586,4 +586,7 @@ export const PHRASES: Record<string, { en: string; ja: string }> = {
   'Más filtros': { en: 'More filters', ja: 'その他の絞り込み' },
   'Idioma': { en: 'Language', ja: '言語' },
   'Público': { en: 'Audience', ja: '対象読者' },
+  'Filtros': { en: 'Filters', ja: '絞り込み' },
+  'Géneros': { en: 'Genres', ja: 'ジャンル' },
+  'Quitar filtros': { en: 'Clear filters', ja: '絞り込みを解除' },
 };
