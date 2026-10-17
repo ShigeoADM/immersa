@@ -8,11 +8,11 @@
 // para cada una dist/story/{id}/index.html: la misma página, pero con su título, su
 // sinopsis y su portada en las etiquetas. También las añade al sitemap.
 //
-// Las novelas que se publican después las atiende la función storyPreview (functions/).
+// Las novelas nuevas no tienen vista previa propia hasta la siguiente publicación de la web.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { SITE, publishedStories, storyPage } from '../functions/story-meta.js';
+import { SITE, publishedStories, storyPage } from './story-meta.mjs';
 
 const DIST = 'dist';
 

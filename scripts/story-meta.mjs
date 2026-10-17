@@ -1,6 +1,5 @@
 // Vista previa de una novela: su título, sinopsis y portada en las etiquetas de la página.
-// Lo usan scripts/prerender-stories.mjs (al publicar la web) y la función storyPreview
-// (para las novelas publicadas después, sin esperar a la siguiente publicación).
+// Lo usa scripts/prerender-stories.mjs al publicar la web.
 
 export const PROJECT = 'immersa-94cc9';
 export const SITE = 'https://immersa.web.app';
