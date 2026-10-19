@@ -48,3 +48,6 @@ app-example
 # Pruebas de música para el tutorial (no forman parte de la web)
 musica-pruebas/
 video-anuncio/
+
+# Datos del proyecto de Firebase de pruebas de cada colaborador
+.env

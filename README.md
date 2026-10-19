@@ -1,50 +1,53 @@
-# Welcome to your Expo app 👋
+# Immersa
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+**Lee y escribe novelas con fondos, música y caminos distintos.** · *Read and write novels with backgrounds, music and branching paths.*
 
-## Get started
+👉 https://immersa.web.app
 
-1. Install dependencies
+*English below.*
 
-   ```bash
-   npm install
-   ```
+## Español
 
-2. Start the app
+Immersa es una plataforma web para leer y publicar novelas escritas por sus usuarios, en dos formatos:
 
-   ```bash
-   npx expo start
-   ```
+- **Moderno**: cada página es una escena, con su fondo, su música, efectos de sonido, personajes, transiciones y decisiones que llevan a páginas distintas.
+- **Webnovel**: lectura continua con scroll, al estilo de las novelas web.
 
-In the output, you'll find options to open the app in a
+Está disponible en español, inglés y japonés.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### Tecnología
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+[Expo](https://expo.dev) y React Native (exportado como web), [Expo Router](https://docs.expo.dev/router/introduction), y [Firebase](https://firebase.google.com) (Authentication, Firestore, Storage y Hosting).
 
-## Get a fresh project
+### Colaborar
 
-When you're ready, run:
+Las propuestas de mejora son bienvenidas: lee [CONTRIBUTING.md](CONTRIBUTING.md) para preparar el entorno y enviar cambios.
 
-```bash
-npm run reset-project
-```
+### Licencia
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+**Código visible, no código abierto.** Puedes leer el código y modificarlo para proponer mejoras a Immersa, pero no usarlo en otros proyectos ni publicar tu propia versión. Las condiciones completas están en [LICENSE.md](LICENSE.md).
 
-## Learn more
+## English
 
-To learn more about developing your project with Expo, look at the following resources:
+Immersa is a web platform for reading and publishing novels written by its users, in two formats:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- **Moderno** (Modern): every page is a scene, with its own background, music, sound effects, characters, transitions and choices that lead to different pages.
+- **Webnovel**: continuous scrolling, in the style of web novels.
 
-## Join the community
+It is available in Spanish, English and Japanese.
 
-Join our community of developers creating universal apps.
+### Tech
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+[Expo](https://expo.dev) and React Native (exported for the web), [Expo Router](https://docs.expo.dev/router/introduction), and [Firebase](https://firebase.google.com) (Authentication, Firestore, Storage and Hosting).
+
+### Contributing
+
+Improvements are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) to set up and submit changes.
+
+### License
+
+**Source available, not open source.** You may read the code and modify it to propose improvements to Immersa, but not use it in other projects or publish your own version. Full terms in [LICENSE.md](LICENSE.md).
+
+---
+
+© 2026 Enrique Echevarría Pérez
