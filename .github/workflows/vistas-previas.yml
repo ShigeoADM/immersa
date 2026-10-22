@@ -1,0 +1,71 @@
+# Vistas previas de las novelas (lo que se ve al compartir su enlace en WhatsApp, Discord…).
+#
+# Cada novela publicada tiene su página preparada al publicar la web. Esta tarea vuelve a
+# publicarla cada pocas horas, pero SOLO si ha cambiado alguna novela (nueva, retocada o
+# retirada): así las nuevas tienen su vista previa sin que haga falta publicar a mano.
+#
+# Publica en el sitio "immersa" (immersa.web.app), nunca en immersa-94cc9.web.app.
+# Necesita el secreto FIREBASE_SERVICE_ACCOUNT (cuenta de servicio con permiso para
+# publicar en Firebase Hosting).
+
+name: Vistas previas de las novelas
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'   # cada 6 horas
+  workflow_dispatch:          # también a mano, desde la pestaña Actions
+
+concurrency:
+  group: publicar-web
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    if: github.repository == 'ShigeoADM/immersa'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Huella de las novelas publicadas
+        id: huella
+        run: echo "valor=$(node scripts/previews-fingerprint.mjs)" >> "$GITHUB_OUTPUT"
+
+      # La huella de la última publicación se guarda en la caché de GitHub
+      - name: ¿Ha cambiado algo desde la última vez?
+        id: anterior
+        uses: actions/cache/restore@v4
+        with:
+          path: .huella-publicada
+          key: vistas-previas-${{ steps.huella.outputs.valor }}
+          lookup-only: true
+
+      - name: Dependencias
+        if: steps.anterior.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Publicar la web
+        if: steps.anterior.outputs.cache-hit != 'true'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "Falta el secreto FIREBASE_SERVICE_ACCOUNT: no se publica."; exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/cuenta.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/cuenta.json"
+          node scripts/deploy.mjs prod
+          rm -f "$RUNNER_TEMP/cuenta.json"
+
+      - name: Recordar lo publicado
+        if: steps.anterior.outputs.cache-hit != 'true'
+        run: echo "${{ steps.huella.outputs.valor }}" > .huella-publicada
+
+      - uses: actions/cache/save@v4
+        if: steps.anterior.outputs.cache-hit != 'true'
+        with:
+          path: .huella-publicada
+          key: vistas-previas-${{ steps.huella.outputs.valor }}
