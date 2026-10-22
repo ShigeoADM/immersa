@@ -9,6 +9,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { RoleBadge } from '@/components/role-badge';
+import { FounderBadge } from '@/components/founder-badge';
 import type { PublicProfile } from '@/services/profiles';
 import { type LikedStory, listFollowing, listLikedStories } from '@/services/social';
 import { type BlockedUser, listBlocked, unblockUser } from '@/services/moderation';
@@ -120,6 +121,7 @@ export default function ProfileListsScreen() {
                 <View style={styles.nameRow}>
                   <Text style={styles.rowTitle} numberOfLines={1}>{p.displayName}</Text>
                   <RoleBadge role={p.role} size="sm" />
+                  <FounderBadge uid={p.uid} size="sm" />
                 </View>
                 {p.bio ? <Text style={styles.rowSub} numberOfLines={1}>{p.bio}</Text> : null}
               </View>

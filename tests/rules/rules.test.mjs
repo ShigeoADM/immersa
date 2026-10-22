@@ -28,6 +28,7 @@ await env.withSecurityRulesDisabled(async ctx => {
   await setDoc(doc(db, 'users/author'), {});
   await setDoc(doc(db, 'users/fan'), {});
   await setDoc(doc(db, 'users/mod'), { role: 'admin', permissions: ['deleteStories'] });
+  await setDoc(doc(db, 'users/boss'), { role: 'owner' });
   await setDoc(doc(db, 'profiles/author'), { displayName: 'Autor' });
   await setDoc(doc(db, 'profiles/author/followers/fan'), { createdAt: 'x' });
   await uploadBytes(ref(ctx.storage(), 'covers/author/old.webp'), new Uint8Array([1, 2, 3]), { contentType: 'image/webp' });
@@ -38,6 +39,7 @@ const author = env.authenticatedContext('author');
 const fan = env.authenticatedContext('fan');
 const stranger = env.authenticatedContext('stranger');
 const mod = env.authenticatedContext('mod');
+const boss = env.authenticatedContext('boss');
 
 const now = new Date().toISOString();
 const notif = (extra = {}) => ({ type: 'like', title: 'Nuevo me gusta', body: 'A Fan le gusta "Historia".', tx: { title: 'Nuevo me gusta', p: { name: 'Fan' } }, storyId: 's1', fromUid: 'fan', createdAt: now, read: false, ...extra });
@@ -77,6 +79,12 @@ await check('ABUSO: denuncia con texto enorme', false, () => setDoc(doc(fan.fire
 await check('ABUSO: leer los datos privados de otro usuario', false, () => getDoc(doc(fan.firestore(), 'users/author')));
 await check('ABUSO: darse permisos de administrador', false, () => setDoc(doc(fan.firestore(), 'users/fan'), { role: 'admin', permissions: ['deleteStories'] }));
 await check('ABUSO: inflar los "me gusta" sin dar me gusta', false, () => setDoc(doc(fan.firestore(), 'stories/s1'), { uid: 'author', published: true, title: 'Historia', likeCount: 999 }));
+
+// ── Insignia de fundador ──
+await check('El dueño da la insignia de fundador', true, () => setDoc(doc(boss.firestore(), 'founders/author'), { since: now }));
+await check('Cualquiera ve quién es fundador', true, () => getDoc(doc(anon.firestore(), 'founders/author')));
+await check('ABUSO: darse a sí mismo la insignia', false, () => setDoc(doc(fan.firestore(), 'founders/fan'), { since: now }));
+await check('ABUSO: un admin da la insignia (solo el dueño)', false, () => setDoc(doc(mod.firestore(), 'founders/fan'), { since: now }));
 
 // ── Storage ──
 const st = c => c.storage();

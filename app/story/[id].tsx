@@ -31,6 +31,7 @@ import { adminDeleteStory } from '@/services/admin';
 import { type PublicProfile, getPublicProfile, getStaffRoles } from '@/services/profiles';
 import type { Role } from '@/constants/permissions';
 import { RoleBadge } from '@/components/role-badge';
+import { FounderBadge } from '@/components/founder-badge';
 import { WEBNOVEL_THEMES, WEBNOVEL_THEME_DEFAULT, type WebnovelTheme, getWebnovelTheme } from '@/constants/webnovel';
 import { type StoryComment, deleteComment, listStoryComments } from '@/services/comments';
 import { CommentItem } from '@/components/comment-item';
@@ -464,6 +465,7 @@ export default function StoryDetailScreen() {
               <MaterialIcons name="person" size={13} color="rgba(255,255,255,0.75)" />
               <Text style={styles.authorName} numberOfLines={1}>{author?.displayName ?? t('story.viewAuthor')}</Text>
               <RoleBadge role={author?.role} size="sm" />
+              <FounderBadge uid={story.uid} size="sm" />
             </TouchableOpacity>
           ) : null}
           {story.subtitle ? (

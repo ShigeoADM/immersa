@@ -591,4 +591,14 @@ export const PHRASES: Record<string, { en: string; ja: string }> = {
   'Quitar filtros': { en: 'Clear filters', ja: '絞り込みを解除' },
   'Enseñarla sobre el título': { en: 'Show it above the title', ja: 'タイトルの上に表示する' },
   'Ver historias en todos los idiomas': { en: 'Show stories in every language', ja: 'すべての言語の作品を表示' },
+
+  // ── Insignia de autor fundador ──
+  'FUNDADOR': { en: 'FOUNDER', ja: '創設メンバー' },
+  'Dar insignia de fundador': { en: 'Give founder badge', ja: '創設メンバーのバッジを付与' },
+  'Quitar insignia de fundador': { en: 'Remove founder badge', ja: '創設メンバーのバッジを外す' },
+  '{name} llevará la insignia FUNDADOR junto a su nombre en toda la web.': { en: '{name} will carry the FOUNDER badge next to their name across the site.', ja: '{name}さんの名前の横に、サイト全体で「創設メンバー」のバッジが表示されます。' },
+  '{name} dejará de llevar la insignia FUNDADOR.': { en: '{name} will no longer carry the FOUNDER badge.', ja: '{name}さんの「創設メンバー」のバッジが外れます。' },
+  'Dar insignia': { en: 'Give badge', ja: '付与する' },
+  'Quitar insignia': { en: 'Remove badge', ja: '外す' },
+  'No se pudo cambiar la insignia.': { en: 'The badge could not be changed.', ja: 'バッジを変更できませんでした。' },
 };

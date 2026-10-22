@@ -371,6 +371,13 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // ── Autores fundadores ────────────────────────────────────────────────────
+    // Insignia que da a mano el dueño de Immersa. Pública: sale junto al nombre.
+    match /founders/{userId} {
+      allow read: if true;
+      allow write: if isOwner();
+    }
+
     // ── Noticias y avisos de administración ───────────────────────────────────
     match /announcements/{announcementId} {
       allow read: if signedIn();

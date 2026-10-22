@@ -19,6 +19,7 @@ import { db } from '@/config/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { RoleBadge } from '@/components/role-badge';
+import { FounderBadge } from '@/components/founder-badge';
 import { getFollowerCount, getFollowingCount, getLikedCount } from '@/services/social';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { statusLabel, useT, formatLabel } from '@/i18n';
@@ -221,7 +222,10 @@ export default function ProfileScreen() {
 
           {/* Nombre y email */}
           <Text style={styles.displayName}>{displayName}</Text>
-          <RoleBadge role={staff.role} />
+          <View style={styles.badges}>
+            <RoleBadge role={staff.role} />
+            <FounderBadge uid={user?.uid} />
+          </View>
           {profile.emailPublic && email
             ? <Text style={styles.emailText}>{email}</Text>
             : null
@@ -318,6 +322,7 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  badges: { flexDirection: 'row', gap: 6, justifyContent: 'center' },
   container: { flex: 1, backgroundColor: Colors.bg },
   centered:  { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 14 },
 

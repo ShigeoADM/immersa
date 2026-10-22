@@ -6,6 +6,7 @@ import { Colors } from '@/constants/theme';
 import type { Role } from '@/constants/permissions';
 import type { StoryComment } from '@/services/comments';
 import { RoleBadge } from '@/components/role-badge';
+import { FounderBadge } from '@/components/founder-badge';
 import { ts, useT } from '@/i18n';
 
 // Un comentario: avatar a la izquierda, nombre arriba a la izquierda,
@@ -42,6 +43,7 @@ export function CommentItem({ comment, role, showLocation = true, canDelete, onD
           >
             <Text style={[styles.name, colors && { color: colors.name }]} numberOfLines={1}>{comment.userName}</Text>
             <RoleBadge role={role} size="sm" />
+            <FounderBadge uid={comment.uid} size="sm" />
           </TouchableOpacity>
           <View style={styles.headerRight}>
             {showLocation && (

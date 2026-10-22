@@ -10,6 +10,8 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { RoleBadge } from '@/components/role-badge';
+import { FounderBadge } from '@/components/founder-badge';
+import { setFounder, useIsFounder } from '@/services/founders';
 import { type PublicProfile, getPublicProfile } from '@/services/profiles';
 import { getFollowerCount, isFollowing, setFollow } from '@/services/social';
 import { useAuth } from '@/context/AuthContext';
@@ -41,7 +43,7 @@ export default function PublicProfileScreen() {
   const [stories, setStories] = useState<StoryCard[]>([]);
   const [loading, setLoading] = useState(true);
   // Seguir al autor
-  const { user, publicName, blocked, can } = useAuth();
+  const { user, publicName, blocked, can, staff } = useAuth();
   const isMe = !!user && user.uid === uid;
   const [following, setFollowing] = useState(false);
   const [followers, setFollowers] = useState(0);
@@ -103,6 +105,28 @@ export default function PublicProfileScreen() {
               setTargetSuspended(next);
             } catch (e: any) { AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo cambiar la suspensión.')); }
           },
+        },
+      ],
+    );
+  };
+
+  // ── Insignia de autor fundador (solo el dueño de Immersa) ──
+  const isFounder = useIsFounder(uid);
+  const canGrantFounder = staff.role === 'owner' && !isMe;
+  const toggleFounder = () => {
+    if (!uid || !canGrantFounder) return;
+    const next = !isFounder;
+    AppAlert.alert(
+      next ? ts('Dar insignia de fundador') : ts('Quitar insignia de fundador'),
+      next
+        ? ts('{name} llevará la insignia FUNDADOR junto a su nombre en toda la web.', { name })
+        : ts('{name} dejará de llevar la insignia FUNDADOR.', { name }),
+      [
+        { text: ts('Cancelar'), style: 'cancel' },
+        {
+          text: next ? ts('Dar insignia') : ts('Quitar insignia'), style: next ? 'default' : 'destructive',
+          onPress: () => setFounder(uid, next).catch((e: any) =>
+            AppAlert.alert(ts('Error'), e?.message ?? ts('No se pudo cambiar la insignia.'))),
         },
       ],
     );
@@ -175,7 +199,10 @@ export default function PublicProfileScreen() {
                   </View>
               }
               <Text style={styles.name}>{name}</Text>
-              <RoleBadge role={profile?.role ?? null} />
+              <View style={styles.badges}>
+                <RoleBadge role={profile?.role ?? null} />
+                <FounderBadge uid={uid} />
+              </View>
               {profile?.email ? <Text style={styles.email}>{profile.email}</Text> : null}
               {profile?.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
               <View style={styles.statRow}>
@@ -211,6 +238,13 @@ export default function PublicProfileScreen() {
                   <TouchableOpacity onPress={toggleBlock} hitSlop={8} activeOpacity={0.7}>
                     <Text style={styles.modLink}>{isBlocked ? ts('Desbloquear') : ts('Bloquear')}</Text>
                   </TouchableOpacity>
+                  {canGrantFounder && (
+                    <TouchableOpacity onPress={toggleFounder} hitSlop={8} activeOpacity={0.7}>
+                      <Text style={[styles.modLink, { color: '#FFD98A' }]}>
+                        {isFounder ? ts('Quitar insignia de fundador') : ts('Dar insignia de fundador')}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                   {canModerate && (
                     <TouchableOpacity onPress={toggleSuspended} hitSlop={8} activeOpacity={0.7}>
                       <Text style={[styles.modLink, { color: '#FF6B6B' }]}>
@@ -266,6 +300,7 @@ export default function PublicProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  badges: { flexDirection: 'row', gap: 6, justifyContent: 'center' },
   container: { flex: 1, backgroundColor: Colors.bg },
   hero: {
     backgroundColor: Colors.surface, paddingBottom: 24, alignItems: 'center',
