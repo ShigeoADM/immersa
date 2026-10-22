@@ -16,6 +16,17 @@ service firebase.storage {
       return request.resource == null || request.resource.size < maxMb * 1024 * 1024;
     }
 
+    // Solo imágenes o audio de verdad: que nadie use el almacén para alojar otra cosa
+    // (páginas web, ejecutables…). Borrar no lleva archivo.
+    function deletingOrImage() {
+      return request.resource == null
+        || request.resource.contentType.matches('image/(png|jpeg|webp|gif|bmp|avif)');
+    }
+    function deletingOrAudio() {
+      return request.resource == null
+        || request.resource.contentType.matches('audio/.*|video/ogg|video/mp4|application/ogg');
+    }
+
     function ownsStory(storyId) {
       return signedIn()
         && firestore.get(/databases/(default)/documents/stories/$(storyId)).data.uid == request.auth.uid;
@@ -31,10 +42,10 @@ service firebase.storage {
 
     // ── Fotos de perfil y portadas: solo su dueño ────────────────────────────
     match /avatars/{userId}/{file} {
-      allow write: if signedIn() && request.auth.uid == userId && deletingOr(8);
+      allow write: if signedIn() && request.auth.uid == userId && deletingOr(8) && deletingOrImage();
     }
     match /covers/{userId}/{file} {
-      allow write: if signedIn() && request.auth.uid == userId && deletingOr(8);
+      allow write: if signedIn() && request.auth.uid == userId && deletingOr(8) && deletingOrImage();
     }
 
     // ── Archivos de una historia: solo su autor ──────────────────────────────
@@ -45,14 +56,14 @@ service firebase.storage {
     match /sfx/{storyId}/{rest=**}   { allow list: if ownsStory(storyId); }
     // Fondos de página
     match /pages/{storyId}/{chapterId}/{file} {
-      allow write: if ownsStory(storyId) && deletingOr(8);
+      allow write: if ownsStory(storyId) && deletingOr(8) && deletingOrImage();
     }
     // Música y efectos de sonido
     match /music/{storyId}/{chapterId}/{file} {
-      allow write: if ownsStory(storyId) && deletingOr(25);
+      allow write: if ownsStory(storyId) && deletingOr(25) && deletingOrAudio();
     }
     match /sfx/{storyId}/{chapterId}/{file} {
-      allow write: if ownsStory(storyId) && deletingOr(10);
+      allow write: if ownsStory(storyId) && deletingOr(10) && deletingOrAudio();
     }
   }
 }

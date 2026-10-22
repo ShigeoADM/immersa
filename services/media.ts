@@ -18,11 +18,26 @@ function readLocalFile(localUri: string, timeoutMs: number): Promise<Blob> {
   });
 }
 
+// Tipo de archivo que se declara al subir. Las reglas de Storage solo aceptan imágenes en
+// las carpetas de imágenes y audio en las de sonido, así que se indica siempre: el que dé
+// el navegador o, si no da ninguno, el que corresponde a la extensión.
+const TYPE_BY_EXT: Record<string, string> = {
+  mp3: 'audio/mpeg', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav',
+  m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', weba: 'audio/webm',
+  webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+  bmp: 'image/bmp', avif: 'image/avif',
+};
+function contentTypeFor(blob: Blob, storagePath: string): string {
+  if (blob.type && blob.type !== 'application/octet-stream') return blob.type;
+  const ext = storagePath.split('.').pop()?.toLowerCase() ?? '';
+  return TYPE_BY_EXT[ext] ?? (/^(music|sfx)\//.test(storagePath) ? 'audio/mpeg' : 'image/jpeg');
+}
+
 // Sube un archivo local a Storage y devuelve su URL.
 export async function uploadLocalFile(localUri: string, storagePath: string, timeoutMs = 30000): Promise<string> {
   const blob = await readLocalFile(localUri, timeoutMs);
   const storageRef = ref(storage, storagePath);
-  await uploadBytes(storageRef, blob);
+  await uploadBytes(storageRef, blob, { contentType: contentTypeFor(blob, storagePath) });
   return getDownloadURL(storageRef);
 }
 
@@ -33,14 +48,16 @@ export async function uploadLocalFile(localUri: string, storagePath: string, tim
 //    lado largo máximo, en píxeles);
 //  · se guarda en WebP a calidad alta, que a la vista no se distingue del original.
 // Si el resultado no pesa claramente menos, se sube el original tal cual. Los GIF (pueden
-// estar animados) y los SVG no se tocan.
+// estar animados) no se tocan. Los formatos que el almacenamiento no admite (SVG, que puede
+// llevar código, o HEIC) se convierten siempre a WebP.
 //
 // Se hace en el navegador. En el móvil, el selector de imágenes ya las recomprime.
 const IMAGE_QUALITY = 0.9;
 
 async function optimizeImage(blob: Blob, maxSide: number): Promise<Blob> {
   if (Platform.OS !== 'web') return blob;
-  if (!/^image\/(jpeg|png|webp|bmp)$/.test(blob.type)) return blob;
+  const mustConvert = !!blob.type && !/^image\/(jpeg|png|webp|gif|bmp|avif)$/.test(blob.type);
+  if (!mustConvert && !/^image\/(jpeg|png|webp|bmp)$/.test(blob.type)) return blob;
   const g = globalThis as any;
   const src = g.URL.createObjectURL(blob);
   try {
@@ -65,7 +82,8 @@ async function optimizeImage(blob: Blob, maxSide: number): Promise<Blob> {
     // Navegador que no sabe guardar WebP (devuelve otra cosa): JPEG, pero solo si el
     // original ya lo era (un PNG puede tener transparencia, y el JPEG la perdería)
     if (!out || out.type !== 'image/webp') out = blob.type === 'image/jpeg' ? await encode('image/jpeg') : null;
-    // Solo compensa si ahorra de verdad
+    // Solo compensa si ahorra de verdad (o si el original no se puede guardar tal cual)
+    if (out && mustConvert) return out;
     return out && out.size < blob.size * 0.9 ? out : blob;
   } catch {
     return blob; // ante cualquier problema, se sube el original
@@ -75,15 +93,16 @@ async function optimizeImage(blob: Blob, maxSide: number): Promise<Blob> {
 }
 
 const IMAGE_EXT: Record<string, string> = {
-  'image/webp': 'webp', 'image/png': 'png', 'image/gif': 'gif', 'image/svg+xml': 'svg', 'image/bmp': 'bmp',
+  'image/webp': 'webp', 'image/png': 'png', 'image/gif': 'gif', 'image/bmp': 'bmp', 'image/avif': 'avif',
 };
 
 // Sube una imagen, aligerándola antes. `pathNoExt` es la ruta sin extensión: se le añade
 // la que corresponda al formato final.
 export async function uploadImage(localUri: string, pathNoExt: string, maxSide: number, timeoutMs = 30000): Promise<string> {
   const blob = await optimizeImage(await readLocalFile(localUri, timeoutMs), maxSide);
-  const storageRef = ref(storage, `${pathNoExt}.${IMAGE_EXT[blob.type] ?? 'jpg'}`);
-  await uploadBytes(storageRef, blob);
+  const path = `${pathNoExt}.${IMAGE_EXT[blob.type] ?? 'jpg'}`;
+  const storageRef = ref(storage, path);
+  await uploadBytes(storageRef, blob, { contentType: contentTypeFor(blob, path) });
   return getDownloadURL(storageRef);
 }
 

@@ -207,10 +207,14 @@ service cloud.firestore {
       match /comments/{commentId} {
         allow read: if storyPublic(storyId) || ownsStory(storyId) || can('deleteStories');
         allow create: if signedIn()
+                      && request.resource.data.keys().hasOnly(['uid', 'userName', 'userAvatar', 'text', 'createdAt',
+                                                               'chapterId', 'pageId', 'chapterNumber', 'pageNumber'])
                       && request.resource.data.uid == request.auth.uid
                       && request.resource.data.text is string
                       && request.resource.data.text.size() > 0
                       && request.resource.data.text.size() <= 500
+                      && request.resource.data.get('userName', '') is string
+                      && request.resource.data.get('userName', '').size() <= 60
                       && (storyPublished(storyId) || ownsStory(storyId))
                       && !isSuspended();
         allow delete: if signedIn()
@@ -304,11 +308,29 @@ service cloud.firestore {
       //  · me gusta, comentarios y nuevos seguidores, firmados con el uid de quien los envía
       //  · aviso al autor de que moderación eliminó su novela
       match /notifications/{notificationId} {
-        allow create: if signedIn() && request.auth.uid != userId && (
+        function cleanNotification() {
+          let n = request.resource.data;
+          return n.keys().hasOnly(['type', 'title', 'body', 'tx', 'storyId', 'fromUid', 'createdAt', 'read'])
+            && n.title is string && n.title.size() <= 300
+            && n.body is string && n.body.size() <= 600
+            && n.read == false;
+        }
+        function storyOfRecipient() {
+          let storyId = request.resource.data.get('storyId', '');
+          return storyId is string && storyId != ''
+            && exists(/databases/$(database)/documents/stories/$(storyId))
+            && get(/databases/$(database)/documents/stories/$(storyId)).data.uid == userId;
+        }
+        function isFollower() {
+          return exists(/databases/$(database)/documents/profiles/$(userId)/followers/$(request.auth.uid));
+        }
+        allow create: if signedIn() && request.auth.uid != userId && cleanNotification() && (
           (request.resource.data.fromUid == request.auth.uid
-            && request.resource.data.type in ['like', 'comment', 'follow']
-            && request.resource.data.read == false
-            && !isSuspended())
+            && !isSuspended()
+            && (
+              (request.resource.data.type in ['like', 'comment'] && storyOfRecipient())
+              || (request.resource.data.type == 'follow' && isFollower())
+            ))
           || (request.resource.data.type == 'admin' && can('deleteStories'))
         );
       }
@@ -337,8 +359,14 @@ service cloud.firestore {
     // sobrescribir). Solo moderación las lee y las cierra.
     match /reports/{reportId} {
       allow create: if signedIn()
+                    && request.resource.data.keys().hasOnly(['type', 'storyId', 'storyTitle', 'commentId', 'commentText',
+                                                             'targetUid', 'reason', 'details', 'reporterUid', 'createdAt'])
                     && request.resource.data.reporterUid == request.auth.uid
-                    && request.resource.data.type in ['story', 'comment'];
+                    && request.resource.data.type in ['story', 'comment']
+                    && request.resource.data.get('details', '') is string
+                    && request.resource.data.get('details', '').size() <= 300
+                    && request.resource.data.get('commentText', '') is string
+                    && request.resource.data.get('commentText', '').size() <= 600;
       allow read, delete: if can('deleteStories');
       allow update: if false;
     }
