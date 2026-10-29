@@ -4,14 +4,16 @@
 // "Cap. 1 · Pág. 3" sin lecturas extra) y el nombre y avatar de quien lo escribió.
 //
 // Respuestas: un solo nivel, como en Wattpad. Una respuesta apunta al comentario con el
-// que empieza el hilo (replyTo) y guarda a quién contesta (replyToUid / replyToName), que
-// puede ser el del hilo u otra respuesta del mismo hilo.
+// que empieza el hilo (replyTo) y guarda a qué comentario contesta (replyToId: el del hilo
+// u otra respuesta) y su autor (replyToUid / replyToName). ancestorUids son los autores de
+// toda la cadena hacia arriba: pueden borrarla (al borrar su comentario, con él se van
+// todas las respuestas que cuelgan de él).
 //
 // Comentarios de párrafo (Webnovel): paragraph es el número de párrafo y paragraphKey una
 // huella de su texto, para encontrarlo aunque el autor añada o quite párrafos antes.
 
 import {
-  addDoc, collection, deleteDoc, doc, getDocs, limit, orderBy, query, where,
+  addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, orderBy, query, where,
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { notifyUser } from '@/services/notifications';
@@ -32,6 +34,8 @@ export interface StoryComment {
   replyTo?: string;      // id del comentario con el que empieza el hilo
   replyToUid?: string;   // a quién responde
   replyToName?: string;
+  replyToId?: string;    // comentario exacto al que responde
+  ancestorUids?: string[];
   paragraph?: number;    // Webnovel: párrafo comentado
   paragraphKey?: string;
 }
@@ -62,9 +66,27 @@ export function toThreads(comments: StoryComment[]): CommentThread[] {
 }
 
 // A quién se responde: el hilo y la persona (el autor del hilo o el de una respuesta)
-export type ReplyTarget = { rootId: string; commentId: string; uid: string; name: string };
-export const replyTargetFor = (c: StoryComment): ReplyTarget =>
-  ({ rootId: c.replyTo ?? c.id, commentId: c.id, uid: c.uid, name: c.userName });
+export type ReplyTarget = { rootId: string; commentId: string; uid: string; name: string; ancestorUids: string[] };
+export const replyTargetFor = (c: StoryComment): ReplyTarget => ({
+  rootId: c.replyTo ?? c.id, commentId: c.id, uid: c.uid, name: c.userName,
+  ancestorUids: [...new Set([...(c.ancestorUids ?? []), c.uid])].slice(-20),
+});
+
+// Comentario del que cuelga una respuesta (las antiguas, sin replyToId, cuelgan del hilo)
+const parentOf = (c: StoryComment) => c.replyToId ?? c.replyTo;
+
+// Respuestas que cuelgan de un comentario, a cualquier profundidad, dentro de una lista
+export function descendantsOf(comments: StoryComment[], id: string): StoryComment[] {
+  const out: StoryComment[] = [];
+  const queue = [id];
+  while (queue.length) {
+    const cur = queue.shift()!;
+    for (const c of comments) {
+      if (c.replyTo && parentOf(c) === cur && !out.includes(c)) { out.push(c); queue.push(c.id); }
+    }
+  }
+  return out;
+}
 
 const commentsCol = (storyId: string) => collection(db, 'stories', storyId, 'comments');
 const toComment = (d: any): StoryComment => ({ id: d.id, ...(d.data() as Omit<StoryComment, 'id'>) });
@@ -84,7 +106,7 @@ export async function listStoryComments(storyId: string, max = 50): Promise<Stor
 
 export async function addComment(
   storyId: string,
-  comment: Omit<StoryComment, 'id' | 'createdAt' | 'replyTo' | 'replyToUid' | 'replyToName'>,
+  comment: Omit<StoryComment, 'id' | 'createdAt' | 'replyTo' | 'replyToUid' | 'replyToName' | 'replyToId' | 'ancestorUids'>,
   story: { authorUid?: string | null; title?: string },
   reply?: ReplyTarget | null,
 ): Promise<StoryComment> {
@@ -92,7 +114,10 @@ export async function addComment(
     ...comment,
     text: comment.text.trim(),
     createdAt: new Date().toISOString(),
-    ...(reply ? { replyTo: reply.rootId, replyToUid: reply.uid, replyToName: reply.name.slice(0, 60) } : {}),
+    ...(reply ? {
+      replyTo: reply.rootId, replyToId: reply.commentId, replyToUid: reply.uid,
+      replyToName: reply.name.slice(0, 60), ancestorUids: reply.ancestorUids,
+    } : {}),
   };
   // Sin campos vacíos: Firestore no los admite
   Object.keys(data).forEach(k => (data as any)[k] === undefined && delete (data as any)[k]);
@@ -125,5 +150,19 @@ export async function addComment(
   return { id: ref.id, ...data };
 }
 
-export const deleteComment = (storyId: string, commentId: string) =>
-  deleteDoc(doc(db, 'stories', storyId, 'comments', commentId));
+// Borra un comentario y todas las respuestas que cuelgan de él, a cualquier profundidad
+// (el de un hilo se lleva el hilo entero). Primero las respuestas y al final el
+// comentario, que es lo que permite a las reglas comprobar quién empezó el hilo.
+// Devuelve los ids borrados, para quitarlos de la pantalla.
+export async function deleteComment(storyId: string, commentId: string): Promise<string[]> {
+  const ref = doc(db, 'stories', storyId, 'comments', commentId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return [commentId];
+  const c = toComment(snap);
+  const rootId = c.replyTo ?? c.id;
+  const thread = (await getDocs(query(commentsCol(storyId), where('replyTo', '==', rootId)))).docs.map(toComment);
+  const doomed = descendantsOf(thread, c.id);
+  await Promise.all(doomed.map(r => deleteDoc(doc(db, 'stories', storyId, 'comments', r.id))));
+  await deleteDoc(ref);
+  return [c.id, ...doomed.map(r => r.id)];
+}

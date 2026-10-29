@@ -33,11 +33,11 @@ import type { Role } from '@/constants/permissions';
 import { RoleBadge } from '@/components/role-badge';
 import { FounderBadge } from '@/components/founder-badge';
 import { WEBNOVEL_THEMES, WEBNOVEL_THEME_DEFAULT, type WebnovelTheme, getWebnovelTheme } from '@/constants/webnovel';
-import { type StoryComment, deleteComment, listStoryComments } from '@/services/comments';
+import { type StoryComment, deleteComment, descendantsOf, listStoryComments } from '@/services/comments';
 import { CommentItem } from '@/components/comment-item';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { promptLogin } from '@/components/login-prompt';
-import { genreLabel, statusLabel, useT, formatLabel } from '@/i18n';
+import { genreLabel, statusLabel, useT, formatLabel, ts } from '@/i18n';
 
 interface Story {
   id: string;
@@ -281,14 +281,18 @@ export default function StoryDetailScreen() {
   const visibleComments = comments.filter(c => !blocked.has(c.uid));
 
   const handleDeleteComment = (c: StoryComment) => {
-    AppAlert.alert(t('story.deleteComment'), t('story.deleteCommentBody'), [
+    // Con él se borran las respuestas que cuelgan de él
+    const replies = descendantsOf(comments, c.id).length;
+    const body = replies === 0 ? t('story.deleteCommentBody')
+      : `${t('story.deleteCommentBody')} ${replies === 1 ? ts('También se borrará su respuesta.') : ts('También se borrarán sus {n} respuestas.', { n: replies })}`;
+    AppAlert.alert(t('story.deleteComment'), body, [
       { text: t('common.cancel'), style: 'cancel' },
       {
         text: t('common.delete'), style: 'destructive',
         onPress: async () => {
           try {
-            await deleteComment(id as string, c.id);
-            setComments(prev => prev.filter(x => x.id !== c.id));
+            const gone = await deleteComment(id as string, c.id);
+            setComments(prev => prev.filter(x => !gone.includes(x.id)));
           } catch (e: any) { AppAlert.alert(t('common.error'), e?.message ?? t('story.deleteCommentFailed')); }
         },
       },

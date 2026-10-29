@@ -631,4 +631,6 @@ export const PHRASES: Record<string, { en: string; ja: string }> = {
   'Y 1 comentario en un párrafo del capítulo.': { en: 'And 1 comment on a paragraph of the chapter.', ja: 'ほかに、この話の段落へのコメントが1件あります。' },
   'Y {n} comentarios en párrafos del capítulo.': { en: 'And {n} comments on paragraphs of the chapter.', ja: 'ほかに、この話の段落へのコメントが{n}件あります。' },
   'Nueva respuesta en "{story}"': { en: 'New reply on "{story}"', ja: '「{story}」に新しい返信' },
+  'También se borrará su respuesta.': { en: 'Its reply will be deleted too.', ja: 'この返信も一緒に削除されます。' },
+  'También se borrarán sus {n} respuestas.': { en: 'Its {n} replies will be deleted too.', ja: 'この{n}件の返信も一緒に削除されます。' },
 };

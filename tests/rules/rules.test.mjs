@@ -92,6 +92,19 @@ await check('ABUSO: aviso de "respuesta" a quien no escribió ese comentario', f
   notif({ type: 'reply', fromUid: 'stranger', commentId: 'fanc' })));
 await check('ABUSO: párrafo que no es un número', false, () => addDoc(collection(fan.firestore(), 'stories/s1/comments'), comment({ paragraph: 'tres', paragraphKey: 'x' })));
 
+// ── Borrado en cascada ──
+await env.withSecurityRulesDisabled(async ctx => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, 'stories/s1/comments/r1'), { uid: 'stranger', text: 'resp', replyTo: 'fanc', replyToId: 'fanc', ancestorUids: ['fan'] });
+  await setDoc(doc(db, 'stories/s1/comments/r2'), { uid: 'author', text: 'resp de resp', replyTo: 'fanc', replyToId: 'r1', ancestorUids: ['fan', 'stranger'] });
+  await setDoc(doc(db, 'stories/s1/comments/old'), { uid: 'author', text: 'respuesta antigua', replyTo: 'fanc' });
+});
+const del = (ctx, id) => import('firebase/firestore').then(f => f.deleteDoc(doc(ctx.firestore(), 'stories/s1/comments/' + id)));
+await check('Quien responde borra su respuesta de la cadena (r2 cuelga de r1)', true, () => del(stranger, 'r2'));
+await check('ABUSO: alguien de fuera borra una respuesta ajena', false, () => del(env.authenticatedContext('nadie'), 'r1'));
+await check('Quien empezó el hilo borra una respuesta antigua (sin lista de autores)', true, () => del(fan, 'old'));
+await check('Quien empezó el hilo borra una respuesta', true, () => del(fan, 'r1'));
+
 // ── Insignia de fundador ──
 await check('El dueño da la insignia de fundador', true, () => setDoc(doc(boss.firestore(), 'founders/author'), { since: now }));
 await check('Cualquiera ve quién es fundador', true, () => getDoc(doc(anon.firestore(), 'founders/author')));

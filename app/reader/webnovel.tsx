@@ -21,7 +21,7 @@ import { sortChapters } from '@/services/stories';
 import { useAuth } from '@/context/AuthContext';
 import type { Role } from '@/constants/permissions';
 import {
-  type ReplyTarget, type StoryComment, COMMENT_MAX_LENGTH, addComment, deleteComment, listChapterComments,
+  type ReplyTarget, type StoryComment, COMMENT_MAX_LENGTH, addComment, deleteComment, descendantsOf, listChapterComments,
   paragraphKey, replyTargetFor,
 } from '@/services/comments';
 import { getStaffRoles } from '@/services/profiles';
@@ -304,14 +304,18 @@ export default function WebnovelReaderScreen() {
   };
 
   const handleDeleteComment = (c: StoryComment) => {
-    AppAlert.alert(t('story.deleteComment'), t('story.deleteCommentBody'), [
+    // Con él se borran las respuestas que cuelgan de él
+    const replies = descendantsOf(comments, c.id).length;
+    const body = replies === 0 ? t('story.deleteCommentBody')
+      : `${t('story.deleteCommentBody')} ${replies === 1 ? ts('También se borrará su respuesta.') : ts('También se borrarán sus {n} respuestas.', { n: replies })}`;
+    AppAlert.alert(t('story.deleteComment'), body, [
       { text: t('common.cancel'), style: 'cancel' },
       {
         text: t('common.delete'), style: 'destructive',
         onPress: async () => {
           try {
-            await deleteComment(storyId, c.id);
-            setComments(prev => prev.filter(x => x.id !== c.id));
+            const gone = await deleteComment(storyId, c.id);
+            setComments(prev => prev.filter(x => !gone.includes(x.id)));
           } catch (e: any) { AppAlert.alert(t('common.error'), e?.message ?? t('story.deleteCommentFailed')); }
         },
       },

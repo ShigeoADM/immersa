@@ -39,7 +39,7 @@ import type { ReportTarget } from '@/services/reports';
 import { sortChapters } from '@/services/stories';
 import { useAuth } from '@/context/AuthContext';
 import {
-  type ReplyTarget, type StoryComment, COMMENT_MAX_LENGTH, addComment, deleteComment, listChapterComments, replyTargetFor,
+  type ReplyTarget, type StoryComment, COMMENT_MAX_LENGTH, addComment, deleteComment, descendantsOf, listChapterComments, replyTargetFor,
 } from '@/services/comments';
 import { CommentItem } from '@/components/comment-item';
 import { CommentThreads, ReplyingTo } from '@/components/comment-threads';
@@ -56,7 +56,7 @@ import {
 import { promptLogin } from '@/components/login-prompt';
 import { PageTransitionOverlay, transitionHalfMs } from '@/components/page-transition';
 import { ChapterIntroView, type IntroStyle } from '@/components/chapter-intro';
-import { t as translate, useT, type TKey } from '@/i18n';
+import { t as translate, useT, type TKey, ts } from '@/i18n';
 
 // ─── Colores de acento del lector ────────────────────────────────────────────
 const UI_ACCENT_KEY = 'immersa_ui_color';
@@ -1782,14 +1782,18 @@ export default function PageModernoReaderScreen() {
   };
 
   const handleDeleteComment = (c: StoryComment) => {
-    AppAlert.alert(t('story.deleteComment'), t('story.deleteCommentBody'), [
+    // Con él se borran las respuestas que cuelgan de él
+    const replies = descendantsOf(chapterComments, c.id).length;
+    const body = replies === 0 ? t('story.deleteCommentBody')
+      : `${t('story.deleteCommentBody')} ${replies === 1 ? ts('También se borrará su respuesta.') : ts('También se borrarán sus {n} respuestas.', { n: replies })}`;
+    AppAlert.alert(t('story.deleteComment'), body, [
       { text: t('common.cancel'), style: 'cancel' },
       {
         text: t('common.delete'), style: 'destructive',
         onPress: async () => {
           try {
-            await deleteComment(storyId as string, c.id);
-            setChapterComments(prev => prev.filter(x => x.id !== c.id));
+            const gone = await deleteComment(storyId as string, c.id);
+            setChapterComments(prev => prev.filter(x => !gone.includes(x.id)));
           } catch (e: any) { AppAlert.alert(t('common.error'), e?.message ?? t('story.deleteCommentFailed')); }
         },
       },

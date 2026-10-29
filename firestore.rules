@@ -209,14 +209,16 @@ service cloud.firestore {
         allow create: if signedIn()
                       && request.resource.data.keys().hasOnly(['uid', 'userName', 'userAvatar', 'text', 'createdAt',
                                                                'chapterId', 'pageId', 'chapterNumber', 'pageNumber',
-                                                               'replyTo', 'replyToUid', 'replyToName',
+                                                               'replyTo', 'replyToUid', 'replyToName', 'replyToId', 'ancestorUids',
                                                                'paragraph', 'paragraphKey'])
                       // Respuesta: a un hilo de esta misma novela
                       && (!('replyTo' in request.resource.data)
                           || (request.resource.data.replyTo is string
                               && exists(/databases/$(database)/documents/stories/$(storyId)/comments/$(request.resource.data.replyTo))
                               && request.resource.data.get('replyToName', '') is string
-                              && request.resource.data.get('replyToName', '').size() <= 60))
+                              && request.resource.data.get('replyToName', '').size() <= 60
+                              && request.resource.data.get('ancestorUids', []) is list
+                              && request.resource.data.get('ancestorUids', []).size() <= 20))
                       // Comentario de un párrafo (Webnovel)
                       && (!('paragraph' in request.resource.data)
                           || (request.resource.data.paragraph is int
@@ -230,8 +232,14 @@ service cloud.firestore {
                       && request.resource.data.get('userName', '').size() <= 60
                       && (storyPublished(storyId) || ownsStory(storyId))
                       && !isSuspended();
+        // También los autores de la cadena de la que cuelga (al borrar su comentario se van
+        // sus respuestas) y, en las respuestas antiguas sin esa lista, quien empezó el hilo
         allow delete: if signedIn()
-                      && (resource.data.uid == request.auth.uid || ownsStory(storyId) || can('deleteStories'));
+                      && (resource.data.uid == request.auth.uid || ownsStory(storyId) || can('deleteStories')
+                          || request.auth.uid in resource.data.get('ancestorUids', [])
+                          || (resource.data.get('replyTo', '') is string && resource.data.get('replyTo', '') != ''
+                              && exists(/databases/$(database)/documents/stories/$(storyId)/comments/$(resource.data.replyTo))
+                              && get(/databases/$(database)/documents/stories/$(storyId)/comments/$(resource.data.replyTo)).data.uid == request.auth.uid));
       }
     }
 
