@@ -10,7 +10,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { Image } from 'expo-image';
+import { CoverImage } from '@/components/cover-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, type Href } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -70,12 +70,12 @@ function BookCard({
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.82}>
       {/* Portada */}
       <View style={styles.cardCover}>
-        {entry.coverUrl
-          ? <Image source={{ uri: entry.coverThumbUrl || entry.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
-          : <View style={[StyleSheet.absoluteFill, styles.coverPlaceholder]}>
-              <MaterialIcons name="menu-book" size={26} color={fmtColor + '60'} />
-            </View>
-        }
+        <CoverImage
+          sources={[entry.coverThumbUrl, entry.coverUrl]}
+          fallback={<View style={[StyleSheet.absoluteFill, styles.coverPlaceholder]}>
+            <MaterialIcons name="menu-book" size={26} color={fmtColor + '60'} />
+          </View>}
+        />
         <View style={[styles.fmtBadge, { backgroundColor: fmtColor + 'CC' }]}>
           <Text style={styles.fmtBadgeText}>{formatLabel(entry.format)}</Text>
         </View>

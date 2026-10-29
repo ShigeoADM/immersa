@@ -322,6 +322,12 @@ export default function ModernoDetailsScreen() {
                   source={{ uri: coverUri }}
                   style={[StyleSheet.absoluteFill, { borderRadius: 4 }]}
                   contentFit="cover" transition={150}
+                  // El archivo ya no existe (se borró del almacenamiento): sin portada,
+                  // y al guardar se quita también de la historia
+                  onError={() => {
+                    if (uploadingCover || coverUri !== coverUrl) return;
+                    setCoverUri(null); setCoverUrl(''); setCoverThumbUrl('');
+                  }}
                 />
                 {/* Botón de cambio encima de la imagen */}
                 {!uploadingCover && (

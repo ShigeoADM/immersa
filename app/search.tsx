@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, FlatList,
   ActivityIndicator,
 } from 'react-native';
-import { Image } from 'expo-image';
+import { CoverImage } from '@/components/cover-image';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { collection, getDocs, limit, query, where } from 'firebase/firestore';
@@ -255,12 +255,12 @@ export default function SearchScreen() {
             return (
               <TouchableOpacity style={styles.row} activeOpacity={0.8} onPress={() => router.push(`/story/${s.id}`)}>
                 <View style={styles.cover}>
-                  {s.coverUrl
-                    ? <Image source={{ uri: s.coverThumbUrl || s.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
-                    : <View style={[StyleSheet.absoluteFill, styles.coverPlaceholder]}>
-                        <MaterialIcons name="menu-book" size={20} color={fmtColor + '60'} />
-                      </View>
-                  }
+                  <CoverImage
+                    sources={[s.coverThumbUrl, s.coverUrl]}
+                    fallback={<View style={[StyleSheet.absoluteFill, styles.coverPlaceholder]}>
+                      <MaterialIcons name="menu-book" size={20} color={fmtColor + '60'} />
+                    </View>}
+                  />
                 </View>
                 <View style={styles.rowInfo}>
                   <Text style={styles.rowTitle} numberOfLines={2}>{s.title}</Text>

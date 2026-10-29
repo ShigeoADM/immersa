@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { CoverImage } from '@/components/cover-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -279,12 +280,12 @@ export default function PublicProfileScreen() {
                       onPress={() => router.push(`/story/${s.id}`)}
                     >
                       <View style={styles.cardCover}>
-                        {s.coverUrl
-                          ? <Image source={{ uri: s.coverThumbUrl || s.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
-                          : <View style={[StyleSheet.absoluteFill, styles.coverPlaceholder]}>
-                              <MaterialIcons name="menu-book" size={26} color={fmtColor + '60'} />
-                            </View>
-                        }
+                        <CoverImage
+                          sources={[s.coverThumbUrl, s.coverUrl]}
+                          fallback={<View style={[StyleSheet.absoluteFill, styles.coverPlaceholder]}>
+                            <MaterialIcons name="menu-book" size={26} color={fmtColor + '60'} />
+                          </View>}
+                        />
                       </View>
                       <Text style={styles.cardTitle} numberOfLines={2}>{s.title}</Text>
                       <Text style={styles.cardStatus}>{statusLabel(s.status)}</Text>

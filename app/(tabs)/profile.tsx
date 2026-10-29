@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { CoverImage } from '@/components/cover-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, type Href } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -57,12 +58,12 @@ function StoryCard({ story, onPress }: { story: StoryCard; onPress: () => void }
       activeOpacity={0.8}
       onPress={onPress}
     >
-      {story.coverUrl
-        ? <Image source={{ uri: story.coverThumbUrl || story.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
-        : <View style={[styles.storyCardPlaceholder, { backgroundColor: Colors.card }]}>
-            <MaterialIcons name="menu-book" size={28} color={fmtColor + '60'} />
-          </View>
-      }
+      <CoverImage
+        sources={[story.coverThumbUrl, story.coverUrl]}
+        fallback={<View style={[styles.storyCardPlaceholder, { backgroundColor: Colors.card }]}>
+          <MaterialIcons name="menu-book" size={28} color={fmtColor + '60'} />
+        </View>}
+      />
       <View style={[styles.fmtBadge, { backgroundColor: fmtColor + 'CC' }]}>
         <Text style={styles.fmtBadgeText}>{formatLabel(story.format)}</Text>
       </View>

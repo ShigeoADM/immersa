@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { CoverImage } from '@/components/cover-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, type Href } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -75,12 +76,12 @@ function VerticalCard({ story, onPress }: { story: StoryCard; onPress: () => voi
   return (
     <TouchableOpacity style={styles.vCard} activeOpacity={0.8} onPress={onPress}>
       <View style={styles.vCardCover}>
-        {story.coverUrl
-          ? <Image source={{ uri: story.coverThumbUrl || story.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
-          : <View style={styles.cardPlaceholder}>
-              <MaterialIcons name="menu-book" size={28} color={fmtColor + '60'} />
-            </View>
-        }
+        <CoverImage
+          sources={[story.coverThumbUrl, story.coverUrl]}
+          fallback={<View style={styles.cardPlaceholder}>
+            <MaterialIcons name="menu-book" size={28} color={fmtColor + '60'} />
+          </View>}
+        />
         <View style={[styles.fmtBadge, { backgroundColor: fmtColor + 'CC' }]}>
           <Text style={styles.fmtBadgeText}>{formatLabel(story.format)}</Text>
         </View>
@@ -106,12 +107,12 @@ function HorizontalCard({ story, onPress, single }: {
   const cardStyle = single ? styles.hCardSingle : styles.hCard;
   return (
     <TouchableOpacity style={cardStyle} activeOpacity={0.8} onPress={onPress}>
-      {story.coverUrl
-        ? <Image source={{ uri: story.coverThumbUrl || story.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
-        : <View style={[styles.cardPlaceholder, { backgroundColor: Colors.card }]}>
-            <MaterialIcons name="menu-book" size={single ? 24 : 16} color={fmtColor + '60'} />
-          </View>
-      }
+      <CoverImage
+        sources={[story.coverThumbUrl, story.coverUrl]}
+        fallback={<View style={[styles.cardPlaceholder, { backgroundColor: Colors.card }]}>
+          <MaterialIcons name="menu-book" size={single ? 24 : 16} color={fmtColor + '60'} />
+        </View>}
+      />
       <View style={[styles.fmtBadge, { backgroundColor: fmtColor + 'CC' }]}>
         <Text style={styles.fmtBadgeText}>{formatLabel(story.format)}</Text>
       </View>

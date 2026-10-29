@@ -104,6 +104,7 @@ export default function StoryDetailScreen() {
 
   const t = useT();
   const [story, setStory]             = useState<Story | null>(null);
+  const [coverBroken, setCoverBroken] = useState(false); // el archivo de la portada ya no existe
   // Web: el título de la pestaña es el de la novela mientras se está en su ficha
   useEffect(() => {
     if (Platform.OS !== 'web' || !story?.title) return;
@@ -337,6 +338,8 @@ export default function StoryDetailScreen() {
     );
   }
 
+  const cover = coverBroken ? null : story.coverUrl;
+
   // Contenido +18: solo para mayores de edad (el autor y moderación siempre pueden verla)
   const isOwnStory = !!user && story.uid === user.uid;
   if (story.isAdult && !isOwnStory && !can('deleteStories') && isAdult !== true) {
@@ -384,14 +387,15 @@ export default function StoryDetailScreen() {
       </Modal>
 
       {/* ── Portada / hero ── */}
-      <View style={[styles.hero, isDesktop && (story.coverUrl ? styles.heroDesktop : styles.heroDesktopNoCover)]}>
-        {story.coverUrl
+      <View style={[styles.hero, isDesktop && (cover ? styles.heroDesktop : styles.heroDesktopNoCover)]}>
+        {cover
           ? <Image
-              source={{ uri: story.coverUrl }}
+              source={{ uri: cover }}
               style={StyleSheet.absoluteFill}
               contentFit="cover"
               transition={150}
               blurRadius={isDesktop ? 40 : 0}
+              onError={() => setCoverBroken(true)}
             />
           : <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0A0A0A' }]} />
         }
@@ -449,9 +453,9 @@ export default function StoryDetailScreen() {
 
         <View style={isDesktop ? styles.heroDesktopRow : undefined}>
         {/* Escritorio: la portada con su proporción, a la izquierda del título */}
-        {isDesktop && story.coverUrl ? (
+        {isDesktop && cover ? (
           <Image
-            source={{ uri: story.coverUrl }}
+            source={{ uri: cover }}
             style={(story as any).coverOrientation === 'horizontal' ? styles.coverCardWide : styles.coverCardTall}
             contentFit="cover"
             transition={150}
