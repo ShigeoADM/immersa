@@ -53,8 +53,8 @@ const STATUS_LABELS: Record<string, string> = {
 //  Par horizontal:   cada card = (ROW_H - HPAIR_GAP) / 2
 //  Sola horizontal:  más alta y un poco más ancha, centrada en el slot
 
-const ROW_H      = 220;   // altura uniforme de todos los slots
-const V_INFO_H   = 46;    // área de texto debajo de la portada vertical
+const ROW_H      = 242;   // altura uniforme de todos los slots
+const V_INFO_H   = 68;    // área de texto debajo de la portada vertical: título en dos líneas y estado
 const V_COVER_H  = ROW_H - V_INFO_H;   // 174 px
 const VCARD_W    = 128;
 
@@ -85,8 +85,7 @@ function VerticalCard({ story, onPress }: { story: StoryCard; onPress: () => voi
         </View>
       </View>
       <View style={styles.vCardInfo}>
-        {/* Una línea: con dos no cabía y se cortaba sin puntos suspensivos */}
-        <Text style={styles.vCardTitle} numberOfLines={1}>{story.title}</Text>
+        <Text style={styles.vCardTitle} numberOfLines={2}>{story.title}</Text>
         <Text style={styles.vCardStatus} numberOfLines={1}>
           {statusLabel(story.status)}
         </Text>
@@ -373,9 +372,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   vCardCover:  { width: '100%', height: V_COVER_H },
-  vCardInfo:   { flex: 1, padding: 10, gap: 4, justifyContent: 'center' },
+  vCardInfo:   { flex: 1, paddingHorizontal: 10, paddingVertical: 8, gap: 3, justifyContent: 'flex-start' },
   vCardTitle:  { fontSize: 12, fontWeight: '600', color: Colors.textPrimary, lineHeight: 17 },
-  vCardStatus: { fontSize: 10, color: Colors.textMuted },
+  vCardStatus: { fontSize: 10, lineHeight: 14, color: Colors.textMuted },
 
   // ── Columna para el par de horizontales ──────────────────────────────────────
   hColPair: {
