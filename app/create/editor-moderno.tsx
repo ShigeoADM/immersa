@@ -33,18 +33,20 @@ function confirmAction(
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { collection, addDoc, doc, updateDoc, getDocs, getDoc, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, getDocs, getDoc, query, orderBy, writeBatch } from 'firebase/firestore';
+import * as DocumentPicker from 'expo-document-picker';
+import { type BookSection, readBookFile, splitIntoChapters } from '@/services/import-book';
 import { db } from '@/config/firebase';
 import { Colors } from '@/constants/theme';
 import { AppAlert, useDialogAccent } from '@/components/app-dialog';
 import {
-  deleteChapterWithCascade, deleteStoryWithCascade, formatReadingStats, saveOrder, sortChapters,
+  countWords, deleteChapterWithCascade, deleteStoryWithCascade, formatReadingStats, saveOrder, sortChapters,
 } from '@/services/stories';
 import { type StoryStats, getStoryStats } from '@/services/social';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { tutorialEvent, tutorialIntercept, tutorialZone } from '@/components/tutorial';
 import { BACKUP_EXTENSION, encodeBackup } from '@/services/backup-file';
-import { t as translate, useT } from '@/i18n';
+import { t as translate, ts, useT } from '@/i18n';
 
 interface Chapter {
   id: string;
@@ -322,6 +324,89 @@ export default function EditorModernoScreen() {
     }
   };
 
+  // ── Importar un libro entero (Webnovel) ───────────────────────────────────
+  // Se lee el archivo, se separa en capítulos por sus encabezados y se enseña una vista
+  // previa para elegir qué partes entran antes de crear nada.
+  const [bookImport, setBookImport] = useState<{
+    fileName: string; sections: BookSection[]; include: boolean[]; single: boolean;
+  } | null>(null);
+  const [readingBook, setReadingBook] = useState(false);
+  const [importingBook, setImportingBook] = useState(false);
+
+  const handlePickBook = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'text/plain', 'text/markdown', 'application/pdf', 'application/epub+zip', 'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets[0]) return;
+      const asset = result.assets[0];
+      setReadingBook(true);
+      const bytes = new Uint8Array(await (await fetch(asset.uri)).arrayBuffer());
+      const baseName = asset.name.replace(/\.[^.]+$/, '');
+      const sections = splitIntoChapters(await readBookFile({ name: asset.name, bytes }), baseName);
+      if (sections.length === 0) {
+        AppAlert.alert(ts('No se pudo importar'), ts('No se ha encontrado texto en ese archivo.'));
+        return;
+      }
+      // El texto suelto del principio (portada, índice…) solo entra marcado si es largo
+      const include = sections.map(sec => sec.heading || sec.words >= 80);
+      setBookImport({ fileName: asset.name, sections, include, single: false });
+    } catch (e: any) {
+      console.error('Error leyendo el libro:', e);
+      AppAlert.alert(ts('No se pudo importar'), e?.message ?? ts('Inténtalo de nuevo.'));
+    } finally {
+      setReadingBook(false);
+    }
+  };
+
+  const handleImportBook = async () => {
+    if (!bookImport || importingBook) return;
+    const chosen = bookImport.sections.filter((_, i) => bookImport.include[i]);
+    if (chosen.length === 0) return;
+    // Todo junto: un solo capítulo, con cada encabezado en negrita dentro del texto
+    const list = bookImport.single
+      ? [{
+          title: bookImport.fileName.replace(/\.[^.]+$/, '').slice(0, 80),
+          content: chosen.map(sec => (sec.heading ? `**${sec.title}**\n\n` : '') + sec.content).join('\n\n'),
+        }]
+      : chosen.map(sec => ({ title: sec.title, content: sec.content }));
+    // Un capítulo no puede pasar de lo que cabe en un documento de la base de datos
+    if (list.some(c => c.content.length > 900_000)) {
+      AppAlert.alert(ts('No se pudo importar'), ts('Ese capítulo es demasiado largo para guardarlo de una vez. Impórtalo separado por capítulos.'));
+      return;
+    }
+    setImportingBook(true);
+    try {
+      await saveOrder(chaptersPath, chapters);
+      const base = Date.now();
+      const created: Chapter[] = [];
+      // En tandas pequeñas: cada capítulo puede llevar bastante texto
+      for (let i = 0; i < list.length; i += 20) {
+        const batch = writeBatch(db);
+        list.slice(i, i + 20).forEach((c, k) => {
+          const ref = doc(collection(db, 'stories', storyId as string, 'chapters'));
+          const createdAt = new Date(base + i + k).toISOString();
+          const order = chapters.length + i + k + 1;
+          const wordCount = countWords(c.content.replace(/\*+/g, ''));
+          batch.set(ref, { title: c.title, content: c.content, wordCount, pages: [], createdAt, order });
+          created.push({ id: ref.id, title: c.title, createdAt, order, wordCount } as Chapter);
+        });
+        await batch.commit();
+      }
+      setChapters(prev => [...prev.map((c, k) => ({ ...c, order: k + 1 })), ...created]);
+      setBookImport(null);
+    } catch (e: any) {
+      console.error('Error importando el libro:', e);
+      AppAlert.alert(ts('No se pudo importar'), e?.message ?? ts('Inténtalo de nuevo.'));
+    } finally {
+      setImportingBook(false);
+    }
+  };
+
   const handleAddChapter = async () => {
     if (!chapterTitle.trim() || saving) return;
     setSaving(true);
@@ -531,12 +616,85 @@ export default function EditorModernoScreen() {
         )}
       </ScrollView>
 
-      <SafeAreaView edges={['bottom']} style={styles.footer}>
-        <TouchableOpacity style={styles.addChapterBtn} activeOpacity={0.85} onPress={() => setModalVisible(true)} testID={tutorialZone('addChapter')}>
+      <SafeAreaView edges={['bottom']} style={[styles.footer, styles.footerRow]}>
+        <TouchableOpacity style={[styles.addChapterBtn, { flex: 1 }]} activeOpacity={0.85} onPress={() => setModalVisible(true)} testID={tutorialZone('addChapter')}>
           <MaterialIcons name="add" size={20} color="#000" />
           <Text style={styles.addChapterText}>{t('book.addChapter')}</Text>
         </TouchableOpacity>
+        {format === 'Webnovel' && Platform.OS === 'web' && (
+          <TouchableOpacity style={styles.importBookBtn} activeOpacity={0.85} onPress={handlePickBook} disabled={readingBook}>
+            {readingBook
+              ? <ActivityIndicator size="small" color={accent} />
+              : <MaterialIcons name="upload-file" size={20} color={accent} />}
+            <Text style={styles.importBookText}>{readingBook ? ts('Leyendo el archivo…') : ts('Importar libro')}</Text>
+          </TouchableOpacity>
+        )}
       </SafeAreaView>
+
+      <Modal visible={!!bookImport} transparent animationType="fade" onRequestClose={() => !importingBook && setBookImport(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, styles.bookBox]}>
+            <Text style={styles.modalTitle}>{ts('Importar un libro entero')}</Text>
+            {bookImport && (
+              <>
+                <Text style={styles.bookHint}>
+                  {ts('Se han encontrado {n} partes en «{file}». Desmarca las que no quieras importar.', { n: bookImport.sections.length, file: bookImport.fileName })}
+                </Text>
+                <ScrollView style={styles.bookList} contentContainerStyle={{ gap: 4 }}>
+                  {bookImport.sections.map((sec, i) => {
+                    const on = bookImport.include[i];
+                    return (
+                      <TouchableOpacity
+                        key={i}
+                        style={styles.bookRow}
+                        activeOpacity={0.7}
+                        onPress={() => setBookImport(b => b && { ...b, include: b.include.map((v, k) => (k === i ? !v : v)) })}
+                      >
+                        <MaterialIcons name={on ? 'check-box' : 'check-box-outline-blank'} size={20} color={on ? accent : Colors.textMuted} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.bookRowTitle, !on && { color: Colors.textMuted }]} numberOfLines={1}>
+                            {sec.heading ? sec.title : ts('Sin encabezado (texto del principio)')}
+                          </Text>
+                          <Text style={styles.bookRowSub} numberOfLines={1}>
+                            {ts('{n} palabras', { n: sec.words })} · {sec.content.replace(/\*+/g, '').split('\n').find(l => l.trim())?.slice(0, 70)}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <TouchableOpacity
+                  style={styles.bookRow}
+                  activeOpacity={0.7}
+                  onPress={() => setBookImport(b => b && { ...b, single: !b.single })}
+                >
+                  <MaterialIcons name={bookImport.single ? 'check-box' : 'check-box-outline-blank'} size={20} color={bookImport.single ? accent : Colors.textMuted} />
+                  <Text style={styles.bookRowTitle}>{ts('Todo en un solo capítulo')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.bookHint}>{ts('Los capítulos se crean como borradores, después de los que ya tienes.')}</Text>
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setBookImport(null)} disabled={importingBook}>
+                    <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
+                  </TouchableOpacity>
+                  {(() => {
+                    const n = bookImport.single ? 1 : bookImport.include.filter(Boolean).length;
+                    const disabled = importingBook || bookImport.include.every(v => !v);
+                    return (
+                      <TouchableOpacity style={[styles.modalConfirmBtn, disabled && styles.modalConfirmDisabled]} onPress={handleImportBook} disabled={disabled}>
+                        {importingBook
+                          ? <ActivityIndicator size="small" color="#000" />
+                          : <Text style={styles.modalConfirmText}>
+                              {n === 1 ? ts('Importar 1 capítulo') : ts('Importar {n} capítulos', { n })}
+                            </Text>}
+                      </TouchableOpacity>
+                    );
+                  })()}
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -637,6 +795,15 @@ const makeStyles = (accent: string) => StyleSheet.create({
   footer:            { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8, borderTopWidth: 1, borderTopColor: Colors.border, backgroundColor: Colors.bg },
   addChapterBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: accent, borderRadius: 6, paddingVertical: 14 },
   addChapterText:    { fontSize: 15, fontWeight: '700', color: '#000' },
+  footerRow:         { flexDirection: 'row', gap: 10 },
+  importBookBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 6, paddingVertical: 14, paddingHorizontal: 16, borderWidth: 1, borderColor: accent },
+  importBookText:    { fontSize: 15, fontWeight: '700', color: accent },
+  bookBox:           { maxWidth: 560, maxHeight: '85%' },
+  bookHint:          { fontSize: 13, lineHeight: 19, color: Colors.textSecondary },
+  bookList:          { maxHeight: 340, borderWidth: 1, borderColor: Colors.border, borderRadius: 6, padding: 6 },
+  bookRow:           { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, paddingHorizontal: 4 },
+  bookRowTitle:      { fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
+  bookRowSub:        { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
   modalOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   modalBox:          { width: '100%', maxWidth: 460, alignSelf: 'center', backgroundColor: Colors.surface, borderRadius: 8, padding: 24, borderWidth: 1, borderColor: Colors.border, gap: 16 },
   modalTitle:        { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },

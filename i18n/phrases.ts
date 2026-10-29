@@ -601,4 +601,22 @@ export const PHRASES: Record<string, { en: string; ja: string }> = {
   'Dar insignia': { en: 'Give badge', ja: '付与する' },
   'Quitar insignia': { en: 'Remove badge', ja: '外す' },
   'No se pudo cambiar la insignia.': { en: 'The badge could not be changed.', ja: 'バッジを変更できませんでした。' },
+
+  // ── Importar un libro entero (Webnovel) ──
+  'Importar libro': { en: 'Import book', ja: '本をインポート' },
+  'Leyendo el archivo…': { en: 'Reading the file…', ja: 'ファイルを読み込み中…' },
+  'Importar un libro entero': { en: 'Import a whole book', ja: '本を丸ごとインポート' },
+  'Se han encontrado {n} partes en «{file}». Desmarca las que no quieras importar.': { en: 'Found {n} parts in “{file}”. Untick the ones you do not want to import.', ja: '「{file}」に{n}個のパートが見つかりました。インポートしないものはチェックを外してください。' },
+  'Sin encabezado (texto del principio)': { en: 'No heading (opening text)', ja: '見出しなし（冒頭のテキスト）' },
+  '{n} palabras': { en: '{n} words', ja: '{n}語' },
+  'Todo en un solo capítulo': { en: 'Everything in a single chapter', ja: 'すべてを1つの話にまとめる' },
+  'Los capítulos se crean como borradores, después de los que ya tienes.': { en: 'Chapters are created as drafts, after the ones you already have.', ja: '話は下書きとして、既存の話の後に作成されます。' },
+  'Importar 1 capítulo': { en: 'Import 1 chapter', ja: '1話をインポート' },
+  'Importar {n} capítulos': { en: 'Import {n} chapters', ja: '{n}話をインポート' },
+  'No se ha encontrado texto en ese archivo.': { en: 'No text was found in that file.', ja: 'このファイルにはテキストが見つかりませんでした。' },
+  'Ese capítulo es demasiado largo para guardarlo de una vez. Impórtalo separado por capítulos.': { en: 'That chapter is too long to save in one go. Import it split into chapters.', ja: 'この話は長すぎて一度に保存できません。話ごとに分けてインポートしてください。' },
+  'Ese archivo no parece un documento de Word (.docx).': { en: 'That file does not look like a Word document (.docx).', ja: 'このファイルはWord文書（.docx）ではないようです。' },
+  'Ese archivo no parece un libro EPUB.': { en: 'That file does not look like an EPUB book.', ja: 'このファイルはEPUBの本ではないようです。' },
+  'No se pudo cargar el lector de PDF. Comprueba la conexión.': { en: 'The PDF reader could not be loaded. Check your connection.', ja: 'PDFリーダーを読み込めませんでした。接続をご確認ください。' },
+  'Los .doc antiguos no se pueden leer. Guárdalo como .docx o como texto (.txt) y vuelve a intentarlo.': { en: 'Old .doc files cannot be read. Save it as .docx or as text (.txt) and try again.', ja: '古い.docファイルは読み込めません。.docxまたはテキスト（.txt）で保存してから、もう一度お試しください。' },
 };
