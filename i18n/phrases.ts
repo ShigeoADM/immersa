@@ -619,4 +619,16 @@ export const PHRASES: Record<string, { en: string; ja: string }> = {
   'Ese archivo no parece un libro EPUB.': { en: 'That file does not look like an EPUB book.', ja: 'このファイルはEPUBの本ではないようです。' },
   'No se pudo cargar el lector de PDF. Comprueba la conexión.': { en: 'The PDF reader could not be loaded. Check your connection.', ja: 'PDFリーダーを読み込めませんでした。接続をご確認ください。' },
   'Los .doc antiguos no se pueden leer. Guárdalo como .docx o como texto (.txt) y vuelve a intentarlo.': { en: 'Old .doc files cannot be read. Save it as .docx or as text (.txt) and try again.', ja: '古い.docファイルは読み込めません。.docxまたはテキスト（.txt）で保存してから、もう一度お試しください。' },
+
+  // ── Respuestas y comentarios por párrafo ──
+  'Responder': { en: 'Reply', ja: '返信' },
+  'Respondiendo a {name}': { en: 'Replying to {name}', ja: '{name}さんに返信' },
+  'Ver 1 respuesta más': { en: 'Show 1 more reply', ja: 'さらに1件の返信を表示' },
+  'Ver {n} respuestas más': { en: 'Show {n} more replies', ja: 'さらに{n}件の返信を表示' },
+  'Comentarios del párrafo': { en: 'Paragraph comments', ja: '段落へのコメント' },
+  'Comenta este párrafo…': { en: 'Comment on this paragraph…', ja: 'この段落にコメント…' },
+  'Nadie ha comentado este párrafo todavía.': { en: 'Nobody has commented on this paragraph yet.', ja: 'この段落にはまだコメントがありません。' },
+  'Y 1 comentario en un párrafo del capítulo.': { en: 'And 1 comment on a paragraph of the chapter.', ja: 'ほかに、この話の段落へのコメントが1件あります。' },
+  'Y {n} comentarios en párrafos del capítulo.': { en: 'And {n} comments on paragraphs of the chapter.', ja: 'ほかに、この話の段落へのコメントが{n}件あります。' },
+  'Nueva respuesta en "{story}"': { en: 'New reply on "{story}"', ja: '「{story}」に新しい返信' },
 };

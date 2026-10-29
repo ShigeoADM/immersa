@@ -39,9 +39,10 @@ import type { ReportTarget } from '@/services/reports';
 import { sortChapters } from '@/services/stories';
 import { useAuth } from '@/context/AuthContext';
 import {
-  type StoryComment, COMMENT_MAX_LENGTH, addComment, deleteComment, listChapterComments,
+  type ReplyTarget, type StoryComment, COMMENT_MAX_LENGTH, addComment, deleteComment, listChapterComments, replyTargetFor,
 } from '@/services/comments';
 import { CommentItem } from '@/components/comment-item';
+import { CommentThreads, ReplyingTo } from '@/components/comment-threads';
 import { getStaffRoles } from '@/services/profiles';
 import { enterReading, leaveReading, hasLikedChapter, setChapterLike } from '@/services/social';
 import type { Role } from '@/constants/permissions';
@@ -706,6 +707,8 @@ export default function PageModernoReaderScreen() {
   const [showComments, setShowComments]     = useState(false);
   const [commentText, setCommentText]       = useState('');
   const [sendingComment, setSendingComment] = useState(false);
+  const [replyTarget, setReplyTarget]       = useState<ReplyTarget | null>(null);
+  const commentInputRef = useRef<TextInput>(null);
   const [reportTarget, setReportTarget]     = useState<ReportTarget | null>(null);
   const [staffRoles, setStaffRoles]         = useState<Map<string, Role>>(new Map());
   const uiOpacity   = useRef(new Animated.Value(1)).current;
@@ -1766,9 +1769,11 @@ export default function PageModernoReaderScreen() {
           chapterNumber, pageNumber: current + 1,
         },
         storyMeta,
+        replyTarget,
       );
       setChapterComments(prev => [created, ...prev]);
       setCommentText('');
+      setReplyTarget(null);
     } catch (e: any) {
       AppAlert.alert(t('common.error'), e?.message ?? t('reader.commentFailed'));
     } finally {
@@ -2023,6 +2028,7 @@ export default function PageModernoReaderScreen() {
   const page       = pages[current];
   // Comentarios de esta página, sin los de usuarios bloqueados
   const pageComments = page ? chapterComments.filter(c => c.pageId === page.id && !blocked.has(c.uid)) : [];
+  useEffect(() => { if (!showComments) setReplyTarget(null); }, [showComments, current]);
   // ── Web: pantalla completa ────────────────────────────────────────────────
   const [isFullscreen, setIsFullscreen] = useState(false);
   useEffect(() => {
@@ -2650,32 +2656,39 @@ export default function PageModernoReaderScreen() {
                 <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.8)" />
               </TouchableOpacity>
             </View>
-            <FlatList
-              data={pageComments}
-              keyExtractor={c => c.id}
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ paddingHorizontal: 14, flexGrow: 1 }}
-              ListEmptyComponent={
-                <Text style={styles.commentsEmpty}>{t('reader.noCommentsPage')}</Text>
-              }
-              renderItem={({ item }) => (
-                <CommentItem
-                  comment={item}
-                  role={staffRoles.get(item.uid)}
-                  showLocation={false}
-                  canDelete={item.uid === auth.currentUser?.uid || isAuthor || can('deleteStories')}
-                  onDelete={handleDeleteComment}
-                  onReport={item.uid !== auth.currentUser?.uid
-                    ? () => setReportTarget({
-                        type: 'comment', storyId: storyId as string, storyTitle: storyMeta.title ?? '',
-                        commentId: item.id, commentText: item.text, targetUid: item.uid,
-                      })
-                    : undefined}
-                />
-              )}
-            />
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 14, flexGrow: 1 }}>
+              {pageComments.length === 0
+                ? <Text style={styles.commentsEmpty}>{t('reader.noCommentsPage')}</Text>
+                : <CommentThreads
+                    comments={pageComments}
+                    mutedColor="#FFFFFF"
+                    accentColor={accentColor}
+                    renderComment={item => (
+                      <CommentItem
+                        comment={item}
+                        role={staffRoles.get(item.uid)}
+                        showLocation={false}
+                        canDelete={item.uid === auth.currentUser?.uid || isAuthor || can('deleteStories')}
+                        onDelete={handleDeleteComment}
+                        onReply={c => {
+                          if (!auth.currentUser) { askLoginToComment(); return; }
+                          setReplyTarget(replyTargetFor(c));
+                          commentInputRef.current?.focus();
+                        }}
+                        onReport={item.uid !== auth.currentUser?.uid
+                          ? () => setReportTarget({
+                              type: 'comment', storyId: storyId as string, storyTitle: storyMeta.title ?? '',
+                              commentId: item.id, commentText: item.text, targetUid: item.uid,
+                            })
+                          : undefined}
+                      />
+                    )}
+                  />}
+            </ScrollView>
+            <ReplyingTo target={replyTarget} onCancel={() => setReplyTarget(null)} color={accentColor} mutedColor="rgba(255,255,255,0.6)" />
             <View style={styles.commentInputRow}>
               <TextInput
+                ref={commentInputRef}
                 style={styles.commentInput}
                 value={commentText}
                 onChangeText={setCommentText}

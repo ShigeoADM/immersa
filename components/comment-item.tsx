@@ -11,13 +11,14 @@ import { ts, useT } from '@/i18n';
 
 // Un comentario: avatar a la izquierda, nombre arriba a la izquierda,
 // "Cap. 1 · Pág. 3" arriba a la derecha y el texto debajo.
-export function CommentItem({ comment, role, showLocation = true, canDelete, onDelete, onReport, onPressUser, colors }: {
+export function CommentItem({ comment, role, showLocation = true, canDelete, onDelete, onReport, onReply, onPressUser, colors }: {
   comment: StoryComment;
   role?: Role | null;       // rol actual de quien comenta (insignia DUEÑO / ADMIN)
   showLocation?: boolean;
   canDelete?: boolean;
   onDelete?: (comment: StoryComment) => void;
   onReport?: (comment: StoryComment) => void;   // si se pasa, muestra el botón de denunciar
+  onReply?: (comment: StoryComment) => void;    // si se pasa, muestra «Responder»
   onPressUser?: (uid: string) => void;
   colors?: { name: string; text: string; muted: string }; // para fondos que no son el oscuro
 }) {
@@ -64,13 +65,26 @@ export function CommentItem({ comment, role, showLocation = true, canDelete, onD
             )}
           </View>
         </View>
-        <Text style={[styles.text, colors && { color: colors.text }]}>{comment.text}</Text>
+        <Text style={[styles.text, colors && { color: colors.text }]}>
+          {comment.replyToName
+            ? <Text style={[styles.mention, colors && { color: colors.muted }]}>@{comment.replyToName} </Text>
+            : null}
+          {comment.text}
+        </Text>
+        {onReply && (
+          <TouchableOpacity onPress={() => onReply(comment)} hitSlop={6} style={styles.replyBtn}>
+            <Text style={[styles.replyText, colors && { color: colors.muted }]}>{ts('Responder')}</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  mention:   { fontWeight: '700', color: Colors.textSecondary },
+  replyBtn:  { alignSelf: 'flex-start', paddingTop: 2 },
+  replyText: { fontSize: 12, fontWeight: '700', color: Colors.textMuted },
   row:    { flexDirection: 'row', gap: 10, paddingVertical: 10 },
   avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.card },
   avatarFallback: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border },

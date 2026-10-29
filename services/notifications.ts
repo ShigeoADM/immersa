@@ -29,7 +29,7 @@ import { auth, db } from '@/config/firebase';
 
 export type NotificationType =
   | 'story_deleted' | 'chapter' | 'new_story'   // sobre historias que sigues
-  | 'like' | 'comment' | 'follow'               // de otros usuarios hacia ti
+  | 'like' | 'comment' | 'reply' | 'follow'     // de otros usuarios hacia ti
   | 'news' | 'admin';                           // del equipo
 
 // Plantilla (en español, con {huecos}) de los avisos que escribe la app: la pantalla de
@@ -358,7 +358,7 @@ export async function markAllNotificationsRead(uid: string) {
 // notificaciones de otro usuario, y con fromUid = quien lo envía.
 export async function notifyUser(
   toUid: string,
-  n: { type: 'like' | 'comment' | 'follow'; title: string; body: string; storyId?: string; tx?: NotificationTx },
+  n: { type: 'like' | 'comment' | 'reply' | 'follow'; title: string; body: string; storyId?: string; commentId?: string; tx?: NotificationTx },
 ) {
   const me = auth.currentUser;
   if (!me || me.uid === toUid) return;

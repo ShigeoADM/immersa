@@ -31,6 +31,7 @@ await env.withSecurityRulesDisabled(async ctx => {
   await setDoc(doc(db, 'users/boss'), { role: 'owner' });
   await setDoc(doc(db, 'profiles/author'), { displayName: 'Autor' });
   await setDoc(doc(db, 'profiles/author/followers/fan'), { createdAt: 'x' });
+  await setDoc(doc(db, 'stories/s1/comments/fanc'), { uid: 'fan', userName: 'Fan', userAvatar: '', text: 'hola', createdAt: 'x', chapterId: 'c1', pageId: '', chapterNumber: 1, pageNumber: 0 });
   await uploadBytes(ref(ctx.storage(), 'covers/author/old.webp'), new Uint8Array([1, 2, 3]), { contentType: 'image/webp' });
 });
 
@@ -79,6 +80,17 @@ await check('ABUSO: denuncia con texto enorme', false, () => setDoc(doc(fan.fire
 await check('ABUSO: leer los datos privados de otro usuario', false, () => getDoc(doc(fan.firestore(), 'users/author')));
 await check('ABUSO: darse permisos de administrador', false, () => setDoc(doc(fan.firestore(), 'users/fan'), { role: 'admin', permissions: ['deleteStories'] }));
 await check('ABUSO: inflar los "me gusta" sin dar me gusta', false, () => setDoc(doc(fan.firestore(), 'stories/s1'), { uid: 'author', published: true, title: 'Historia', likeCount: 999 }));
+
+// ── Respuestas y comentarios por párrafo ──
+const reply = (extra = {}) => comment({ uid: 'stranger', userName: 'Otro', replyTo: 'fanc', replyToUid: 'fan', replyToName: 'Fan', ...extra });
+await check('Respuesta a un comentario', true, () => addDoc(collection(stranger.firestore(), 'stories/s1/comments'), reply()));
+await check('Comentario de un párrafo', true, () => addDoc(collection(fan.firestore(), 'stories/s1/comments'), comment({ pageId: '', pageNumber: 0, paragraph: 3, paragraphKey: 'abc123' })));
+await check('Aviso de respuesta a quien escribió el comentario', true, () => setDoc(doc(stranger.firestore(), 'users/fan/notifications/r1'),
+  notif({ type: 'reply', fromUid: 'stranger', commentId: 'fanc', title: 'Nueva respuesta en "Historia"', body: 'Otro: sí' })));
+await check('ABUSO: respuesta a un comentario que no existe', false, () => addDoc(collection(stranger.firestore(), 'stories/s1/comments'), reply({ replyTo: 'noexiste' })));
+await check('ABUSO: aviso de "respuesta" a quien no escribió ese comentario', false, () => setDoc(doc(stranger.firestore(), 'users/author/notifications/r2'),
+  notif({ type: 'reply', fromUid: 'stranger', commentId: 'fanc' })));
+await check('ABUSO: párrafo que no es un número', false, () => addDoc(collection(fan.firestore(), 'stories/s1/comments'), comment({ paragraph: 'tres', paragraphKey: 'x' })));
 
 // ── Insignia de fundador ──
 await check('El dueño da la insignia de fundador', true, () => setDoc(doc(boss.firestore(), 'founders/author'), { since: now }));

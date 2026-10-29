@@ -208,7 +208,20 @@ service cloud.firestore {
         allow read: if storyPublic(storyId) || ownsStory(storyId) || can('deleteStories');
         allow create: if signedIn()
                       && request.resource.data.keys().hasOnly(['uid', 'userName', 'userAvatar', 'text', 'createdAt',
-                                                               'chapterId', 'pageId', 'chapterNumber', 'pageNumber'])
+                                                               'chapterId', 'pageId', 'chapterNumber', 'pageNumber',
+                                                               'replyTo', 'replyToUid', 'replyToName',
+                                                               'paragraph', 'paragraphKey'])
+                      // Respuesta: a un hilo de esta misma novela
+                      && (!('replyTo' in request.resource.data)
+                          || (request.resource.data.replyTo is string
+                              && exists(/databases/$(database)/documents/stories/$(storyId)/comments/$(request.resource.data.replyTo))
+                              && request.resource.data.get('replyToName', '') is string
+                              && request.resource.data.get('replyToName', '').size() <= 60))
+                      // Comentario de un párrafo (Webnovel)
+                      && (!('paragraph' in request.resource.data)
+                          || (request.resource.data.paragraph is int
+                              && request.resource.data.get('paragraphKey', '') is string
+                              && request.resource.data.get('paragraphKey', '').size() <= 24))
                       && request.resource.data.uid == request.auth.uid
                       && request.resource.data.text is string
                       && request.resource.data.text.size() > 0
@@ -305,12 +318,12 @@ service cloud.firestore {
       }
 
       // Notificaciones que crea OTRO usuario:
-      //  · me gusta, comentarios y nuevos seguidores, firmados con el uid de quien los envía
+      //  · me gusta, comentarios, respuestas y nuevos seguidores, firmados con el uid de quien los envía
       //  · aviso al autor de que moderación eliminó su novela
       match /notifications/{notificationId} {
         function cleanNotification() {
           let n = request.resource.data;
-          return n.keys().hasOnly(['type', 'title', 'body', 'tx', 'storyId', 'fromUid', 'createdAt', 'read'])
+          return n.keys().hasOnly(['type', 'title', 'body', 'tx', 'storyId', 'commentId', 'fromUid', 'createdAt', 'read'])
             && n.title is string && n.title.size() <= 300
             && n.body is string && n.body.size() <= 600
             && n.read == false;
@@ -321,6 +334,14 @@ service cloud.firestore {
             && exists(/databases/$(database)/documents/stories/$(storyId))
             && get(/databases/$(database)/documents/stories/$(storyId)).data.uid == userId;
         }
+        // Respuesta: el destinatario escribió el comentario al que se responde
+        function isRepliedComment() {
+          let storyId = request.resource.data.get('storyId', '');
+          let commentId = request.resource.data.get('commentId', '');
+          let path = /databases/$(database)/documents/stories/$(storyId)/comments/$(commentId);
+          return storyId is string && storyId != '' && commentId is string && commentId != ''
+            && exists(path) && get(path).data.uid == userId;
+        }
         function isFollower() {
           return exists(/databases/$(database)/documents/profiles/$(userId)/followers/$(request.auth.uid));
         }
@@ -329,6 +350,7 @@ service cloud.firestore {
             && !isSuspended()
             && (
               (request.resource.data.type in ['like', 'comment'] && storyOfRecipient())
+              || (request.resource.data.type == 'reply' && isRepliedComment())
               || (request.resource.data.type == 'follow' && isFollower())
             ))
           || (request.resource.data.type == 'admin' && can('deleteStories'))

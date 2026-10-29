@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, AppState,
-  TextInput, KeyboardAvoidingView, Platform,
+  TextInput, KeyboardAvoidingView, Platform, Modal,
   type NativeScrollEvent, type NativeSyntheticEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,17 +21,19 @@ import { sortChapters } from '@/services/stories';
 import { useAuth } from '@/context/AuthContext';
 import type { Role } from '@/constants/permissions';
 import {
-  type StoryComment, COMMENT_MAX_LENGTH, addComment, deleteComment, listChapterComments,
+  type ReplyTarget, type StoryComment, COMMENT_MAX_LENGTH, addComment, deleteComment, listChapterComments,
+  paragraphKey, replyTargetFor,
 } from '@/services/comments';
 import { getStaffRoles } from '@/services/profiles';
 import { enterReading, leaveReading, hasLikedChapter, setChapterLike } from '@/services/social';
 import { CommentItem } from '@/components/comment-item';
+import { CommentThreads, ReplyingTo } from '@/components/comment-threads';
 import { AppAlert } from '@/components/app-dialog';
 import { ReportModal } from '@/components/report-modal';
 import type { ReportTarget } from '@/services/reports';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { promptLogin } from '@/components/login-prompt';
-import { useT } from '@/i18n';
+import { ts, useT } from '@/i18n';
 
 type ChapterRef = { id: string; title: string };
 
@@ -73,6 +75,14 @@ export default function WebnovelReaderScreen() {
   const [comments, setComments]       = useState<StoryComment[]>([]);
   const [staffRoles, setStaffRoles]   = useState<Map<string, Role>>(new Map());
   const [commentText, setCommentText] = useState('');
+  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
+  const commentInputRef = useRef<TextInput>(null);
+  // Panel de comentarios de un párrafo
+  const [paraOpen, setParaOpen]       = useState<number | null>(null);
+  const [paraText, setParaText]       = useState('');
+  const [paraReply, setParaReply]     = useState<ReplyTarget | null>(null);
+  const [paraSending, setParaSending] = useState(false);
+  const paraInputRef = useRef<TextInput>(null);
   const [sending, setSending]         = useState(false);
   const [isAuthor, setIsAuthor]       = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
@@ -281,9 +291,11 @@ export default function WebnovelReaderScreen() {
           chapterId, pageId: '', chapterNumber, pageNumber: 0, // sin página: es del capítulo
         },
         { authorUid: storyRef.current?.uid, title: storyRef.current?.title },
+        replyTarget,
       );
       setComments(prev => [created, ...prev]);
       setCommentText('');
+      setReplyTarget(null);
     } catch (e: any) {
       AppAlert.alert(t('common.error'), e?.message ?? t('reader.commentFailed'));
     } finally {
@@ -309,6 +321,79 @@ export default function WebnovelReaderScreen() {
   // Sin los comentarios de usuarios bloqueados
   const visibleComments = comments.filter(c => !blocked.has(c.uid));
 
+  // ── Comentarios por párrafo ──
+  // Cada comentario de párrafo se coloca por la huella de su texto; si el párrafo ya no
+  // existe tal cual (el autor lo cambió), en el mismo número de párrafo si sigue habiéndolo.
+  const paragraphs = useMemo(() => content.split('\n').filter(l => l.trim().length > 0), [content]);
+  const paraKeys = useMemo(() => paragraphs.map(paragraphKey), [paragraphs]);
+  const paraOf = (c: StoryComment): number | null => {
+    if (c.paragraph === undefined || c.paragraph === null) return null;
+    const byKey = c.paragraphKey ? paraKeys.indexOf(c.paragraphKey) : -1;
+    if (byKey >= 0) return byKey;
+    return c.paragraph < paragraphs.length ? c.paragraph : null;
+  };
+  const paraCounts = paragraphs.map(() => 0);
+  const chapterOnly: StoryComment[] = [];
+  for (const c of visibleComments) {
+    const i = paraOf(c);
+    if (i === null) chapterOnly.push(c); else paraCounts[i]++;
+  }
+  const paraComments = paraOpen === null ? [] : visibleComments.filter(c => paraOf(c) === paraOpen);
+  const inParagraphs = visibleComments.length - chapterOnly.length;
+
+  const openParagraph = (i: number) => { setParaOpen(i); setParaReply(null); setParaText(''); };
+
+  const handleSendParagraphComment = async () => {
+    const text = paraText.trim();
+    const me = auth.currentUser;
+    if (!me) { askLoginToComment(); return; }
+    if (!text || paraOpen === null || !storyId || !chapterId || paraSending) return;
+    if (suspended) {
+      AppAlert.alert(t('write.suspendedTitle'), t('reader.suspendedComment'));
+      return;
+    }
+    setParaSending(true);
+    try {
+      const created = await addComment(
+        storyId,
+        {
+          uid: me.uid, userName: publicName || t('reader.noName'), userAvatar: publicAvatar, text,
+          chapterId, pageId: '', chapterNumber, pageNumber: 0,
+          paragraph: paraOpen, paragraphKey: paraKeys[paraOpen],
+        },
+        { authorUid: storyRef.current?.uid, title: storyRef.current?.title },
+        paraReply,
+      );
+      setComments(prev => [created, ...prev]);
+      setParaText('');
+      setParaReply(null);
+    } catch (e: any) {
+      AppAlert.alert(t('common.error'), e?.message ?? t('reader.commentFailed'));
+    } finally {
+      setParaSending(false);
+    }
+  };
+
+  // Un comentario, igual en el final del capítulo y en el panel de un párrafo
+  const renderComment = (c: StoryComment, onReply: (c: StoryComment) => void) => (
+    <CommentItem
+      comment={c}
+      role={staffRoles.get(c.uid)}
+      showLocation={false}
+      canDelete={c.uid === auth.currentUser?.uid || isAuthor || can('deleteStories')}
+      onDelete={handleDeleteComment}
+      onReply={x => { if (!auth.currentUser) { askLoginToComment(); return; } onReply(x); }}
+      onReport={c.uid !== auth.currentUser?.uid
+        ? () => setReportTarget({
+            type: 'comment', storyId, storyTitle: storyRef.current?.title ?? '',
+            commentId: c.id, commentText: c.text, targetUid: c.uid,
+          })
+        : undefined}
+      onPressUser={uid => { setParaOpen(null); router.push({ pathname: '/user/[uid]', params: { uid } }); }}
+      colors={{ name: theme.text, text: theme.text, muted: theme.muted }}
+    />
+  );
+
   const goToChapter = (id: string) =>
     router.replace(`/reader/webnovel?storyId=${storyId}&chapterId=${id}${isPreview ? '&preview=1' : ''}`);
 
@@ -319,6 +404,70 @@ export default function WebnovelReaderScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.bar} />
       <ReportModal target={reportTarget} onClose={() => setReportTarget(null)} />
+
+      <Modal visible={paraOpen !== null} transparent animationType="slide" onRequestClose={() => setParaOpen(null)}>
+        <View style={styles.paraOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setParaOpen(null)} />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={[styles.paraPanel, { backgroundColor: theme.background, borderColor: theme.border }, isDesktop && styles.paraPanelDesktop]}
+          >
+            <View style={styles.paraHeader}>
+              <Text style={[styles.commentsTitle, { color: theme.text, marginBottom: 0 }]}>
+                {ts('Comentarios del párrafo')}{paraComments.length > 0 ? ` · ${paraComments.length}` : ''}
+              </Text>
+              <TouchableOpacity onPress={() => setParaOpen(null)} hitSlop={8}>
+                <MaterialIcons name="close" size={20} color={theme.muted} />
+              </TouchableOpacity>
+            </View>
+            {paraOpen !== null && (
+              <Text style={[styles.paraQuote, { color: theme.muted, borderLeftColor: Colors.formatColors.Webnovel }]} numberOfLines={4}>
+                {(paragraphs[paraOpen] ?? '').replace(/\*+/g, '')}
+              </Text>
+            )}
+            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingHorizontal: 16 }} keyboardShouldPersistTaps="handled">
+              {paraComments.length === 0
+                ? <Text style={[styles.commentsEmpty, { color: theme.muted }]}>{ts('Nadie ha comentado este párrafo todavía.')}</Text>
+                : <CommentThreads
+                    comments={paraComments}
+                    mutedColor={theme.muted}
+                    accentColor={Colors.formatColors.Webnovel}
+                    renderComment={c => renderComment(c, x => { setParaReply(replyTargetFor(x)); paraInputRef.current?.focus(); })}
+                  />}
+            </ScrollView>
+            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+              <ReplyingTo target={paraReply} onCancel={() => setParaReply(null)} color={theme.text} mutedColor={theme.muted} />
+              <View style={styles.commentInputRow}>
+                <TextInput
+                  ref={paraInputRef}
+                  style={[styles.commentInput, { color: theme.text, backgroundColor: theme.bar, borderColor: theme.border }]}
+                  value={paraText}
+                  onChangeText={setParaText}
+                  placeholder={ts('Comenta este párrafo…')}
+                  placeholderTextColor={theme.muted}
+                  maxLength={COMMENT_MAX_LENGTH}
+                  multiline
+                  onFocus={e => {
+                    if (auth.currentUser) return;
+                    (e.target as any)?.blur?.();
+                    askLoginToComment();
+                  }}
+                />
+                <TouchableOpacity
+                  style={[styles.commentSendBtn, (!paraText.trim() || paraSending) && { opacity: 0.4 }]}
+                  onPress={handleSendParagraphComment}
+                  disabled={!paraText.trim() || paraSending}
+                  activeOpacity={0.8}
+                >
+                  {paraSending
+                    ? <ActivityIndicator size="small" color="#000" />
+                    : <MaterialIcons name="send" size={16} color="#000" />}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
 
       {/* ── Cabecera ── */}
       <SafeAreaView edges={['top']} style={[styles.header, { backgroundColor: theme.bar, borderBottomColor: theme.border }]}>
@@ -377,6 +526,10 @@ export default function WebnovelReaderScreen() {
               content={content}
               paragraphSpacing={Math.round(fontSize * 0.9)}
               style={{ fontFamily: WEBNOVEL_FONT, fontSize, lineHeight, color: theme.text }}
+              counts={paraCounts}
+              onParagraphPress={isPreview ? undefined : openParagraph}
+              bubbleColor={Colors.formatColors.Webnovel}
+              mutedColor={theme.muted}
             />
           ) : (
             <Text style={[styles.empty, { color: theme.muted }]}>{t('reader.noText')}</Text>
@@ -426,10 +579,17 @@ export default function WebnovelReaderScreen() {
           {!isPreview && (
             <View style={[styles.commentsBlock, { borderTopColor: theme.border }]}>
               <Text style={[styles.commentsTitle, { color: theme.text }]}>
-                {t('story.comments')}{visibleComments.length > 0 ? ` · ${visibleComments.length}` : ''}
+                {t('story.comments')}{chapterOnly.length > 0 ? ` · ${chapterOnly.length}` : ''}
               </Text>
+              {inParagraphs > 0 && (
+                <Text style={[styles.commentsEmpty, { color: theme.muted, fontStyle: 'normal', marginTop: 0 }]}>
+                  {inParagraphs === 1 ? ts('Y 1 comentario en un párrafo del capítulo.') : ts('Y {n} comentarios en párrafos del capítulo.', { n: inParagraphs })}
+                </Text>
+              )}
+              <ReplyingTo target={replyTarget} onCancel={() => setReplyTarget(null)} color={theme.text} mutedColor={theme.muted} />
               <View style={styles.commentInputRow}>
                 <TextInput
+                  ref={commentInputRef}
                   style={[styles.commentInput, { color: theme.text, backgroundColor: theme.bar, borderColor: theme.border }]}
                   value={commentText}
                   onChangeText={setCommentText}
@@ -455,28 +615,18 @@ export default function WebnovelReaderScreen() {
                     : <MaterialIcons name="send" size={16} color="#000" />}
                 </TouchableOpacity>
               </View>
-              {visibleComments.length === 0 ? (
+              {chapterOnly.length === 0 ? (
                 <Text style={[styles.commentsEmpty, { color: theme.muted }]}>
                   {t('reader.noCommentsChapter')}
                 </Text>
-              ) : visibleComments.map(c => (
-                <CommentItem
-                  key={c.id}
-                  comment={c}
-                  role={staffRoles.get(c.uid)}
-                  showLocation={false}
-                  canDelete={c.uid === auth.currentUser?.uid || isAuthor || can('deleteStories')}
-                  onDelete={handleDeleteComment}
-                  onReport={c.uid !== auth.currentUser?.uid
-                    ? () => setReportTarget({
-                        type: 'comment', storyId, storyTitle: storyRef.current?.title ?? '',
-                        commentId: c.id, commentText: c.text, targetUid: c.uid,
-                      })
-                    : undefined}
-                  onPressUser={uid => router.push({ pathname: '/user/[uid]', params: { uid } })}
-                  colors={{ name: theme.text, text: theme.text, muted: theme.muted }}
+              ) : (
+                <CommentThreads
+                  comments={chapterOnly}
+                  mutedColor={theme.muted}
+                  accentColor={Colors.formatColors.Webnovel}
+                  renderComment={c => renderComment(c, x => { setReplyTarget(replyTargetFor(x)); commentInputRef.current?.focus(); })}
                 />
-              ))}
+              )}
             </View>
           )}
         </ScrollView>
@@ -530,6 +680,11 @@ const styles = StyleSheet.create({
     flex: 1, maxHeight: 110, fontSize: 14, borderRadius: 8, borderWidth: 1,
     paddingHorizontal: 12, paddingVertical: 9,
   },
+  paraOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  paraPanel:        { maxHeight: '75%', borderTopLeftRadius: 14, borderTopRightRadius: 14, borderWidth: 1, paddingTop: 14, paddingBottom: 14 },
+  paraPanelDesktop: { width: '100%', maxWidth: 720, alignSelf: 'center' },
+  paraHeader:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 10 },
+  paraQuote:        { marginHorizontal: 16, marginBottom: 10, paddingLeft: 10, borderLeftWidth: 3, fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
   commentSendBtn: {
     width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
     backgroundColor: Colors.formatColors.Webnovel,

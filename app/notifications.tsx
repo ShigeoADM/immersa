@@ -25,6 +25,7 @@ const TYPE_ICON: Record<NotificationType, { icon: string; color: string }> = {
   follow:        { icon: 'person-add',       color: '#4A90D9' },
   like:          { icon: 'favorite',         color: '#FF69B4' },
   comment:       { icon: 'chat-bubble',      color: '#4A90D9' },
+  reply:         { icon: 'reply',            color: '#4A90D9' },
   news:          { icon: 'campaign',         color: Colors.emerald },
   admin:         { icon: 'admin-panel-settings', color: '#FFD700' },
 };
@@ -65,7 +66,7 @@ export default function NotificationsScreen() {
     if (!n.read) markNotificationRead(user.uid, n.id).catch(() => {});
     // Lo que tiene que ver con una historia lleva a ella (una borrada ya no existe);
     // un seguidor nuevo, a su perfil
-    if (n.storyId && ['like', 'comment', 'chapter', 'new_story'].includes(n.type)) {
+    if (n.storyId && ['like', 'comment', 'reply', 'chapter', 'new_story'].includes(n.type)) {
       router.push(`/story/${n.storyId}`);
     } else if (n.type === 'follow' && n.fromUid) {
       router.push({ pathname: '/user/[uid]', params: { uid: n.fromUid } });
