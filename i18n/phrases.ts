@@ -633,4 +633,6 @@ export const PHRASES: Record<string, { en: string; ja: string }> = {
   'Nueva respuesta en "{story}"': { en: 'New reply on "{story}"', ja: '「{story}」に新しい返信' },
   'También se borrará su respuesta.': { en: 'Its reply will be deleted too.', ja: 'この返信も一緒に削除されます。' },
   'También se borrarán sus {n} respuestas.': { en: 'Its {n} replies will be deleted too.', ja: 'この{n}件の返信も一緒に削除されます。' },
+  'Ese archivo no parece un documento OpenDocument (.odt).': { en: 'That file does not look like an OpenDocument file (.odt).', ja: 'このファイルはOpenDocument文書（.odt）ではないようです。' },
+  'Ese archivo no parece un documento RTF.': { en: 'That file does not look like an RTF document.', ja: 'このファイルはRTF文書ではないようです。' },
 };

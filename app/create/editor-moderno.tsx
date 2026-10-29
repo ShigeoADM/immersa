@@ -339,6 +339,7 @@ export default function EditorModernoScreen() {
         type: [
           'text/plain', 'text/markdown', 'application/pdf', 'application/epub+zip', 'application/msword',
           'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.oasis.opendocument.text', 'application/rtf', 'text/rtf', 'text/html',
         ],
         copyToCacheDirectory: true,
       });
