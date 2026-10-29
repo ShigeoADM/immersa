@@ -32,6 +32,7 @@ interface StoryCard {
   publishedAt?: string;
   uid: string;
   coverUrl?: string;
+  coverThumbUrl?: string | null;
   coverOrientation?: 'vertical' | 'horizontal';
   likeCount?: number;
   isAdult?: boolean;
@@ -75,7 +76,7 @@ function VerticalCard({ story, onPress }: { story: StoryCard; onPress: () => voi
     <TouchableOpacity style={styles.vCard} activeOpacity={0.8} onPress={onPress}>
       <View style={styles.vCardCover}>
         {story.coverUrl
-          ? <Image source={{ uri: story.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+          ? <Image source={{ uri: story.coverThumbUrl || story.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
           : <View style={styles.cardPlaceholder}>
               <MaterialIcons name="menu-book" size={28} color={fmtColor + '60'} />
             </View>
@@ -106,7 +107,7 @@ function HorizontalCard({ story, onPress, single }: {
   return (
     <TouchableOpacity style={cardStyle} activeOpacity={0.8} onPress={onPress}>
       {story.coverUrl
-        ? <Image source={{ uri: story.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+        ? <Image source={{ uri: story.coverThumbUrl || story.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
         : <View style={[styles.cardPlaceholder, { backgroundColor: Colors.card }]}>
             <MaterialIcons name="menu-book" size={single ? 24 : 16} color={fmtColor + '60'} />
           </View>

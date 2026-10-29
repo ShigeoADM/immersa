@@ -22,7 +22,7 @@ import { AppAlert, useDialogAccent } from '@/components/app-dialog';
 import { ADULT_AUDIENCES, ADULT_CONTENT, AUDIENCES, GENRES, STORY_LANGUAGES, adultContentLabel, audienceLabel } from '@/constants/story-meta';
 import { useAuth } from '@/context/AuthContext';
 import { DesktopColumn } from '@/components/desktop-column';
-import { uploadImage, deleteStoredFile } from '@/services/media';
+import { uploadImage, uploadThumbnail, deleteStoredFile } from '@/services/media';
 import { coverUsedByAnotherStory } from '@/services/stories';
 import { withUploadNotice } from '@/components/upload-notice';
 import { tutorialEvent, tutorialIntercept, tutorialZone } from '@/components/tutorial';
@@ -77,7 +77,9 @@ export default function ModernoDetailsScreen() {
 
   const [coverUri,       setCoverUri]       = useState<string | null>(null);
   const [coverUrl,       setCoverUrl]       = useState('');
+  const [coverThumbUrl,  setCoverThumbUrl]  = useState(''); // la portada en pequeño, para las tarjetas
   const originalCoverRef = useRef(''); // portada guardada, para borrar su archivo si se cambia
+  const originalThumbRef = useRef('');
   const [uploadingCover, setUploadingCover] = useState(false);
 
   const [saving, setSaving] = useState(false);
@@ -106,6 +108,7 @@ export default function ModernoDetailsScreen() {
           setRecommendedUiColor(d.recommendedUiColor ?? null);
           setFormat(d.format === 'Webnovel' ? 'Webnovel' : 'Moderno');
           if (d.coverUrl) { setCoverUri(d.coverUrl); setCoverUrl(d.coverUrl); originalCoverRef.current = d.coverUrl; }
+          if (d.coverThumbUrl) { setCoverThumbUrl(d.coverThumbUrl); originalThumbRef.current = d.coverThumbUrl; }
         }
       } catch (e) {
         console.error('Error cargando historia para editar:', e);
@@ -143,14 +146,20 @@ export default function ModernoDetailsScreen() {
       setCoverUri(localUri);   // preview inmediato
       setUploadingCover(true);
       try {
-        const url = await uploadImage(localUri, `covers/${auth.currentUser?.uid}/${Date.now()}`, 1400);
+        const base = `covers/${auth.currentUser?.uid}/${Date.now()}`;
+        const [url, thumb] = await Promise.all([
+          uploadImage(localUri, base, 1400),
+          uploadThumbnail(localUri, `${base}_mini`, 480),
+        ]);
         setCoverUrl(url);
+        setCoverThumbUrl(thumb ?? '');
         setCoverUri(url);
       } catch (e: any) {
         console.error('Error subiendo portada:', e);
         AppAlert.alert(t('details.coverUploadFailed'), e?.message ?? t('common.tryAgain'));
         setCoverUri(null);
         setCoverUrl('');
+        setCoverThumbUrl('');
       } finally {
         setUploadingCover(false);
       }
@@ -179,15 +188,21 @@ export default function ModernoDetailsScreen() {
           status,
           coverOrientation,
           coverUrl,
+          coverThumbUrl: coverThumbUrl || null,
           recommendedUiColor: recommendedUiColor ?? null,
           updatedAt: new Date().toISOString(),
         });
         // La portada anterior ya no se usa: se borra su archivo
         // (salvo que la comparta con otra historia tuya, como una copia importada)
         const oldCover = originalCoverRef.current;
+        const oldThumb = originalThumbRef.current;
         if (oldCover && oldCover !== coverUrl) {
           coverUsedByAnotherStory(auth.currentUser?.uid, oldCover, storyId as string)
-            .then(shared => { if (!shared) deleteStoredFile(oldCover); });
+            .then(shared => {
+              if (shared) return;
+              deleteStoredFile(oldCover);
+              if (oldThumb && oldThumb !== coverThumbUrl) deleteStoredFile(oldThumb);
+            });
         }
         router.back();
       } else {
@@ -208,6 +223,7 @@ export default function ModernoDetailsScreen() {
           status,
           coverOrientation,
           coverUrl,
+          coverThumbUrl: coverThumbUrl || null,
           chapters: [],
           published: false,
           recommendedUiColor: recommendedUiColor ?? null,

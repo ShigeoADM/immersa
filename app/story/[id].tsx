@@ -48,6 +48,7 @@ interface Story {
   synopsis?: string;
   credits?: string;
   coverUrl?: string;
+  coverThumbUrl?: string;
   publishedAt?: string;
   uid?: string;
   published?: boolean;
@@ -203,6 +204,7 @@ export default function StoryDetailScreen() {
           storyId: story.id,
           title: story.title,
           coverUrl: story.coverUrl ?? null,
+          coverThumbUrl: story.coverThumbUrl ?? null,
           format: story.format,
           coverOrientation: (story as any).coverOrientation ?? 'vertical',
           status: story.status ?? 'ongoing',

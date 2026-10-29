@@ -22,6 +22,7 @@ interface SearchStory {
   format: string;
   authorName?: string;
   coverUrl?: string;
+  coverThumbUrl?: string | null;
   genres?: string[];
   language?: string;
   audience?: string;
@@ -255,7 +256,7 @@ export default function SearchScreen() {
               <TouchableOpacity style={styles.row} activeOpacity={0.8} onPress={() => router.push(`/story/${s.id}`)}>
                 <View style={styles.cover}>
                   {s.coverUrl
-                    ? <Image source={{ uri: s.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+                    ? <Image source={{ uri: s.coverThumbUrl || s.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
                     : <View style={[StyleSheet.absoluteFill, styles.coverPlaceholder]}>
                         <MaterialIcons name="menu-book" size={20} color={fmtColor + '60'} />
                       </View>

@@ -184,6 +184,7 @@ export default function WebnovelReaderScreen() {
         storyId,
         title: story.title ?? '',
         coverUrl: story.coverUrl ?? null,
+        coverThumbUrl: story.coverThumbUrl ?? null,
         format: story.format ?? 'Webnovel',
         coverOrientation: story.coverOrientation ?? 'vertical',
         status: story.status ?? 'ongoing',
@@ -262,7 +263,7 @@ export default function WebnovelReaderScreen() {
     try {
       const s = storyRef.current;
       await setChapterLike(storyId, chapterId, next, { uid: me.uid, name: publicName || t('reader.someone') }, {
-        authorUid: s?.uid, title: s?.title, coverUrl: s?.coverUrl ?? null, format: s?.format,
+        authorUid: s?.uid, title: s?.title, coverUrl: s?.coverUrl ?? null, coverThumbUrl: s?.coverThumbUrl ?? null, format: s?.format,
       });
     } catch (e: any) {
       setLiked(!next);

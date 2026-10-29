@@ -45,7 +45,7 @@ export async function hasLikedStory(storyId: string, uid: string): Promise<boole
 
 export async function setChapterLike(
   storyId: string, chapterId: string, like: boolean, me: Me,
-  story: { authorUid?: string | null; title?: string; coverUrl?: string | null; format?: string },
+  story: { authorUid?: string | null; title?: string; coverUrl?: string | null; coverThumbUrl?: string | null; format?: string },
 ) {
   const now = new Date().toISOString();
   const batch = writeBatch(db);
@@ -54,7 +54,7 @@ export async function setChapterLike(
   if (like) {
     batch.set(likeRef, { createdAt: now });
     batch.set(likedRef, {
-      storyId, title: story.title ?? '', coverUrl: story.coverUrl ?? null,
+      storyId, title: story.title ?? '', coverUrl: story.coverUrl ?? null, coverThumbUrl: story.coverThumbUrl ?? null,
       format: story.format ?? '', createdAt: now, chapters: arrayUnion(chapterId),
     }, { merge: true });
   } else {
@@ -93,13 +93,14 @@ export interface LikedStory {
   storyId: string;
   title: string;
   coverUrl: string | null;
+  coverThumbUrl?: string | null;
   format: string;
   createdAt: string;
 }
 
 export async function setLike(
   storyId: string, like: boolean, me: Me,
-  story: { authorUid?: string | null; title?: string; coverUrl?: string | null; format?: string },
+  story: { authorUid?: string | null; title?: string; coverUrl?: string | null; coverThumbUrl?: string | null; format?: string },
 ) {
   const now = new Date().toISOString();
   const batch = writeBatch(db);
@@ -108,7 +109,7 @@ export async function setLike(
   if (like) {
     batch.set(likeRef, { createdAt: now });
     batch.set(likedRef, {
-      storyId, title: story.title ?? '', coverUrl: story.coverUrl ?? null,
+      storyId, title: story.title ?? '', coverUrl: story.coverUrl ?? null, coverThumbUrl: story.coverThumbUrl ?? null,
       format: story.format ?? '', createdAt: now,
     });
   } else {

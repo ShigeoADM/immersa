@@ -25,6 +25,7 @@ interface StoryCard {
   format: string;
   status: string;
   coverUrl?: string;
+  coverThumbUrl?: string | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -279,7 +280,7 @@ export default function PublicProfileScreen() {
                     >
                       <View style={styles.cardCover}>
                         {s.coverUrl
-                          ? <Image source={{ uri: s.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+                          ? <Image source={{ uri: s.coverThumbUrl || s.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
                           : <View style={[StyleSheet.absoluteFill, styles.coverPlaceholder]}>
                               <MaterialIcons name="menu-book" size={26} color={fmtColor + '60'} />
                             </View>

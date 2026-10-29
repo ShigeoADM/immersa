@@ -37,6 +37,7 @@ interface StoryCard {
   format: string;
   status: string;
   coverUrl?: string;
+  coverThumbUrl?: string | null;
   coverOrientation?: 'vertical' | 'horizontal';
 }
 
@@ -57,7 +58,7 @@ function StoryCard({ story, onPress }: { story: StoryCard; onPress: () => void }
       onPress={onPress}
     >
       {story.coverUrl
-        ? <Image source={{ uri: story.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+        ? <Image source={{ uri: story.coverThumbUrl || story.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
         : <View style={[styles.storyCardPlaceholder, { backgroundColor: Colors.card }]}>
             <MaterialIcons name="menu-book" size={28} color={fmtColor + '60'} />
           </View>

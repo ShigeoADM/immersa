@@ -106,6 +106,55 @@ export async function uploadImage(localUri: string, pathNoExt: string, maxSide: 
   return getDownloadURL(storageRef);
 }
 
+// ── Miniaturas: la portada en pequeño, para las tarjetas ─────────────────────
+// Una portada de 1400 px pintada en una tarjeta de 130 px la reduce el navegador al vuelo,
+// con un filtro rápido que la deja dentada. Se guarda aparte una copia ya reducida con
+// cuidado (a la mitad cada vez, que conserva el detalle sin dientes) y las tarjetas usan esa.
+// Solo en la web; si no se puede hacer, devuelve null y las tarjetas usan la portada.
+export async function uploadThumbnail(localUri: string, pathNoExt: string, maxSide: number, timeoutMs = 30000): Promise<string | null> {
+  if (Platform.OS !== 'web') return null;
+  const g = globalThis as any;
+  let src = '';
+  try {
+    const blob = await readLocalFile(localUri, timeoutMs);
+    if (blob.type === 'image/gif') return null;
+    src = g.URL.createObjectURL(blob);
+    const img: any = await new Promise((resolve, reject) => {
+      const el = new g.Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('imagen ilegible'));
+      el.src = src;
+    });
+    let w = img.naturalWidth, h = img.naturalHeight;
+    if (!w || !h) return null;
+    const scale = Math.min(1, maxSide / Math.max(w, h));
+    const tw = Math.round(w * scale), th = Math.round(h * scale);
+    let cur: any = img;
+    const step = (nw: number, nh: number) => {
+      const c = g.document.createElement('canvas');
+      c.width = nw; c.height = nh;
+      const ctx = c.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(cur, 0, 0, nw, nh);
+      cur = c; w = nw; h = nh;
+    };
+    while (w / 2 >= tw) step(Math.round(w / 2), Math.round(h / 2));
+    if (w !== tw || h !== th) step(tw, th);
+    if (cur === img) step(tw, th);
+    const out: Blob | null = await new Promise(resolve => cur.toBlob(resolve, 'image/webp', 0.88));
+    if (!out || out.type !== 'image/webp') return null;
+    const path = `${pathNoExt}.webp`;
+    const storageRef = ref(storage, path);
+    await uploadBytes(storageRef, out, { contentType: 'image/webp' });
+    return getDownloadURL(storageRef);
+  } catch {
+    return null;
+  } finally {
+    if (src) g.URL.revokeObjectURL(src);
+  }
+}
+
 // ¿Es un archivo subido a nuestro almacenamiento? (Los enlaces externos, como los de
 // Drive, no se pueden ni se deben borrar.)
 export function isStoredFile(url?: string | null): url is string {

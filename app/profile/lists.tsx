@@ -165,7 +165,7 @@ export default function ProfileListsScreen() {
               <TouchableOpacity style={styles.row} activeOpacity={0.8} onPress={() => router.push(`/story/${s.storyId}`)}>
                 <View style={styles.cover}>
                   {s.coverUrl
-                    ? <Image source={{ uri: s.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+                    ? <Image source={{ uri: s.coverThumbUrl || s.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
                     : <View style={[StyleSheet.absoluteFill, styles.coverPlaceholder]}>
                         <MaterialIcons name="menu-book" size={18} color={fmtColor + '60'} />
                       </View>

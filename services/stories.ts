@@ -219,7 +219,11 @@ export async function deleteStoryWithCascade(storyId: string, deletedBy: Deleted
   }
   const files = [...new Set(media)].filter(u => belongsToStory(u, storyId));
   const cover = storySnap.data()?.coverUrl;
-  if (isStoredFile(cover) && !(await coverUsedByAnotherStory(storySnap.data()?.uid, cover, storyId))) files.push(cover);
+  const thumb = storySnap.data()?.coverThumbUrl;
+  if (isStoredFile(cover) && !(await coverUsedByAnotherStory(storySnap.data()?.uid, cover, storyId))) {
+    files.push(cover);
+    if (isStoredFile(thumb)) files.push(thumb);
+  }
   await Promise.all(files.map(deleteStoredFile));
 
   for (const ch of chaptersSnap.docs) {

@@ -1556,6 +1556,7 @@ export default function PageModernoReaderScreen() {
           storyId,
           title: sd.title ?? '',
           coverUrl: sd.coverUrl ?? null,
+          coverThumbUrl: sd.coverThumbUrl ?? null,
           format: sd.format ?? '',
           coverOrientation: sd.coverOrientation ?? 'vertical',
           status: sd.status ?? 'ongoing',
@@ -1700,7 +1701,7 @@ export default function PageModernoReaderScreen() {
           const storySnap = await getDoc(doc(db, 'stories', storyId as string));
           const sd = storySnap.exists() ? storySnap.data() : {};
           await setDoc(libraryRef, {
-            storyId, title: sd.title ?? '', coverUrl: sd.coverUrl ?? null,
+            storyId, title: sd.title ?? '', coverUrl: sd.coverUrl ?? null, coverThumbUrl: sd.coverThumbUrl ?? null,
             format: sd.format ?? '', coverOrientation: sd.coverOrientation ?? 'vertical',
             status: sd.status ?? 'ongoing', isReading: false, isInterested: false,
             addedAt: new Date().toISOString(), ...bm,

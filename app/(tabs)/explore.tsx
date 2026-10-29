@@ -29,6 +29,7 @@ interface LibraryEntry {
   storyId: string;
   title: string;
   coverUrl?: string | null;
+  coverThumbUrl?: string | null;
   format: string;
   coverOrientation?: 'vertical' | 'horizontal';
   status?: string;
@@ -70,7 +71,7 @@ function BookCard({
       {/* Portada */}
       <View style={styles.cardCover}>
         {entry.coverUrl
-          ? <Image source={{ uri: entry.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+          ? <Image source={{ uri: entry.coverThumbUrl || entry.coverUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
           : <View style={[StyleSheet.absoluteFill, styles.coverPlaceholder]}>
               <MaterialIcons name="menu-book" size={26} color={fmtColor + '60'} />
             </View>
