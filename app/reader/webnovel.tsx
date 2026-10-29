@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, AppState,
-  TextInput, KeyboardAvoidingView, Platform, Modal,
+  TextInput, KeyboardAvoidingView, Platform, Modal, Animated, Easing, useWindowDimensions,
   type NativeScrollEvent, type NativeSyntheticEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -341,7 +341,24 @@ export default function WebnovelReaderScreen() {
   const paraComments = paraOpen === null ? [] : visibleComments.filter(c => paraOf(c) === paraOpen);
   const inParagraphs = visibleComments.length - chapterOnly.length;
 
-  const openParagraph = (i: number) => { setParaOpen(i); setParaReply(null); setParaText(''); };
+  // Panel del párrafo: la sombra aparece con un fundido rápido y el panel sube desde abajo
+  const { height: winH } = useWindowDimensions();
+  const paraFade = useRef(new Animated.Value(0)).current;
+  const paraSlide = useRef(new Animated.Value(0)).current;
+  const openParagraph = (i: number) => {
+    setParaOpen(i); setParaReply(null); setParaText('');
+    paraFade.setValue(0); paraSlide.setValue(0);
+    Animated.parallel([
+      Animated.timing(paraFade, { toValue: 1, duration: 140, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(paraSlide, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: Platform.OS !== 'web' }),
+    ]).start();
+  };
+  const closeParagraph = () => {
+    Animated.parallel([
+      Animated.timing(paraFade, { toValue: 0, duration: 140, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(paraSlide, { toValue: 0, duration: 220, easing: Easing.in(Easing.cubic), useNativeDriver: Platform.OS !== 'web' }),
+    ]).start(() => setParaOpen(null));
+  };
 
   const handleSendParagraphComment = async () => {
     const text = paraText.trim();
@@ -405,18 +422,20 @@ export default function WebnovelReaderScreen() {
       <StatusBar barStyle={theme.statusBar} backgroundColor={theme.bar} />
       <ReportModal target={reportTarget} onClose={() => setReportTarget(null)} />
 
-      <Modal visible={paraOpen !== null} transparent animationType="slide" onRequestClose={() => setParaOpen(null)}>
-        <View style={styles.paraOverlay}>
-          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setParaOpen(null)} />
+      <Modal visible={paraOpen !== null} transparent animationType="none" onRequestClose={closeParagraph}>
+        <View style={{ flex: 1 }}>
+          <Animated.View style={[StyleSheet.absoluteFill, styles.paraOverlay, { opacity: paraFade }]} />
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeParagraph} />
+          <Animated.View style={{ transform: [{ translateY: paraSlide.interpolate({ inputRange: [0, 1], outputRange: [winH, 0] }) }] }}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={[styles.paraPanel, { backgroundColor: theme.background, borderColor: theme.border }, isDesktop && styles.paraPanelDesktop]}
+            style={[styles.paraPanel, { maxHeight: winH * 0.75, backgroundColor: theme.background, borderColor: theme.border }, isDesktop && styles.paraPanelDesktop]}
           >
             <View style={styles.paraHeader}>
               <Text style={[styles.commentsTitle, { color: theme.text, marginBottom: 0 }]}>
                 {ts('Comentarios del párrafo')}{paraComments.length > 0 ? ` · ${paraComments.length}` : ''}
               </Text>
-              <TouchableOpacity onPress={() => setParaOpen(null)} hitSlop={8}>
+              <TouchableOpacity onPress={closeParagraph} hitSlop={8}>
                 <MaterialIcons name="close" size={20} color={theme.muted} />
               </TouchableOpacity>
             </View>
@@ -466,6 +485,7 @@ export default function WebnovelReaderScreen() {
               </View>
             </View>
           </KeyboardAvoidingView>
+          </Animated.View>
         </View>
       </Modal>
 
@@ -680,8 +700,8 @@ const styles = StyleSheet.create({
     flex: 1, maxHeight: 110, fontSize: 14, borderRadius: 8, borderWidth: 1,
     paddingHorizontal: 12, paddingVertical: 9,
   },
-  paraOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-  paraPanel:        { maxHeight: '75%', borderTopLeftRadius: 14, borderTopRightRadius: 14, borderWidth: 1, paddingTop: 14, paddingBottom: 14 },
+  paraOverlay:      { backgroundColor: 'rgba(0,0,0,0.45)' },
+  paraPanel:        { borderTopLeftRadius: 14, borderTopRightRadius: 14, borderWidth: 1, paddingTop: 14, paddingBottom: 14 },
   paraPanelDesktop: { width: '100%', maxWidth: 720, alignSelf: 'center' },
   paraHeader:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 10 },
   paraQuote:        { marginHorizontal: 16, marginBottom: 10, paddingLeft: 10, borderLeftWidth: 3, fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
